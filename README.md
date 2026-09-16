@@ -46,6 +46,14 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
   <img src="demo-screenshots/demo_body_rig_action.png" width="30%" alt="The rig mid jumping-jack, the photo head bobbing along" />
   <img src="demo-screenshots/demo_game_play.png" width="30%" alt="UFO Dodge — the mini-game built entirely from library primitives" />
 </p>
+<sub><b>Android</b> — “Add Your Head to a Body”, then UFO Dodge.</sub>
+
+<p>
+  <img src="demo-screenshots/demo_ios_home.png" width="30%" alt="The demo home menu running on an iOS simulator" />
+  <img src="demo-screenshots/demo_ios_warp.png" width="30%" alt="UFO Dodge on iOS — flying through the black-hole warp" />
+  <img src="demo-screenshots/demo_ios_storm.png" width="30%" alt="UFO Dodge on iOS — a meteor-storm cue firing" />
+</p>
+<sub><b>iOS</b> — the same Compose Multiplatform code on an iPhone simulator: the home menu, then UFO Dodge (black-hole warp + a meteor-storm cue).</sub>
 
 **What's inside**
 
