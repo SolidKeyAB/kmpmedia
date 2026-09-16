@@ -1,0 +1,237 @@
+# KMPMedia
+
+> A Kotlin Multiplatform (Android + iOS) Jetpack-Compose media library for **animated, interactive, runtime-editable vector SVG**, plus image, audio and video. Everything renders into native Compose `Canvas`, so SVGs stay live vectors you can animate, clip, layer and edit at runtime — not bitmaps. The public API is small, declarative, and consistently prefixed `OG*`, which makes it well-suited for LLM code generation: describe *what* you want (a shape, an animation set, a cue at a timestamp, a depth) and pass it as data.
+
+This file is a condensed, machine-readable API reference for coding agents. Every signature and recipe below is copied from the real source (`library/src/commonMain`) and compiles as written. When in doubt, prefer these primitives over hand-rolled Compose Canvas code.
+
+## Rules for generating correct KMPMedia code
+
+- All imports come from `com.solidkey.painpoints.*` (sub-packages listed per primitive below).
+- You point a primitive at content with a **source type**, never a raw `String`:
+  `OGImageUrlType("https://…")`, `OGVideoUrlType("https://…")`, `OGSvgUrlType("https://…")` (each also has `…FileType` / `…ResourceFileType` variants). All are subtypes of `OGSourceType`.
+- **Two different scale types** — do not mix them:
+  - `OGImageView(contentScale = …)` takes Compose's `androidx.compose.ui.layout.ContentScale` (`ContentScale.Fit` / `ContentScale.Crop`).
+  - `OGPlayerConfig(contentScale = …)` (video) takes `OGVideoScale` (`OGVideoScale.FIT` / `OGVideoScale.FILL`).
+- Shape enum values are `OGShapeType.CIRCLE | TRIANGLE_UP | TRIANGLE_DOWN | SQUARE | RECTANGLE | DIAMOND` (there is no bare `TRIANGLE`).
+- Animation set values are `OGAnimationType.SCALE | ROTATE | FADE | TRANSLATE` (pass a `Set`).
+- `OGImageView` has a **required** `onEventTriggered: (OGLayerItemEvent, String) -> Unit` param — pass `onEventTriggered = { _, _ -> }` if you don't need it.
+- `OGAVPlayer` has a **required** `action: OGAVPlayerAction` and `onError: (DAVPlayerError) -> Unit`.
+
+## Core primitives (exact signatures)
+
+### Image — `com.solidkey.painpoints.image`
+```kotlin
+@Composable
+fun OGImageView(
+    source: OGSourceType,
+    modifier: Modifier = Modifier,
+    displayShape: OGShapeType = OGShapeType.RECTANGLE,
+    cornerRadius: Dp = 0.dp,
+    contentScale: ContentScale = ContentScale.Fit,   // Compose ContentScale
+    alignment: Alignment = Alignment.Center,
+    draggable: Boolean = false,
+    zIndex: Float = 0f,
+    onError: ((String) -> Unit)? = null,
+    onEventTriggered: (OGLayerItemEvent, String) -> Unit,   // REQUIRED
+)
+```
+
+### Animate any static image/SVG — `com.solidkey.painpoints.image.animating`
+```kotlin
+@Composable
+fun OGAnimatedImage(
+    source: OGSourceType,
+    animations: Set<OGAnimationType>,   // SCALE|ROTATE|FADE|TRANSLATE
+    width: Float = 512f,
+    height: Float = 512f,
+    modifier: Modifier = Modifier,
+    durationMillis: Int = 1200,
+    intensity: Float = 1f,
+    slidePx: Float = 40f,
+    onError: ((String) -> Unit)? = null,
+)
+
+// Wrap arbitrary content instead of a source:
+@Composable
+fun OGAnimatedContainer(
+    animations: Set<OGAnimationType>,
+    modifier: Modifier = Modifier,
+    durationMillis: Int = 1200,
+    slidePx: Float = 40f,
+    intensity: Float = 1f,
+    content: @Composable () -> Unit,
+)
+```
+
+### SVG — `com.solidkey.painpoints.image.svg` and `…svg.animation`
+```kotlin
+@Composable
+fun OGSVGView(source: OGSourceType, width: Float, height: Float, modifier: Modifier = Modifier,
+              enableDrag: Boolean = false, scalingBehavior: SVGScalingBehavior = SVGScalingBehavior.CLIP,
+              onError: ((String) -> Unit)? = null)
+
+// Plays the SMIL <animate>/<animateTransform> subset embedded in the SVG:
+@Composable
+fun OGSVGAnimationPlayer(source: OGSourceType, width: Float, height: Float, modifier: Modifier = Modifier,
+                         isPlaying: Boolean = true, loop: Boolean = true,
+                         scalingBehavior: SVGScalingBehavior = SVGScalingBehavior.CLIP,
+                         onError: ((String) -> Unit)? = null)
+```
+
+### Video — `com.solidkey.painpoints.video.playing`
+```kotlin
+@Composable
+expect fun OGAVPlayer(
+    action: OGAVPlayerAction,                 // PLAY|PAUSE|STOP|REWIND
+    source: OGSourceType,
+    config: OGPlayerConfig = OGPlayerConfig(),
+    modifier: Modifier = Modifier,
+    controller: OGAVPlayerController? = null, // rememberOGAVPlayerController()
+    onError: (DAVPlayerError) -> Unit,        // REQUIRED
+    onProgress: ((OGPlaybackStatus) -> Unit)? = null,
+    cues: List<OGCue> = emptyList(),
+): OGAVPlayerResult
+
+data class OGPlayerConfig(
+    val showDefaultControls: Boolean = false,
+    val displayShape: OGShapeType = OGShapeType.RECTANGLE,
+    val cornerRadius: Dp = 8.dp,
+    val backgroundColor: Color = Color.Black,
+    val contentScale: OGVideoScale = OGVideoScale.FIT,   // OGVideoScale, not Compose ContentScale
+    val playbackConfig: OGVideoPlaybackConfig = OGVideoPlaybackConfig(),
+)
+data class OGVideoPlaybackConfig(val autoStart: Boolean = true, val autoRepeat: Boolean = false,
+                                 val startDelay: Long = 0L, val loopCount: Int = 0)
+```
+
+### Interactive video: cues + live position — `com.solidkey.painpoints.video.playing`
+```kotlin
+OGCue.at(atMs: Long, onFire: () -> Unit): OGCue                    // point cue
+OGCue.range(fromMs: Long, toMs: Long, onEnter: () -> Unit = {}, onExit: () -> Unit = {}): OGCue
+
+@Composable fun rememberOGAVPlayerController(): OGAVPlayerController
+class OGAVPlayerController {
+    val status: State<OGPlaybackStatus>   // live: positionMs, durationMs, progress (0f..1f), isPlaying
+    fun play(); fun pause(); fun stop(); fun seekTo(positionMs: Long); fun seekBy(deltaMs: Long)
+}
+```
+
+### Depth / layering — `com.solidkey.painpoints.depth`
+```kotlin
+fun Modifier.ogDepth(depth: Float, focalDepth: Float, config: OGDepthConfig = OGDepthConfig()): Modifier
+// depth & focalDepth are 0f..1f. Distance from the focal plane drives z-order + blur + dim (+ optional parallax).
+
+@Composable fun OGDepthField(focalDepth: Float, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit)
+@Composable fun OGDepthObject(depth: Float, modifier: Modifier = Modifier,
+                              focalDepth: Float = LocalOGFocalDepth.current,
+                              config: OGDepthConfig = OGDepthConfig(), content: @Composable BoxScope.() -> Unit)
+data class OGDepthConfig(val maxBlur: Dp = 12.dp, val minAlpha: Float = 0.4f, val dimFalloff: Float = 0.5f,
+                         val blurContent: Boolean = true, val depthScale: OGDepthScale? = null)
+```
+
+### Shape clipping — `com.solidkey.painpoints.shape`
+```kotlin
+enum class OGShapeType { CIRCLE, TRIANGLE_UP, TRIANGLE_DOWN, SQUARE, RECTANGLE, DIAMOND }
+fun OGShapeType.toShape(cornerRadius: Dp = 0.dp): Shape   // -> a Compose Shape for Modifier.clip(...)
+```
+
+## Copy-paste recipes (all compile)
+
+**Photo cropped into a circle:**
+```kotlin
+import com.solidkey.painpoints.image.OGImageView
+import com.solidkey.painpoints.image.loading.OGImageUrlType
+import com.solidkey.painpoints.shape.OGShapeType
+import androidx.compose.ui.layout.ContentScale
+
+OGImageView(
+    source = OGImageUrlType("https://example.com/face.jpg"),
+    modifier = Modifier.size(220.dp),
+    displayShape = OGShapeType.CIRCLE,
+    contentScale = ContentScale.Crop,
+    onEventTriggered = { _, _ -> },
+)
+```
+
+**Make a static SVG breathe (scale + rotate loop):**
+```kotlin
+import com.solidkey.painpoints.image.animating.OGAnimatedImage
+import com.solidkey.painpoints.image.animating.OGAnimationType
+import com.solidkey.painpoints.image.loading.OGSvgUrlType
+
+OGAnimatedImage(
+    source = OGSvgUrlType("https://example.com/logo.svg"),
+    animations = setOf(OGAnimationType.SCALE, OGAnimationType.ROTATE),
+    durationMillis = 1500,
+)
+```
+
+**Looping video clipped into a triangle, filling the shape:**
+```kotlin
+import com.solidkey.painpoints.video.playing.*
+import com.solidkey.painpoints.video.loading.OGVideoUrlType
+import com.solidkey.painpoints.shape.OGShapeType
+
+OGAVPlayer(
+    action = OGAVPlayerAction.PLAY,
+    source = OGVideoUrlType("https://example.com/space.mp4"),
+    modifier = Modifier.size(300.dp),
+    config = OGPlayerConfig(
+        displayShape = OGShapeType.TRIANGLE_UP,
+        contentScale = OGVideoScale.FILL,
+        playbackConfig = OGVideoPlaybackConfig(autoStart = true, autoRepeat = true),
+    ),
+    onError = { },
+)
+```
+
+**Fire a caption at 3s and track progress:**
+```kotlin
+import com.solidkey.painpoints.video.playing.*
+import com.solidkey.painpoints.video.loading.OGVideoUrlType
+
+val controller = rememberOGAVPlayerController()
+var caption by remember { mutableStateOf<String?>(null) }
+
+OGAVPlayer(
+    action = OGAVPlayerAction.PLAY,
+    source = OGVideoUrlType("https://example.com/talk.mp4"),
+    controller = controller,
+    cues = listOf(
+        OGCue.at(3_000) { caption = "Chapter 1" },
+        OGCue.range(10_000, 20_000, onEnter = { caption = "Live section" }, onExit = { caption = null }),
+    ),
+    onProgress = { status -> /* status.progress is 0f..1f */ },
+    onError = { },
+)
+// controller.status.value.positionMs / .durationMs / .progress are live; controller.seekTo(ms)
+```
+
+**Depth: fly a sprite over/under a focal plane with depth-of-field:**
+```kotlin
+import com.solidkey.painpoints.depth.*
+
+OGDepthField(focalDepth = 0.5f, modifier = Modifier.fillMaxSize()) {
+    OGDepthObject(depth = 0.2f) { /* far: dimmed + blurred, drawn under */ }
+    OGDepthObject(depth = 0.8f) { /* near: sharp, drawn over */ }
+}
+```
+
+## Package map
+- `com.solidkey.painpoints.image` — `OGImageView`, color/brush
+- `com.solidkey.painpoints.image.loading` — source types (`OGImageUrlType`, `OGSvgUrlType`, file/resource variants)
+- `com.solidkey.painpoints.image.animating` — `OGAnimatedImage`, `OGAnimatedContainer`, `OGAnimationType`, `OGAnimationSpec`
+- `com.solidkey.painpoints.image.svg` / `…svg.animation` — `OGSVGView`, `OGSVGAnimationPlayer`, `SVGScalingBehavior`
+- `com.solidkey.painpoints.image.transform` — `OGImageTransformConfig`, `OGCropConfig`, `OGResizeConfig`, `OGRotateConfig`, `OGColorConfig`
+- `com.solidkey.painpoints.video.playing` — `OGAVPlayer`, `OGPlayerConfig`, `OGCue`, `OGPlaybackStatus`, `OGAVPlayerController`, `OGVideoScale`, `OGAVPlayerAction`, `DAVPlayerError`
+- `com.solidkey.painpoints.video.loading` — `OGVideoUrlType` (+ file/resource variants)
+- `com.solidkey.painpoints.audio.playing` — `OGAudioPlayer`, `OGAudioPlaybackConfig`
+- `com.solidkey.painpoints.depth` — `Modifier.ogDepth`, `OGDepthField`, `OGDepthObject`, `OGDepthConfig`
+- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`
+- `com.solidkey.painpoints.layer` — `OGLayer`, `OGLayerRenderer`, gestures
+
+## Docs
+- Full API + rationale: `docs/AI_GUIDE.md`
+- Depth/layer API: `docs/DEPTH_LAYER.md`
+- Interactive video (cues + position): `docs/INTERACTIVE_VIDEO.md`
+- README: `README.md`

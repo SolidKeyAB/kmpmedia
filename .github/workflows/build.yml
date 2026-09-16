@@ -1,0 +1,31 @@
+name: Build KMP Library
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    # macOS is required: the iOS targets (iosArm64 / iosSimulatorArm64) are always
+    # configured, and their compile/link tasks need Xcode.
+    runs-on: macos-latest
+
+    steps:
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 🛠 Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 🔨 Build Multiplatform Library
+        run: ./gradlew build
+
+      - name: ✅ Run Tests
+        run: ./gradlew allTests

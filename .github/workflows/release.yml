@@ -1,0 +1,52 @@
+name: Publish KMP Library Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    # macOS is required to build/publish the iOS artifacts of the multiplatform library.
+    runs-on: macos-latest
+
+    # The `secrets` context cannot be referenced in a step-level `if:` — doing so fails the
+    # whole workflow at startup (0s "workflow file issue"). Surface the two guard secrets as
+    # job-level env (env IS allowed in `if:`) so the Maven Central step can gate on them.
+    env:
+      HAS_MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' }}
+      HAS_SIGNING_IN_MEMORY_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY != '' }}
+
+    steps:
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 🛠 Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 🔧 Extract version from tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      # Publishing tasks are not compatible with the configuration cache, so it is
+      # disabled explicitly for these steps.
+      - name: 🚀 Publish to GitHub Packages
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository -Pversion=${{ env.VERSION }} --no-configuration-cache
+        env:
+          GPR_USER: ${{ secrets.GPR_USER }}
+          GPR_TOKEN: ${{ secrets.GPR_TOKEN }}
+
+      # Runs only when the Maven Central + signing secrets are configured in the repo.
+      - name: 📦 Publish to Maven Central
+        if: ${{ env.HAS_MAVEN_CENTRAL_USERNAME == 'true' && env.HAS_SIGNING_IN_MEMORY_KEY == 'true' }}
+        run: ./gradlew publishAndReleaseToMavenCentral -Pversion=${{ env.VERSION }} --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
