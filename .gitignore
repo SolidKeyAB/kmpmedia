@@ -13,3 +13,6 @@ xcuserdata
 *.gpg
 #Local MCP / agent-channel config (holds Firebase creds & UIDs — never commit)
 .mcp.json
+
+# nexum: phone file-drop scratch (managed, regenerated) — never commit
+.nexum-shared/

@@ -44,7 +44,7 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
 <p>
   <img src="demo-screenshots/demo_body_rig.png" width="30%" alt="Add your own photo as the head of an already-rigged body" />
   <img src="demo-screenshots/demo_body_rig_action.png" width="30%" alt="The rig mid jumping-jack, the photo head bobbing along" />
-  <img src="demo-screenshots/demo_home.png" width="30%" alt="The demo home menu" />
+  <img src="demo-screenshots/demo_game_play.png" width="30%" alt="UFO Dodge — the mini-game built entirely from library primitives" />
 </p>
 
 **What's inside**
