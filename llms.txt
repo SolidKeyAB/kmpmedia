@@ -29,6 +29,7 @@ fun OGImageView(
     cornerRadius: Dp = 0.dp,
     contentScale: ContentScale = ContentScale.Fit,   // Compose ContentScale
     alignment: Alignment = Alignment.Center,
+    clipShape: Shape? = null,   // optional free-form clip (e.g. OGPolygonShape); overrides displayShape when set
     draggable: Boolean = false,
     zIndex: Float = 0f,
     onError: ((String) -> Unit)? = null,
@@ -133,6 +134,14 @@ data class OGDepthConfig(val maxBlur: Dp = 12.dp, val minAlpha: Float = 0.4f, va
 ```kotlin
 enum class OGShapeType { CIRCLE, TRIANGLE_UP, TRIANGLE_DOWN, SQUARE, RECTANGLE, DIAMOND }
 fun OGShapeType.toShape(cornerRadius: Dp = 0.dp): Shape   // -> a Compose Shape for Modifier.clip(...)
+
+// Free-form polygon lasso (AI-friendly): clip to any outline of line segments. Points are normalized
+// 0..1 (top-left origin), joined in order and auto-closed; <3 points = empty. It's a Compose Shape, so
+// pass it to OGImageView(clipShape = ...) or any Modifier.clip(...). See docs/POLYGON_SHAPE.md.
+data class OGPoint(val x: Float, val y: Float)
+class OGPolygonShape(val points: List<OGPoint>) : Shape {
+    companion object { fun of(vararg points: Pair<Float, Float>): OGPolygonShape }
+}
 ```
 
 ## Copy-paste recipes (all compile)
@@ -227,7 +236,7 @@ OGDepthField(focalDepth = 0.5f, modifier = Modifier.fillMaxSize()) {
 - `com.solidkey.painpoints.video.loading` — `OGVideoUrlType` (+ file/resource variants)
 - `com.solidkey.painpoints.audio.playing` — `OGAudioPlayer`, `OGAudioPlaybackConfig`
 - `com.solidkey.painpoints.depth` — `Modifier.ogDepth`, `OGDepthField`, `OGDepthObject`, `OGDepthConfig`
-- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`
+- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`, `OGPolygonShape`, `OGPoint`
 - `com.solidkey.painpoints.layer` — `OGLayer`, `OGLayerRenderer`, gestures
 
 ## Docs

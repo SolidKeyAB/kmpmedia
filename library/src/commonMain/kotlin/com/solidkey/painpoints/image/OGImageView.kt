@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
@@ -46,6 +47,10 @@ fun OGImageView(
     // CenterStart the left edge, etc. Center = default (unchanged behavior). It also positions a
     // letterboxed image when contentScale = Fit.
     alignment: Alignment = Alignment.Center,
+    // ✂️ Free-form clip override. When non-null (e.g. an OGPolygonShape lasso) it takes precedence
+    // over displayShape/cornerRadius and masks the photo to that arbitrary outline — the same GPU
+    // clip, just any Path. Use it to keep only a hand-/AI-outlined region (e.g. lasso a head).
+    clipShape: Shape? = null,
     transformations: SnapshotStateList<OGImageTransformation> = mutableStateListOf(),
     draggable: Boolean = false,
     x: MutableState<Float>? = null,
@@ -126,13 +131,14 @@ fun OGImageView(
 
     // 🔷 Shape crop. RECTANGLE + 0dp corner is a no-op (default), so behavior is unchanged for
     // existing callers; any other shape masks the photo via a GPU clip (drawn once = no perf loss).
-    val isShaped = displayShape != OGShapeType.RECTANGLE || cornerRadius > 0.dp
-    val clipShape = remember(displayShape, cornerRadius) { displayShape.toShape(cornerRadius) }
+    val isShaped = clipShape != null || displayShape != OGShapeType.RECTANGLE || cornerRadius > 0.dp
+    val builtInShape = remember(displayShape, cornerRadius) { displayShape.toShape(cornerRadius) }
+    val effectiveShape = clipShape ?: builtInShape
 
     Box(
         modifier = modifier
             .zIndex(zIndex) // ✅ apply stacking order
-            .then(if (isShaped) Modifier.clip(clipShape) else Modifier) // 🔷 crop photo into shape
+            .then(if (isShaped) Modifier.clip(effectiveShape) else Modifier) // 🔷 crop photo into shape
             .then(
                 if (effectiveGestureHandler != null)
                     Modifier.ogPointerGestureWrapper(

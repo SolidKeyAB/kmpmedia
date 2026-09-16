@@ -17,6 +17,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Runtime SVG animation** (SMIL `<animate>`) | ✅ | ❌ | ❌ |
 | **Wrap any static image/SVG → animated** (`OGAnimatedImage`) | ✅ | ❌ | ❌ |
 | **Shape-crop** image & video to any shape (circle/triangle/…) | ✅ | ❌ | ❌ |
+| **Free-form polygon lasso** — clip to any AI-/hand-drawn outline (`OGPolygonShape`) | ✅ | ❌ | ❌ |
 | **Depth / layer management** — fly over/under + depth-of-field blur (`Modifier.ogDepth`) | ✅ | ❌ | ❌ |
 | **Interactive / draggable / gesture** layers | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
@@ -59,7 +60,7 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
 
 - **✨ Animate a Static Image** — take a fully-static SVG (zero `<animate>` tags) and bring it alive with the animation primitives: Scale / Rotate / Fade / Slide, combined live.
 - **✂️ Crop a Photo into a Shape** — crop any photo into a circle / triangle / diamond with pinch-to-zoom, drag-to-pan and a 3×3 focal grid — one GPU clip, drawn once, so it's free.
-- **🧍 Add Your Head to a Body** — an *already-rigged* body (torso + two arms + two legs, every segment a jointed chain). Drop in a photo, clip it to a shape and it becomes the **head**, pinned at the neck joint you set (size + tilt). Then tap **Wave / Walk / Jumping jacks / Dance** and the whole body animates, your head riding along. The head is one `OGImageView` shape-crop; the rig and every dynamic are plain Compose, identical on Android & iOS.
+- **🧍 Add Your Head to a Body** — an *already-rigged* body (torso + two arms + two legs, every segment a jointed chain). Drop in a photo and the **✂️ head lasso** ([`OGPolygonShape`](docs/POLYGON_SHAPE.md)) clips out *just the head* — no external editor — pinned at the neck joint you set (size + tilt); or fall back to a circle / triangle / diamond. Then tap **Wave / Walk / Jumping jacks / Dance** and the whole body animates, your head riding along. The head is one `OGImageView` clip; the rig and every dynamic are plain Compose, identical on Android & iOS.
 - **🦾 Jointed Shapes** — the building block behind it: shape-clipped photos pinned at one pixel with a movable angular limit, chained into a draggable two-link arm and a clamped pendulum.
 - **🎬 Video Playback** — one cross-platform `OGAVPlayer` (ExoPlayer on Android, AVPlayer on iOS), re-framed live into any shape, with transport controls, loop and load-any-URL.
 - **🛸 UFO Dodge (mini-game)** — every sprite is a static SVG animated by the library; crop your own photos into shapes and drop them into the field as live game objects.
@@ -237,6 +238,26 @@ OGImageView(
 ```
 
 > The same shape-crop applies to video via `OGAVPlayer(config = OGPlayerConfig(displayShape = OGShapeType.CIRCLE))`.
+
+Need to keep only an *arbitrary* region — a head, a logo, a hand-drawn area? Clip to a **free-form polygon lasso** instead of a built-in shape. The outline is just a list of normalized `0..1` vertices joined by line segments, so an AI/segmentation model or an on-image finger-draw can produce it directly — no external editor:
+
+```kotlin
+import com.solidkey.painpoints.shape.OGPolygonShape
+
+OGImageView(
+    source = OGImageResourceFileType("portrait", OGImageFormat.JPEG),
+    modifier = Modifier.size(220.dp),
+    contentScale = ContentScale.Crop,
+    clipShape = OGPolygonShape.of(          // vertices in 0..1 space (top-left origin), any count ≥ 3
+        0.48f to 0.02f, 0.86f to 0.22f, 0.84f to 0.54f,
+        0.48f to 0.83f, 0.16f to 0.53f, 0.15f to 0.22f,
+    ),                                      // ← clips to exactly this outline; see docs/POLYGON_SHAPE.md
+    onEventTriggered = { _, _ -> },
+    onError = { /* ... */ },
+)
+```
+
+See [**docs/POLYGON_SHAPE.md**](docs/POLYGON_SHAPE.md) for the full API and how the demo's "Add Your Head to a Body" uses it to cut out a head.
 
 ### Play video / audio
 
