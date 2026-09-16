@@ -50,11 +50,12 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
 <sub><b>Android</b> — “Add Your Head to a Body”, then UFO Dodge.</sub>
 
 <p>
-  <img src="demo-screenshots/demo_ios_home.png" width="30%" alt="The demo home menu running on an iOS simulator" />
-  <img src="demo-screenshots/demo_ios_warp.png" width="30%" alt="UFO Dodge on iOS — flying through the black-hole warp" />
-  <img src="demo-screenshots/demo_ios_storm.png" width="30%" alt="UFO Dodge on iOS — a meteor-storm cue firing" />
+  <img src="demo-screenshots/demo_ios_body_rig.png" width="24%" alt="Add Your Head to a Body running on an iOS simulator — the same head lasso" />
+  <img src="demo-screenshots/demo_ios_home.png" width="24%" alt="The demo home menu running on an iOS simulator" />
+  <img src="demo-screenshots/demo_ios_warp.png" width="24%" alt="UFO Dodge on iOS — flying through the black-hole warp" />
+  <img src="demo-screenshots/demo_ios_storm.png" width="24%" alt="UFO Dodge on iOS — a meteor-storm cue firing" />
 </p>
-<sub><b>iOS</b> — the same Compose Multiplatform code on an iPhone simulator: the home menu, then UFO Dodge (black-hole warp + a meteor-storm cue).</sub>
+<sub><b>iOS</b> — the same Compose Multiplatform code on an iPhone simulator: <b>“Add Your Head to a Body”</b> (your photo cut out by the <code>OGPolygonShape</code> head-lasso, exactly as on Android), the home menu, then UFO Dodge (black-hole warp + a meteor-storm cue).</sub>
 
 **What's inside**
 
