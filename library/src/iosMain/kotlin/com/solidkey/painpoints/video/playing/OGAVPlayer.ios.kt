@@ -177,7 +177,7 @@ actual fun OGAVPlayer(
             .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
             // Respect the caller's modifier size (was hardcoded .size(250.dp), which ignored the
             // passed modifier — the same bug fixed on Android in v0.1.8).
-            .clip(config.shape)
+            .clip(config.effectiveShape)
             .pointerInput(config.displayMovable) {
                 if (config.displayMovable) {
                     detectDragGestures { change, dragAmount ->

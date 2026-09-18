@@ -50,8 +50,11 @@ fun scalePolygonPoints(points: List<OGPoint>, width: Float, height: Float): List
 ```
 
 `clipShape` is fully backward-compatible: leave it `null` (the default) and `displayShape` +
-`cornerRadius` behave exactly as before. Because `OGPolygonShape` is an ordinary `Shape`, you can also
-apply it to **any** composable with `Modifier.clip(OGPolygonShape.of(...))` — including a video surface.
+`cornerRadius` behave exactly as before. **Video has the same first-class support** — pass a
+`clipShape` into the player's config: `OGAVPlayer(config = OGPlayerConfig(clipShape = OGPolygonShape.of(...)))`
+clips the video to that outline (it takes precedence over `displayShape`, exactly like on images). And
+since `OGPolygonShape` is an ordinary `Shape`, you can still `Modifier.clip(OGPolygonShape.of(...))` any
+other composable.
 
 ## Example — cut out a head
 

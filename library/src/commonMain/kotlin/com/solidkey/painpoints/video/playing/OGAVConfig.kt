@@ -41,11 +41,20 @@ data class OGPlayerConfig(
     val controlPosition: Alignment? = null, // ✅ Allow developers to decide control location
     val backgroundColor: Color = Color.Black, // ✅ Fills the shape behind/around the video (letterbox color)
     val contentScale: OGVideoScale = OGVideoScale.FIT, // ✅ FIT = letterbox, FILL = crop to remove empty areas
-    val playbackConfig: OGVideoPlaybackConfig = OGVideoPlaybackConfig() // ✅ Nested playback settings
+    val playbackConfig: OGVideoPlaybackConfig = OGVideoPlaybackConfig(), // ✅ Nested playback settings
+    // ✂️ Free-form clip override (e.g. an OGPolygonShape lasso). When non-null it takes precedence
+    // over displayShape/cornerRadius and masks the video to that arbitrary outline — the same GPU
+    // clip OGImageView uses, so video reaches shape parity with images. null = use displayShape.
+    val clipShape: Shape? = null
 ) {
     // displayShape + displayMovable are now honored on both Android and iOS
     // (see OGAVPlayer.ios.kt), so the previous iOS "ignored" warnings were removed.
 
+    /** Built-in shape derived from [displayShape] + [cornerRadius]. */
     val shape: Shape
         get() = displayShape.toShape(cornerRadius)
+
+    /** The shape the video is actually clipped to: a non-null [clipShape] (lasso) wins, else [shape]. */
+    val effectiveShape: Shape
+        get() = clipShape ?: shape
 }

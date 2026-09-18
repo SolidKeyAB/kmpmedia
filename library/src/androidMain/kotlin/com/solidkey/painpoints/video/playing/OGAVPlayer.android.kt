@@ -200,7 +200,7 @@ actual fun OGAVPlayer(
     Box(
         modifier = modifier
             .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
-            .clip(config.shape)
+            .clip(config.effectiveShape)
             .background(config.backgroundColor)
             .pointerInput(config.displayMovable) {
                 if (config.displayMovable) {

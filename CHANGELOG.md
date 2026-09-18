@@ -4,6 +4,16 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] — 2026-09-18
+
+> Brings the **free-form clip shape to video**: `OGAVPlayer` now clips to any `Shape` (e.g. an `OGPolygonShape` lasso), reaching full parity with `OGImageView`. Purely additive — `OGPlayerConfig` gains one optional field defaulting to `null`, so every existing player call compiles unchanged.
+
+### Added
+- `OGPlayerConfig(clipShape: Shape? = null)` — when non-null, the video is masked to that arbitrary outline (e.g. an `OGPolygonShape`), taking precedence over `displayShape`/`cornerRadius`. Backed by a new `OGPlayerConfig.effectiveShape` (= `clipShape ?: shape`) that both the Android (ExoPlayer) and iOS (AVPlayer) players clip to — the same GPU `Modifier.clip` mask, so there's no new runtime cost.
+
+### Notes
+- Backward-compatible: `clipShape` defaults to `null`, so `displayShape`/`cornerRadius` behave exactly as before. This promotes "clip a video to a hand-/AI-drawn region" from a manual `Modifier.clip` wrap to a first-class config option, matching `OGImageView(clipShape = …)`.
+
 ## [1.3.0] — 2026-09-16
 
 > Adds a **free-form polygon lasso** clip shape — clip an image (or any composable) to an arbitrary outline of line segments, not just the built-in circle/triangle/…. Purely additive: `OGImageView` gains one optional trailing param, every existing call compiles unchanged.
