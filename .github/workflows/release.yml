@@ -11,11 +11,15 @@ jobs:
     runs-on: macos-latest
 
     # The `secrets` context cannot be referenced in a step-level `if:` — doing so fails the
-    # whole workflow at startup (0s "workflow file issue"). Surface the two guard secrets as
-    # job-level env (env IS allowed in `if:`) so the Maven Central step can gate on them.
+    # whole workflow at startup (0s "workflow file issue"). Surface the guard secrets as
+    # job-level env (env IS allowed in `if:`) so each publish step can gate on its own secrets.
+    # Per docs/RELEASING.md this workflow is DORMANT by design: publishing to Maven Central is
+    # done manually/locally so the signing key never lives in GitHub. With none of these secrets
+    # set, both publish steps skip and a run is a harmless no-op (nothing publishes, nothing fails).
     env:
       HAS_MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' }}
       HAS_SIGNING_IN_MEMORY_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY != '' }}
+      HAS_GPR_TOKEN: ${{ secrets.GPR_TOKEN != '' }}
 
     steps:
       - name: 🧾 Checkout code
@@ -35,7 +39,10 @@ jobs:
 
       # Publishing tasks are not compatible with the configuration cache, so it is
       # disabled explicitly for these steps.
+      # Gated like the Maven Central step below: with no GPR_TOKEN set this skips instead of
+      # failing, so a stray tag push can't leave a red ❌. See docs/RELEASING.md.
       - name: 🚀 Publish to GitHub Packages
+        if: ${{ env.HAS_GPR_TOKEN == 'true' }}
         run: ./gradlew publishAllPublicationsToGitHubPackagesRepository -Pversion=${{ env.VERSION }} --no-configuration-cache
         env:
           GPR_USER: ${{ secrets.GPR_USER }}
