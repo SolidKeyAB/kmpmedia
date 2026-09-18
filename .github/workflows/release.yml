@@ -1,9 +1,15 @@
 name: Publish KMP Library Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  # Manual-dispatch only — deliberately NOT triggered by tag pushes. Per docs/RELEASING.md we
+  # publish to Maven Central manually/locally (signing key never in GitHub), so cutting a GitHub
+  # Release / pushing a tag must NOT spin this (macOS) runner. Kept as an opt-in escape hatch: to
+  # automate later, add the secrets below and run it by hand (Actions → Run workflow → version).
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 1.4.0) — must already be committed on main.'
+        required: true
 
 jobs:
   publish:
@@ -34,13 +40,13 @@ jobs:
       - name: 🛠 Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: 🔧 Extract version from tag
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: 🔧 Resolve version
+        run: echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
 
       # Publishing tasks are not compatible with the configuration cache, so it is
       # disabled explicitly for these steps.
       # Gated like the Maven Central step below: with no GPR_TOKEN set this skips instead of
-      # failing, so a stray tag push can't leave a red ❌. See docs/RELEASING.md.
+      # failing, so even a manual run with no secrets is a clean no-op. See docs/RELEASING.md.
       - name: 🚀 Publish to GitHub Packages
         if: ${{ env.HAS_GPR_TOKEN == 'true' }}
         run: ./gradlew publishAllPublicationsToGitHubPackagesRepository -Pversion=${{ env.VERSION }} --no-configuration-cache

@@ -39,25 +39,34 @@ the tests on every push to `main`.
      (`mavenCentralUsername` / `mavenCentralPassword`).
    - Central's CDN (`repo1.maven.org`) syncs roughly 10–15 min after a successful upload.
 
-3. **Cut the GitHub Release _without_ triggering the publish workflow.** `release.yml` fires on
-   a `v*.*.*` tag push and runs on a **macOS runner**, so we disable it while tagging to avoid a
-   pointless run:
+3. **Cut the GitHub Release.** Safe to do directly — `release.yml` no longer triggers on tag
+   pushes (it's manual-dispatch only; see below), so this spins no runner:
 
    ```bash
-   gh workflow disable "Publish KMP Library Release" -R SolidKeyAB/kmpmedia
    gh release create v<x.y.z> --target main --title "…" --notes-file NOTES.md --latest
-   gh workflow enable  "Publish KMP Library Release" -R SolidKeyAB/kmpmedia
    ```
 
    `gh release --target` must be a **branch name** (e.g. `main`), not a commit SHA — a SHA is
    rejected with HTTP 422.
 
+4. **Verify it's live.** Central's CDN (`repo1.maven.org`) syncs ~10–15 min after upload; then:
+
+   ```bash
+   curl -sI https://repo1.maven.org/maven2/se/solidkey/kmpmedia-lib/<x.y.z>/kmpmedia-lib-<x.y.z>.pom
+   # → HTTP/2 200 once synced
+   ```
+
+   Also confirm `…/kmpmedia-lib/maven-metadata.xml` shows `<latest>` / `<release>` = `<x.y.z>`.
+
 ## The `release.yml` workflow (dormant by design)
 
-`release.yml` is kept but **intentionally dormant**: both of its publish steps are gated on repo
-secrets we deliberately do **not** set (`MAVEN_CENTRAL_*`, `SIGNING_IN_MEMORY_KEY`, `GPR_TOKEN`).
-With no secrets present, a run is a harmless no-op — nothing publishes and nothing fails.
+`release.yml` is kept but **intentionally dormant** and **manual-dispatch only** — it does **not**
+run on tag pushes, so cutting a GitHub Release (step 3) never spins a runner and needs no
+disable/enable dance. Both publish steps are also gated on repo secrets we deliberately do **not**
+set (`MAVEN_CENTRAL_*`, `SIGNING_IN_MEMORY_KEY`, `GPR_TOKEN`), so even a manual run with no secrets
+is a harmless no-op.
 
-If we ever decide to automate publishing, adding those secrets switches it on with no further
-changes. If we do, prefer a **dedicated, revocable signing subkey** (not the primary GPG key), so
-a leak can be revoked without touching the maintainer's identity.
+If we ever decide to automate publishing, add those secrets and run the workflow by hand
+(Actions → **Publish KMP Library Release** → **Run workflow** → enter the version). Prefer a
+**dedicated, revocable signing subkey** (not the primary GPG key), so a leak can be revoked without
+touching the maintainer's identity.
