@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/branding/kmpmedia-logo.svg" alt="KMPMedia — media for Kotlin Multiplatform + Compose" width="480">
+</p>
+
 # KMPMedia
 
 **A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, audio, and video, on **Android and iOS**.
