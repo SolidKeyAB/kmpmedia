@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] — 2026-09-19
+
+> Adds **audio sprites** — trigger *slices* of a single audio file on demand. Pack many short sounds (a "collect" chime, a "hit" thud, a "powerup" sweep) into one asset and fire any of them by id on an event, with a small voice pool so they can overlap instead of cutting each other off. Purely additive: a brand-new primitive alongside the existing `OGAudioPlayer`, which is unchanged.
+
+### Added
+- `OGAudioClip(id, startMs, endMs = END)` in `com.solidkey.painpoints.audio.playing` — a named, time-bounded window inside one audio file (the audio equivalent of a texture atlas). `endMs = OGAudioClip.END` (the default) plays from `startMs` to the end of the file; otherwise `endMs` must be `> startMs`. Exposes `playsToEnd` / `durationMs`; validates its inputs.
+- `OGAudioSprite` (expect/actual) — loads one `OGSource` plus a list of `OGAudioClip`s, then `play("hit")` fires a clip on the next free voice. Also `stop(clipId)`, `stopAll()`, `setVolume(0f..1f)`, `release()`, and `clipIds`. Created with `OGAudioSprite.create()` (Composable factory).
+- `OGAudioSpriteConfig(voices = 4, volume = 1f)` — sizes the round-robin voice pool (how many clips may sound at once) and sets master volume.
+
+### Notes
+- Android plays each window via **media3/ExoPlayer** `MediaItem.ClippingConfiguration` (the same media3 stack the video player already uses); iOS via `AVPlayer` seek + `AVPlayerItem.forwardPlaybackEndTime`, one player per voice. Overlap is handled by a shared, unit-tested round-robin allocator (`OGVoiceRotor`) — the (voices+1)-th simultaneous trigger reuses the oldest voice.
+- Short SFX deliberately do **not** grab Android audio focus (a per-trigger request/abandon would add latency and duck the user's music).
+- Backward-compatible: `OGAudioPlayer` (whole-file playback) is untouched; `OGAudioSprite` is a separate, opt-in primitive. See `docs/AUDIO_SPRITE.md`. The demo's **UFO Dodge** game uses it for collect/hit SFX.
+
 ## [1.4.0] — 2026-09-18
 
 > Brings the **free-form clip shape to video**: `OGAVPlayer` now clips to any `Shape` (e.g. an `OGPolygonShape` lasso), reaching full parity with `OGImageView`. Purely additive — `OGPlayerConfig` gains one optional field defaulting to `null`, so every existing player call compiles unchanged.
