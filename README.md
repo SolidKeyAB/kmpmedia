@@ -47,9 +47,10 @@ Today that makes KMPMedia **AI-generatable**. A serializable scene-spec + MCP se
 KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) built directly against this library's source, so every screen is real, readable library code you can lift into your own app. It's the fastest way to see what "animated, interactive, runtime-editable" actually looks like.
 
 <p align="center">
-  <img src="demo-screenshots/ufo-dodge-demo.gif" width="30%" alt="UFO Dodge in motion — a real looping video clipped into the space background, SVG sprites animated by the library, and a live meteor-storm cue" />
+  <img src="demo-screenshots/ufo-dodge-demo.gif" width="30%" alt="UFO Dodge in motion on Android — a real looping video clipped into the space background, SVG sprites animated by the library, and a live meteor-storm cue" />
+  <img src="demo-screenshots/ios-ufo-dodge-demo.gif" width="30%" alt="The same UFO Dodge running on an iOS simulator — identical Compose Multiplatform code, same clipped-video backdrop and animated sprites" />
 </p>
-<sub><b>UFO Dodge, live</b> — a real looping video clipped into the backdrop, SVG sprites animated by the library, and the video's own timeline firing an in-game meteor-storm cue. All built from library primitives, identical on Android &amp; iOS.</sub>
+<sub><b>UFO Dodge, live — Android (left) &amp; iOS (right).</b> The <i>same</i> Compose Multiplatform code on both: a real looping video clipped into the backdrop, SVG sprites animated by the library, and the video's own timeline firing an in-game meteor-storm cue. All built from library primitives.</sub>
 
 <p>
   <img src="demo-screenshots/demo_body_rig.png" width="30%" alt="Add your own photo as the head of an already-rigged body" />
