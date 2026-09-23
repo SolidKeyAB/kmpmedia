@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] — 2026-09-23
+
+> Makes **animated GIFs actually animate** on both Android and iOS. Until now the image path decoded only a GIF's *first frame* (a still picture); `OGImageView` now plays the frames — looping, with the same one-liner API as any other image, and the same shape clip that crops a still photo works on the moving frames too. Purely additive and dependency-free.
+
+### Added
+- `rememberOGAnimatedPainter(source, loop = true, speed = 1f, onError = null)` in `com.solidkey.painpoints.image.gif` (expect/actual `@Composable`) — returns a playing `Painter` that advances a multi-frame image's frames on the Compose clock (`null` while the first frame is still decoding). `loop` repeats forever (default); `speed > 1` plays faster.
+- `OGImageView` now auto-detects a `.gif` source (by extension) and animates it — **no API change** to existing calls; a `.gif` URL, file path or iOS resource simply plays instead of showing one frame.
+
+### Notes
+- Native platform decoders, **no new dependencies**: Android uses `AnimatedImageDrawable` (API 28+, with a clean static-first-frame fallback on API 24–27, where `speed` is ignored); iOS decodes every frame with Skia's `Codec` and cycles them, driven by a small, pure, unit-tested frame clock (`OGGifClock`). This matches the library's existing `BitmapFactory` / `UIImage` / Skia style.
+- **Not GIF-specific**: animated **WebP** and any other multi-frame format the platform decoder understands ride the same path.
+- Backward-compatible: still images are unaffected; a GIF just animates where it used to render its first frame. See `docs/GIF.md`.
+
 ## [1.5.0] — 2026-09-19
 
 > Adds **audio sprites** — trigger *slices* of a single audio file on demand. Pack many short sounds (a "collect" chime, a "hit" thud, a "powerup" sweep) into one asset and fire any of them by id on an event, with a small voice pool so they can overlap instead of cutting each other off. Purely additive: a brand-new primitive alongside the existing `OGAudioPlayer`, which is unchanged.
