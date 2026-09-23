@@ -43,6 +43,9 @@ fun OGSVGView(
     enableDrag: Boolean = false,
     scalingBehavior: SVGScalingBehavior = SVGScalingBehavior.CLIP,
     followCommonPractices: Boolean = false, // New flag to follow common practices
+    // Runtime, per-node attribute overrides keyed by SVG `id`. Change this map from Compose
+    // state and the SVG redraws live (no re-parse). Empty = unchanged, static behaviour.
+    overrides: Map<String, OGSvgNodeOverride> = emptyMap(),
     onError: ((String) -> Unit)? = null,
     onScaleComputed: ((Float) -> Unit)? = null  // Optional callback, default is null
 ) {
@@ -51,7 +54,6 @@ fun OGSVGView(
     var OGParsedSVGResult by remember { mutableStateOf<OGParsedSVGResult?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var isDragging by remember { mutableStateOf(false) }
-    var renderShapes by remember { mutableStateOf<List<RenderShape>>(emptyList()) }
 
     val disableScrolling = rememberScrollableState { delta ->
         if (isDragging) 0f else delta
@@ -79,17 +81,25 @@ fun OGSVGView(
             return@loadSvg
         }
 
-        val resolvedViewBox = result.viewBox
+        isSvgLoaded = true
+        OGParsedSVGResult = result
+        viewBox = result.viewBox
+    }
+
+    // Build the draw list reactively from the parsed tree + the current overrides. Keyed on
+    // `overrides` (and size/behaviour), so changing an override re-resolves the shapes WITHOUT
+    // re-parsing the source; unchanged overrides reuse the cached list.
+    val parsedResult = OGParsedSVGResult
+    val renderShapes: List<RenderShape> = remember(
+        parsedResult, overrides, width, height, scalingBehavior, followCommonPractices
+    ) {
+        val svgTree = parsedResult?.svgTree ?: return@remember emptyList()
+        val resolvedViewBox = parsedResult.viewBox
         // Guard against a degenerate viewBox (e.g. viewBox="0 0 0 0") to avoid a
         // divide-by-zero that would produce an infinite/NaN scale.
         val vbWidth = resolvedViewBox.width.takeIf { it != 0f } ?: width
         val vbHeight = resolvedViewBox.height.takeIf { it != 0f } ?: height
-
-        isSvgLoaded = true
-        OGParsedSVGResult = result
-        viewBox = resolvedViewBox
-
-        renderShapes = prepareRenderShapes(
+        prepareRenderShapes(
             svgTree = svgTree,
             scale = width / vbWidth,
             scaleX = width / vbWidth,
@@ -100,9 +110,10 @@ fun OGSVGView(
             width = width,
             height = height,
             followCommonPractices = followCommonPractices,
-            gradients = result.gradients,
-            patterns = result.patterns,
-            viewBox = resolvedViewBox
+            gradients = parsedResult.gradients,
+            patterns = parsedResult.patterns,
+            viewBox = resolvedViewBox,
+            overrides = overrides
         )
     }
 
@@ -150,7 +161,31 @@ fun OGSVGView(
                 }
             }) {
                 renderShapes.forEach { renderShape ->
-                    renderShape.drawAction(this, if (enableDrag) dragOffset else Offset.Zero)
+                    val dOff = if (enableDrag) dragOffset else Offset.Zero
+                    val ov = renderShape.element?.id?.let { overrides[it] }
+                    if (ov != null && ov.hasTransform) {
+                        // Apply transform overrides uniformly (independent of shape type), pivoting
+                        // around the given user-space point (default: viewBox centre), mapped into
+                        // the same scaled space the shapes are drawn in.
+                        val vbOffX = -vb.minX * scale
+                        val vbOffY = -vb.minY * scale
+                        val pivotX = (ov.rotationCx ?: (vb.minX + vb.width / 2f)) * scale + vbOffX
+                        val pivotY = (ov.rotationCy ?: (vb.minY + vb.height / 2f)) * scale + vbOffY
+                        val pivot = Offset(pivotX, pivotY)
+                        val txPx = (ov.translateX ?: 0f) * scale
+                        val tyPx = (ov.translateY ?: 0f) * scale
+                        withTransform({
+                            if (txPx != 0f || tyPx != 0f) translate(txPx, tyPx)
+                            ov.rotation?.let { rotate(it, pivot = pivot) }
+                            if (ov.scaleX != null || ov.scaleY != null) {
+                                scale(ov.scaleX ?: 1f, ov.scaleY ?: 1f, pivot = pivot)
+                            }
+                        }) {
+                            renderShape.drawAction(this, dOff)
+                        }
+                    } else {
+                        renderShape.drawAction(this, dOff)
+                    }
                 }
             }
         }
@@ -180,11 +215,16 @@ fun prepareRenderShapes(
     followCommonPractices: Boolean,
     gradients: Map<String, OGSVGGradient>? = null,
     patterns: Map<String, OGSVGPattern>? = null,
-    viewBox: ViewBox
+    viewBox: ViewBox,
+    overrides: Map<String, OGSvgNodeOverride> = emptyMap()
 ): List<RenderShape> {
     val renderShapes = mutableListOf<RenderShape>()
 
-    fun traverse(element: OGSVGTreeElement) {
+    fun traverse(node: OGSVGTreeElement) {
+        // Fold any paint override (fill/stroke/stroke-width) for this node's id into an effective
+        // element; transforms are applied separately at draw time. No override → same object.
+        val element = if (overrides.isEmpty()) node
+            else applyPaintOverride(node, node.id?.let { overrides[it] })
         val strokeWidth = (element.style.strokeWidth ?: 1f) * scale
 
         element.shapes.forEach { shape ->

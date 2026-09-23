@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] — 2026-09-23
+
+> **Runtime-editable SVG.** KMPMedia parses an SVG into a live node tree — now you can address any node by its `id` and change its attributes at runtime, bound to Compose state, turning a static `.svg` into a **live template**: gauges, charts, progress rings, status icons. The source is parsed **once**; only the overrides change and it redraws live. Purely additive — a new optional `overrides` param on `OGSVGView` defaulting to empty, so every existing call is unchanged. Same code on Android and iOS.
+
+### Added
+- `OGSvgNodeOverride` in `com.solidkey.painpoints.image.svg` — a per-node override (every field nullable, `null` = keep the original): `fill`, `stroke`, `strokeWidth`, `translateX` / `translateY`, `rotation` (with `rotationCx` / `rotationCy` pivot), `scaleX` / `scaleY`.
+- `OGSVGView(overrides: Map<String, OGSvgNodeOverride> = emptyMap())` — map node `id` → override; change the map from Compose state and only the matched nodes re-resolve, **without re-parsing** the source.
+
+### Notes
+- Paint (`fill` / `stroke` / `strokeWidth`) folds into the node's style (reusing `OGSVGStyle.combine`); transforms (`translate` / `rotation` / `scale`) are applied uniformly at draw time, so they work on **any** shape type (path / circle / rect / line / polygon / ellipse) regardless of the renderer's per-shape transform handling.
+- Reactive and cheap — resolving overrides walks the already-parsed tree and rebuilds the draw list; no re-parse or re-fetch. Backward-compatible (`overrides` defaults to empty). See `docs/RUNTIME_SVG.md`; the demo's **Runtime-editable SVG** screen is a live gauge driven by a slider.
+- Roadmap follow-ups: overriding a node's path `d`, and animating between two paths (path morphing).
+
 ## [1.6.0] — 2026-09-23
 
 > Makes **animated GIFs actually animate** on both Android and iOS. Until now the image path decoded only a GIF's *first frame* (a still picture); `OGImageView` now plays the frames — looping, with the same one-liner API as any other image, and the same shape clip that crops a still photo works on the moving frames too. Purely additive and dependency-free.
