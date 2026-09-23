@@ -221,10 +221,13 @@ fun prepareRenderShapes(
     val renderShapes = mutableListOf<RenderShape>()
 
     fun traverse(node: OGSVGTreeElement) {
-        // Fold any paint override (fill/stroke/stroke-width) for this node's id into an effective
-        // element; transforms are applied separately at draw time. No override → same object.
+        // Fold any paint override (fill/stroke/stroke-width) and any path-`d` override for this
+        // node's id into an effective element; transforms are applied separately at draw time.
+        // No override → same object.
         val element = if (overrides.isEmpty()) node
-            else applyPaintOverride(node, node.id?.let { overrides[it] })
+            else node.id?.let { overrides[it] }.let { ov ->
+                applyPathOverride(applyPaintOverride(node, ov), ov, viewBox)
+            }
         val strokeWidth = (element.style.strokeWidth ?: 1f) * scale
 
         element.shapes.forEach { shape ->
