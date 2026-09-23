@@ -51,6 +51,14 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
 </p>
 <sub><b>The core moves, live.</b> Crop a photo into any shape · re-frame a <i>running</i> video into any shape · bring a 100%-static SVG to life with Scale / Rotate / Fade / Slide. Each is one <code>OGImageView</code> / <code>OGAVPlayer</code> / animation-primitive call — the same Compose Multiplatform code on Android &amp; iOS.</sub>
 
+And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any node changed by its `id` at runtime, bound to Compose state:
+
+<p align="center">
+  <img src="demo-screenshots/runtime-svg-demo.gif" width="30%" alt="Runtime-editable SVG on Android — a live gauge whose needle rotates and whose arc and status dot recolour green→amber→red as a slider drives an overrides map keyed by node id, with no re-parse" />
+  <img src="demo-screenshots/ios-runtime-svg-demo.gif" width="30%" alt="The same runtime-editable SVG gauge on an iOS simulator — identical Compose Multiplatform code, the needle and zones following the same overrides map" />
+</p>
+<sub><b>Runtime-editable SVG, live — Android (left) &amp; iOS (right).</b> One <code>.svg</code> is parsed <i>once</i>; a slider only mutates an <code>overrides</code> map keyed by node <code>id</code> and the same drawing redraws live — the needle rotates and the arc + status dot recolour green→amber→red. No re-parse, identical on both platforms. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
