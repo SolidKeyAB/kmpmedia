@@ -23,6 +23,7 @@ import androidx.compose.ui.zIndex
 import com.solidkey.painpoints.shape.OGShapeType
 import com.solidkey.painpoints.shape.toShape
 import co.touchlab.kermit.Logger
+import com.solidkey.painpoints.image.gif.rememberOGAnimatedPainter
 import com.solidkey.painpoints.image.layering.OGLayerItemEvent
 import com.solidkey.painpoints.image.loading.OGImageLoader
 import com.solidkey.painpoints.image.processing.OGImageProcessor
@@ -84,10 +85,22 @@ fun OGImageView(
         OGSourceType.SourceType.RESOURCE -> OGSource.Resource(location)
     }
 
-    // Load image
-    OGImageLoader.loadImage(imageSource, onError) { painter ->
-        imagePainter = painter
-        transformedPainter = painter
+    // 🎞️ Animated GIF path. A `.gif` source is played as a looping animation instead of a static
+    // decode (which only ever shows the first frame). Detection is by extension, so URL/file GIFs
+    // animate on both platforms and iOS resource GIFs too (their location resolves to a full path);
+    // static transformations don't apply to GIFs, but the shape clip / contentScale / alignment
+    // below still do. Everything else is unchanged for non-GIF sources.
+    val isGif = remember(location) {
+        location.substringBefore('?').substringAfterLast('.', "").equals("gif", ignoreCase = true)
+    }
+    val gifPainter = if (isGif) rememberOGAnimatedPainter(imageSource, onError = onError) else null
+
+    // Load image (static path only — GIFs are handled by [gifPainter] above).
+    if (!isGif) {
+        OGImageLoader.loadImage(imageSource, onError) { painter ->
+            imagePainter = painter
+            transformedPainter = painter
+        }
     }
 
     // Trigger transformation if any changes
@@ -151,7 +164,8 @@ fun OGImageView(
             .then(if (debugVisual) Modifier.background(Color.Red.copy(alpha = 0.3f)) else Modifier)
     ) {
         Image(
-            painter = transformedPainter ?: imagePainter ?: ColorPainter(Color.LightGray),
+            painter = if (isGif) gifPainter ?: ColorPainter(Color.LightGray)
+            else transformedPainter ?: imagePainter ?: ColorPainter(Color.LightGray),
             contentDescription = "Processed Image",
             contentScale = contentScale,
             alignment = alignment,

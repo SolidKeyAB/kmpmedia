@@ -4,7 +4,7 @@
 
 # KMPMedia
 
-**A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, audio, and video, on **Android and iOS**.
+**A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, **animated GIFs**, audio, and video, on **Android and iOS**.
 
 Everything renders into native Compose primitives (`Canvas`/`drawScope`), so SVGs are live vectors you can animate, drag, layer, and edit at runtime — not rasterized bitmaps.
 
@@ -274,6 +274,39 @@ OGImageView(
     onError = { /* ... */ },
 )
 ```
+
+### Play an animated GIF
+
+Point `OGImageView` at a `.gif` and it plays — no extra API. The frames animate on **both platforms** (previously the image path only ever showed the first frame). Everything else about `OGImageView` still applies: `contentScale`, `alignment`, and shape-crop / lasso clipping all work on the moving image.
+
+```kotlin
+import com.solidkey.painpoints.image.OGImageView
+import com.solidkey.painpoints.image.loading.OGImageUrlType
+
+// A .gif URL (or file path) auto-detects and loops.
+OGImageView(
+    source = OGImageUrlType("https://example.com/loading.gif"),
+    onEventTriggered = { _, _ -> },
+    onError = { /* ... */ },
+)
+```
+
+Want direct control over looping / speed, or to feed the animation into your own `Image`? Use the underlying painter:
+
+```kotlin
+import androidx.compose.foundation.Image
+import com.solidkey.painpoints.image.gif.rememberOGAnimatedPainter
+import com.solidkey.painpoints.source.OGSource
+
+val painter = rememberOGAnimatedPainter(
+    source = OGSource.Url("https://example.com/loading.gif"),
+    loop = true,
+    speed = 1.5f,          // iOS honours speed; Android plays at native rate
+)
+painter?.let { Image(painter = it, contentDescription = null) }
+```
+
+> **How it works** — Android decodes into the platform's self-animating `AnimatedImageDrawable` (API 28+; the static first frame on API 24–27). iOS decodes every frame with Skia's `Codec` and cycles them honouring per-frame delays and `speed`. See [docs/GIF.md](docs/GIF.md).
 
 See [**docs/POLYGON_SHAPE.md**](docs/POLYGON_SHAPE.md) for the full API and how the demo's "Add Your Head to a Body" uses it to cut out a head.
 
