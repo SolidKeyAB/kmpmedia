@@ -4,6 +4,17 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-09-23
+
+> **Runtime path geometry.** Runtime-editable SVG can now change a node's **shape**, not just its paint and transform: an `OGSvgNodeOverride` may carry a replacement path `d`, and the addressed `<path>` re-parses to the new geometry live — no new node, no re-parse of the whole SVG. This is the building block for path morphing (the next roadmap step). Purely additive: a new optional `pathData` field defaulting to `null`, so every existing call is unchanged. Same code on Android and iOS.
+
+### Added
+- `OGSvgNodeOverride.pathData: String?` — a replacement path `d`. When set on a node that holds `<path>` geometry, the node redraws with this geometry instead of its original; `null` (default) keeps the original. Ignored on non-path nodes.
+
+### Notes
+- The new `d` is re-parsed against the SVG's viewBox (same user-space as the source), so the viewport transform, any paint override and any transform override on the node still apply on top. Reuses the existing `parsePathCommands`; the resolve rebuilds a fresh shapes list and never mutates the parsed source tree, so switching `pathData` (or clearing it) always re-resolves from the original `d`.
+- Because the geometry is fully runtime-supplied, callers can compute a `d` per frame (e.g. interpolate between two same-structure paths) as a stop-gap until the first-class path-morphing tween lands. See `docs/RUNTIME_SVG.md`; the demo's **Runtime-editable SVG** screen adds a live ▶/❚❚/■ icon whose one `<path>` swaps geometry from the override map.
+
 ## [1.7.0] — 2026-09-23
 
 > **Runtime-editable SVG.** KMPMedia parses an SVG into a live node tree — now you can address any node by its `id` and change its attributes at runtime, bound to Compose state, turning a static `.svg` into a **live template**: gauges, charts, progress rings, status icons. The source is parsed **once**; only the overrides change and it redraws live. Purely additive — a new optional `overrides` param on `OGSVGView` defaulting to empty, so every existing call is unchanged. Same code on Android and iOS.

@@ -2,9 +2,11 @@ package com.solidkey.painpoints.image.svg
 
 import androidx.compose.ui.graphics.Color
 import com.solidkey.painpoints.image.OGColor
+import com.solidkey.painpoints.image.loading.ViewBox
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -101,5 +103,82 @@ class OGSvgNodeOverrideTest {
         val n = node(id = "unmatched")
         assertSame(n, applyPaintOverride(n, null))
         assertNull(applyPaintOverride(n, null).style.stroke)
+    }
+
+    // ---- applyPathOverride (runtime path-`d` override) ----
+
+    private val vb = ViewBox(0f, 0f, 100f, 100f)
+
+    private fun pathNode(
+        id: String? = "p1",
+        d: String = "M0 0 L10 0 L10 10 Z",
+        style: OGSVGStyle = OGSVGStyle(fill = OGColor(Color.Red)),
+    ) = OGSVGTreeElement(
+        tagName = "path",
+        attributes = mutableMapOf("d" to d),
+        style = style,
+        id = id,
+    ).also { it.shapes.add(OGSVGPath(parsePathCommands(d, vb, style))) }
+
+    @Test
+    fun hasPath_detectsPathData() {
+        assertFalse(OGSvgNodeOverride().hasPath)
+        assertTrue(OGSvgNodeOverride(pathData = "M0 0 L1 1").hasPath)
+        // pathData is orthogonal to paint / transform.
+        assertFalse(OGSvgNodeOverride(pathData = "M0 0").hasPaint)
+        assertFalse(OGSvgNodeOverride(pathData = "M0 0").hasTransform)
+    }
+
+    @Test
+    fun pathOverride_nullOrNoPathData_returnsSameInstance() {
+        val n = pathNode()
+        assertSame(n, applyPathOverride(n, null, vb))
+        assertSame(n, applyPathOverride(n, OGSvgNodeOverride(fill = Color.Green), vb))
+    }
+
+    @Test
+    fun pathOverride_onNonPathNode_isNoOp() {
+        // A circle node has no OGSVGPath geometry, so a `d` override can't apply.
+        val circle = node() // tagName = "circle", no path shapes
+        assertSame(circle, applyPathOverride(circle, OGSvgNodeOverride(pathData = "M0 0 L5 5"), vb))
+    }
+
+    @Test
+    fun pathOverride_replacesGeometry_withReparsedCommands() {
+        val style = OGSVGStyle(fill = OGColor(Color.Red))
+        val n = pathNode(d = "M0 0 L10 0 L10 10 Z", style = style)
+        val newD = "M0 0 L20 0 L20 20"
+        val out = applyPathOverride(n, OGSvgNodeOverride(pathData = newD), vb)
+
+        assertNotSame(n, out)
+        val outPath = out.shapes.single() as OGSVGPath
+        // Geometry equals a fresh parse of the new `d` (same viewBox + style).
+        assertEquals(parsePathCommands(newD, vb, style), outPath.commands)
+    }
+
+    @Test
+    fun pathOverride_doesNotMutateSourceTree() {
+        // Re-resolving with a different override must always start from the original `d`, so the
+        // parsed source element and its shapes list must be left untouched.
+        val original = pathNode(d = "M0 0 L10 0 L10 10 Z")
+        val originalCommands = (original.shapes.single() as OGSVGPath).commands
+        val out = applyPathOverride(original, OGSvgNodeOverride(pathData = "M0 0 L99 0"), vb)
+
+        assertNotSame(original.shapes, out.shapes) // fresh list
+        // Source unchanged: still the original geometry.
+        assertEquals(originalCommands, (original.shapes.single() as OGSVGPath).commands)
+    }
+
+    @Test
+    fun pathOverride_keepsNonPathShapesOnTheNode() {
+        // A node carrying both a line and a path: only the path is re-geometried.
+        val n = pathNode(d = "M0 0 L10 0")
+        val line = OGSVGLine(0f, 0f, 5f, 5f)
+        n.shapes.add(line)
+        val out = applyPathOverride(n, OGSvgNodeOverride(pathData = "M0 0 L30 0"), vb)
+
+        assertTrue(out.shapes.any { it is OGSVGPath })
+        assertSame(line, out.shapes.first { it is OGSVGLine }) // line passed through untouched
+        assertEquals(2, out.shapes.size)
     }
 }

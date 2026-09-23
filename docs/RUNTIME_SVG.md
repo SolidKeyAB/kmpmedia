@@ -1,4 +1,4 @@
-# Runtime-editable SVG — `com.solidkey.painpoints.image.svg` (KMPMedia 1.7.0)
+# Runtime-editable SVG — `com.solidkey.painpoints.image.svg` (KMPMedia 1.7.0+)
 
 Most libraries render an SVG as a **static picture**. KMPMedia parses it into a live node tree,
 so from 1.7.0 you can **address any node by its `id` and change its attributes at runtime**, bound
@@ -52,12 +52,36 @@ Every field is optional; `null` means "keep the node's original value".
 | `rotation: Float?` | Rotate the node (degrees), on top of its own transform |
 | `rotationCx`, `rotationCy: Float?` | Pivot for rotation/scale (user units); default = viewBox centre |
 | `scaleX`, `scaleY: Float?` | Scale the node about the pivot |
+| `pathData: String?` *(since 1.8.0)* | Replace a `<path>` node's geometry with a new `d` string |
 
 - **Paint** (`fill` / `stroke` / `strokeWidth`) is folded into the node's style at shape-prep time
   (reusing the parser's `OGSVGStyle.combine`).
 - **Transforms** (`translate` / `rotation` / `scale`) are applied uniformly at draw time — so they
   work on **any** shape type (path, circle, rect, line, polygon, ellipse), independent of the
   renderer's per-shape transform handling.
+- **Path geometry** (`pathData`) re-shapes a `<path>` node: the new `d` is re-parsed against the
+  same viewBox (so it shares the source's user-space), and its `OGSVGPath` geometry is swapped in —
+  paint and transform overrides on the node still apply on top. Ignored on non-path nodes. The
+  source tree is never mutated, so switching back to a different (or no) `pathData` always
+  re-resolves from the original `d`.
+
+### Path geometry (`pathData`)
+
+```kotlin
+// One <path id="icon"> in the SVG; swap its geometry live between recognisable glyphs.
+val play  = "M35 25 L75 50 L35 75 Z"
+val pause = "M35 25 H47 V75 H35 Z M53 25 H65 V75 H53 Z"
+val stop  = "M30 30 H70 V70 H30 Z"
+
+OGSVGView(
+    source = OGSvgUrlType("icon.svg"),
+    overrides = mapOf("icon" to OGSvgNodeOverride(pathData = if (playing) pause else play)),
+)
+```
+
+Because the whole geometry is runtime-supplied, your state can compute a `d` per frame (e.g. an
+interpolation between two same-structure paths) and feed it here — the foundation for **path
+morphing** (a first-class tween lands next on the roadmap).
 
 ## How to author the SVG
 
@@ -76,8 +100,8 @@ Just give the nodes you want to drive an `id`:
 - Reactive & cheap: resolving overrides walks the (already parsed) tree and rebuilds the draw list;
   it does not re-parse or re-fetch the SVG.
 - Backward-compatible and purely additive — `overrides` defaults to empty.
-- Roadmap follow-ups (see [ROADMAP.md](../ROADMAP.md)): overriding a node's path `d`, and animating
-  between two paths (path morphing).
+- Roadmap follow-up (see [ROADMAP.md](../ROADMAP.md)): a first-class **path morphing** tween that
+  animates between two paths (the per-node `d` override above is its building block).
 
 See the **Runtime-editable SVG** screen in the [demo app](https://github.com/SolidKeyAB/kmpmedia-demo)
 for a live gauge driven by a slider.
