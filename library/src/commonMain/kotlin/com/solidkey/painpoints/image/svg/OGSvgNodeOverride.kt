@@ -18,6 +18,13 @@ import com.solidkey.painpoints.image.loading.ViewBox
  * time (so they work on any shape type), pivoting around ([rotationCx], [rotationCy]) in SVG
  * user units — defaulting to the viewBox centre. A [pathData] change re-shapes a `<path>` node by
  * swapping its geometry for a new `d` string, re-parsed against the same viewBox.
+ *
+ * Path morphing: set [pathDataTo] to a target `d` and drive [morphProgress] `0f`→`1f` from a
+ * Compose animation, and the `<path>` tweens smoothly from its current geometry (the original,
+ * or [pathData] if also set) to the target. Both `d` strings are parsed once and cached; each
+ * frame only interpolates floats — no per-frame re-parse or string work — so it holds 60fps in
+ * live gameplay. Morphing requires the two paths to share the same command structure (same count
+ * and types); a mismatched pair snaps at the halfway point instead of drawing garbage.
  */
 @Immutable
 data class OGSvgNodeOverride(
@@ -40,6 +47,20 @@ data class OGSvgNodeOverride(
      * original geometry. Ignored on non-path nodes. This is the building block for path morphing.
      */
     val pathData: String? = null,
+    /**
+     * The morph *target* path `d` for a `<path>` node. When set, the node tweens from its current
+     * geometry ([pathData] if given, else the original `d`) toward this `d` by [morphProgress].
+     * Parsed once and cached; the per-frame cost is only float interpolation, so it is safe to
+     * animate at 60fps. Requires the same command structure as the start path (see class doc).
+     * `null` = no morph. Ignored on non-path nodes.
+     */
+    val pathDataTo: String? = null,
+    /**
+     * Morph position in `0f..1f`: `0f` = the start geometry, `1f` = [pathDataTo], values between
+     * interpolate. Ignored unless [pathDataTo] is set. Drive this from a Compose animation
+     * (`animateFloatAsState`, `rememberInfiniteTransition`, …) for a live tween. Clamped to `0..1`.
+     */
+    val morphProgress: Float = 0f,
 ) {
     /** True if any paint field is set (folded into the node's style at shape-prep time). */
     val hasPaint: Boolean
@@ -53,6 +74,10 @@ data class OGSvgNodeOverride(
     /** True if a replacement path `d` is set (re-parsed into the node's geometry at shape-prep time). */
     val hasPath: Boolean
         get() = pathData != null
+
+    /** True if a morph target `d` is set (the node tweens toward it by [morphProgress]). */
+    val hasMorph: Boolean
+        get() = pathDataTo != null
 }
 
 /**
@@ -87,15 +112,18 @@ internal fun applyPaintOverride(
  * source tree is never mutated — re-resolving with a different override always starts from the original `d`.
  *
  * Pure and side-effect-free (delegates only to [parsePathCommands]), so it is unit-testable off-device.
+ * An optional [parseCache] memoises the `d`→commands parse so an animated override that keeps the
+ * same `pathData` across frames re-parses it at most once.
  */
 internal fun applyPathOverride(
     element: OGSVGTreeElement,
     override: OGSvgNodeOverride?,
     viewBox: ViewBox,
+    parseCache: MutableMap<String, List<OGSVGCommand>>? = null,
 ): OGSVGTreeElement {
     if (override == null || !override.hasPath) return element
     if (element.shapes.none { it is OGSVGPath }) return element
-    val commands = parsePathCommands(override.pathData!!, viewBox, element.style)
+    val commands = parsePathCached(override.pathData!!, viewBox, element.style, parseCache)
     val newShapes = element.shapes.mapTo(mutableListOf()) { shape ->
         if (shape is OGSVGPath) OGSVGPath(commands).also { it.animations = shape.animations } else shape
     }

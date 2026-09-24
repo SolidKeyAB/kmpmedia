@@ -31,11 +31,12 @@ Status: ✅ shipped · 🔜 next · 🧭 planned
 Competitors render an SVG as a static picture. KMPMedia already has a **live SVG scene
 graph + a SMIL animation engine** — so make the vector *editable and data-bound at runtime*.
 
-- 🔜 **Runtime-mutable SVG** — address any node by `id` and set `fill` / `stroke` /
+- ✅ **Runtime-mutable SVG** — address any node by `id` and set `fill` / `stroke` /
   `transform` / path at runtime, bound to Compose state. "SVG as a live template"
-  (gauges, charts, badges, progress rings).
-- 🧭 **Path morphing** — animate a shape's `d` between two paths (extends the current
-  `animateTransform` + `x/cx/y/cy` SMIL subset). Cross-platform vector morphing exists nowhere else.
+  (gauges, charts, badges, progress rings). *(1.7.0 attrs + transform · 1.8.0 path `d`)*
+- ✅ **Path morphing** — tween a shape's `d` between two paths, driven by any Compose
+  animation, parse-once/lerp-per-frame so it holds 60fps. Cross-platform vector morphing
+  exists nowhere else. *(1.9.0 — `OGSvgNodeOverride.pathDataTo` + `morphProgress`)*
 - 🧭 **AI hooks** — "describe → SVG / clip region." The polygon lasso is already an
   AI-friendly normalized outline; make prompt-driven vector generation/patching first-class.
 
