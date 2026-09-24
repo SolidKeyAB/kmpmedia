@@ -79,9 +79,32 @@ OGSVGView(
 )
 ```
 
-Because the whole geometry is runtime-supplied, your state can compute a `d` per frame (e.g. an
-interpolation between two same-structure paths) and feed it here — the foundation for **path
-morphing** (a first-class tween lands next on the roadmap).
+### Path morphing (`pathDataTo` + `morphProgress`, 1.9.0+)
+
+A `<path>` can tween smoothly between two shapes. Set `pathDataTo` to the target `d` and drive
+`morphProgress` `0f`→`1f` from any Compose animation — the node interpolates from its current
+geometry (the original, or `pathData` if you also set it) to the target.
+
+```kotlin
+// A <path id="blob"> tweens from its own `d` (a star) toward a ring and back, forever.
+val t by rememberInfiniteTransition().animateFloat(
+    0f, 1f, infiniteRepeatable(tween(1500), RepeatMode.Reverse)
+)
+OGSVGView(
+    source = OGSvgUrlType("blob.svg"),
+    overrides = mapOf("blob" to OGSvgNodeOverride(pathDataTo = ringD, morphProgress = t)),
+)
+```
+
+Built for the "runs in a game at 60fps" bar: **both** endpoint `d` strings are parsed *once* and
+cached, so each frame only interpolates floats — no per-frame re-parse, no string building, no
+allocation churn. The cost profile matches the animated rotation override above.
+
+> **Structure must match.** Morphing is a coordinate tween, so the two paths need the same command
+> **structure** — identical count and command types, index for index (e.g. both `M` + 9×`L` + `Z`).
+> A mismatched pair snaps at the halfway point rather than drawing a garbled shape. This is the same
+> constraint every SVG morph tool (Lottie, Rive, SMIL) imposes; a handy trick is to generate both
+> `d` strings from one loop, varying only the coordinates.
 
 ## How to author the SVG
 
@@ -98,10 +121,10 @@ Just give the nodes you want to drive an `id`:
 ## Notes
 
 - Reactive & cheap: resolving overrides walks the (already parsed) tree and rebuilds the draw list;
-  it does not re-parse or re-fetch the SVG.
-- Backward-compatible and purely additive — `overrides` defaults to empty.
-- Roadmap follow-up (see [ROADMAP.md](../ROADMAP.md)): a first-class **path morphing** tween that
-  animates between two paths (the per-node `d` override above is its building block).
+  it does not re-parse or re-fetch the SVG. Path `d` / morph parses are memoised per SVG, so an
+  animated morph parses each endpoint at most once even while `morphProgress` changes every frame.
+- Backward-compatible and purely additive — `overrides` defaults to empty, and the morph fields
+  (`pathDataTo` / `morphProgress`) default to no-morph.
 
 See the **Runtime-editable SVG** screen in the [demo app](https://github.com/SolidKeyAB/kmpmedia-demo)
 for a live gauge driven by a slider.

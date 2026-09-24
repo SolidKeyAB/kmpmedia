@@ -4,6 +4,18 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] — 2026-09-24
+
+> **Path morphing.** A `<path>` can now tween smoothly between two shapes at runtime. Set `OGSvgNodeOverride.pathDataTo` to a target `d` and drive `morphProgress` `0f`→`1f` from any Compose animation, and the node interpolates from its current geometry (the original, or `pathData` if also set) to the target. Built for the "must run in a game at 60fps" bar: both endpoint `d` strings are parsed **once** (cached), so each frame only interpolates floats — no per-frame re-parse, no string work, no allocation churn. Purely additive: two new optional fields defaulting to no-morph, so every existing call is unchanged. Same code on Android and iOS.
+
+### Added
+- `OGSvgNodeOverride.pathDataTo: String?` — the morph *target* path `d`. When set on a node holding `<path>` geometry, the node tweens toward this shape.
+- `OGSvgNodeOverride.morphProgress: Float` — the tween position in `0f..1f` (`0f` = start, `1f` = target). Ignored unless `pathDataTo` is set; clamped to range. Drive it from `animateFloatAsState` / `rememberInfiniteTransition` for a live morph.
+
+### Notes
+- Morphing is a coordinate tween, so the two paths must share the same command **structure** (identical count and command types, index for index). A structurally-mismatched pair snaps at the halfway point rather than crashing or drawing a garbled shape — the same constraint every SVG morph tool imposes.
+- Internally `OGSVGView` keeps a per-SVG parse cache so the two endpoint `d` strings survive the per-frame recompositions a morph triggers; the cost profile matches the already-shipped animated rotation override. The parsed source tree is never mutated. See `docs/RUNTIME_SVG.md`; the demo's **Runtime-editable SVG** screen adds a live star⇄ring morph driven by an infinite transition.
+
 ## [1.8.0] — 2026-09-23
 
 > **Runtime path geometry.** Runtime-editable SVG can now change a node's **shape**, not just its paint and transform: an `OGSvgNodeOverride` may carry a replacement path `d`, and the addressed `<path>` re-parses to the new geometry live — no new node, no re-parse of the whole SVG. This is the building block for path morphing (the next roadmap step). Purely additive: a new optional `pathData` field defaulting to `null`, so every existing call is unchanged. Same code on Android and iOS.

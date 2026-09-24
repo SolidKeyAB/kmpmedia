@@ -90,6 +90,10 @@ fun OGSVGView(
     // `overrides` (and size/behaviour), so changing an override re-resolves the shapes WITHOUT
     // re-parsing the source; unchanged overrides reuse the cached list.
     val parsedResult = OGParsedSVGResult
+    // Parse cache for path-`d` / morph overrides, keyed to the loaded SVG. It survives the
+    // per-frame recompositions a morph animation triggers, so each endpoint `d` is parsed once
+    // even while `morphProgress` changes every frame.
+    val pathParseCache = remember(parsedResult) { mutableMapOf<String, List<OGSVGCommand>>() }
     val renderShapes: List<RenderShape> = remember(
         parsedResult, overrides, width, height, scalingBehavior, followCommonPractices
     ) {
@@ -113,7 +117,8 @@ fun OGSVGView(
             gradients = parsedResult.gradients,
             patterns = parsedResult.patterns,
             viewBox = resolvedViewBox,
-            overrides = overrides
+            overrides = overrides,
+            parseCache = pathParseCache
         )
     }
 
@@ -216,17 +221,21 @@ fun prepareRenderShapes(
     gradients: Map<String, OGSVGGradient>? = null,
     patterns: Map<String, OGSVGPattern>? = null,
     viewBox: ViewBox,
-    overrides: Map<String, OGSvgNodeOverride> = emptyMap()
+    overrides: Map<String, OGSvgNodeOverride> = emptyMap(),
+    parseCache: MutableMap<String, List<OGSVGCommand>>? = null
 ): List<RenderShape> {
     val renderShapes = mutableListOf<RenderShape>()
 
     fun traverse(node: OGSVGTreeElement) {
-        // Fold any paint override (fill/stroke/stroke-width) and any path-`d` override for this
+        // Fold any paint override (fill/stroke/stroke-width), path-`d` swap and path morph for this
         // node's id into an effective element; transforms are applied separately at draw time.
-        // No override → same object.
+        // Order matters: paint → path swap (sets the morph "from") → morph tween. No override → same object.
         val element = if (overrides.isEmpty()) node
             else node.id?.let { overrides[it] }.let { ov ->
-                applyPathOverride(applyPaintOverride(node, ov), ov, viewBox)
+                applyMorphOverride(
+                    applyPathOverride(applyPaintOverride(node, ov), ov, viewBox, parseCache),
+                    ov, viewBox, parseCache
+                )
             }
         val strokeWidth = (element.style.strokeWidth ?: 1f) * scale
 
