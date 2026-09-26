@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] — 2026-09-27
+
+> **Shape-morph clips.** The clip mask itself can now animate. `OGMorphShape(from, to, progress)` is a Compose `Shape` whose outline tweens from one shape to another as you drive `progress` `0f`→`1f`, so a **running video or animated GIF** can shift circle → diamond → triangle → [lasso](docs/POLYGON_SHAPE.md) *while it keeps playing*. It drops into the exact slot a static shape already uses — `OGImageView(clipShape = …)`, `OGPlayerConfig(clipShape = …)`, or any `Modifier.clip(…)` — so **no media-surface API changed**. Built for the 60fps bar: each endpoint outline is resampled to N perimeter points **once** (cached by shape + size) and only the point lists are lerped per frame — the same sample-once / lerp-per-frame budget as the 1.9.0 SVG path morph. Clipping *moving* media to a *morphing* outline, identical on Android and iOS, exists nowhere else in KMP. This is the first item of **Bet 2 — Living shapes** on the roadmap.
+
+### Added
+- `OGMorphShape(from: Shape, to: Shape, progress: Float, sampleCount: Int = OG_MORPH_SAMPLES)` — a clip `Shape` that morphs between any two shapes. `progress <= 0` / `>= 1` pass the raw endpoint outline straight through (zero resample cost).
+- `ogMorphSequence(stops: List<Shape>, progress: Float, …)` — one `0f..1f` progress that walks a whole chain of stops (e.g. `circle → diamond → lasso`), returning the active adjacent-pair morph.
+- `OG_MORPH_SAMPLES` — the default perimeter-sample count (96).
+- Value `equals`/`hashCode` on `TriangleShape` / `DiamondShape` / `OGPolygonShape`, so a re-created endpoint is a resample-cache (and Compose-skip) hit.
+
+### Notes
+- Endpoints can be any `Shape` (built-ins, `RoundedCornerShape`, an `OGPolygonShape` lasso). Different vertex counts still tween — both are resampled to `sampleCount` points. The target samples are cyclically re-aligned (and reversed if it fits better) to the source once per resample, so outlines that start at different corners or wind opposite ways morph without swirling. A degenerate endpoint (empty outline) snaps to the start shape. See `docs/SHAPE_MORPH_CLIPS.md`; the demo's **Morph the clip itself** screen drives a video + GIF + gradient tile through one morphing mask.
+
 ## [1.9.0] — 2026-09-24
 
 > **Path morphing.** A `<path>` can now tween smoothly between two shapes at runtime. Set `OGSvgNodeOverride.pathDataTo` to a target `d` and drive `morphProgress` `0f`→`1f` from any Compose animation, and the node interpolates from its current geometry (the original, or `pathData` if also set) to the target. Built for the "must run in a game at 60fps" bar: both endpoint `d` strings are parsed **once** (cached), so each frame only interpolates floats — no per-frame re-parse, no string work, no allocation churn. Purely additive: two new optional fields defaulting to no-morph, so every existing call is unchanged. Same code on Android and iOS.

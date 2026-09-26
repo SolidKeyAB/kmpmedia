@@ -42,8 +42,9 @@ graph + a SMIL animation engine** — so make the vector *editable and data-boun
 
 ## Bet 2 — Living shapes (deepen the signature)
 
-- 🧭 **Morph the clip itself** — animate a video/GIF mask circle → diamond → lasso.
+- ✅ **Morph the clip itself** — animate a video/GIF mask circle → diamond → lasso.
   Clipping *moving* media to a *morphing* shape is unique to KMPMedia.
+  *(1.10.0 — `OGMorphShape` + `ogMorphSequence`, drops into the existing `clipShape` slot)*
 - 🧭 **Auto-cutout** — on-device subject/background segmentation → auto-generate an
   `OGPolygonShape`. "Drop a photo, get the subject clipped out," no manual lasso.
 - 🧭 **Soft & gradient masks, multi-region clips** — feathered edges and more than one region.

@@ -59,6 +59,12 @@ class TriangleShape(private val direction: TriangleDirection, private val corner
         }
         return Outline.Generic(path)
     }
+
+    // Value equality so a re-created TriangleShape is a cache/skip hit (e.g. OGMorphShape endpoints).
+    override fun equals(other: Any?): Boolean =
+        other is TriangleShape && other.direction == direction && other.cornerRadius == cornerRadius
+
+    override fun hashCode(): Int = 31 * direction.hashCode() + cornerRadius.hashCode()
 }
 
 class DiamondShape(private val cornerRadius: Dp = 0.dp) : Shape {
@@ -75,4 +81,9 @@ class DiamondShape(private val cornerRadius: Dp = 0.dp) : Shape {
         }
         return Outline.Generic(path)
     }
+
+    // Value equality so a re-created DiamondShape is a cache/skip hit (e.g. OGMorphShape endpoints).
+    override fun equals(other: Any?): Boolean = other is DiamondShape && other.cornerRadius == cornerRadius
+
+    override fun hashCode(): Int = cornerRadius.hashCode()
 }

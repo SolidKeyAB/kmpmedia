@@ -43,6 +43,11 @@ class OGPolygonShape(val points: List<OGPoint>) : Shape {
         return Outline.Generic(path)
     }
 
+    // Value equality (by points) so a re-created lasso is a cache/skip hit (e.g. OGMorphShape endpoints).
+    override fun equals(other: Any?): Boolean = other is OGPolygonShape && other.points == points
+
+    override fun hashCode(): Int = points.hashCode()
+
     companion object {
         /** Convenience builder from raw `(x, y)` pairs in normalized `0..1` space. */
         fun of(vararg points: Pair<Float, Float>): OGPolygonShape =

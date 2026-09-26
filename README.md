@@ -67,6 +67,13 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Path morphing, live — Android (left) &amp; iOS (right).</b> A single node's <code>&lt;path&gt;</code> tweens between a star and a ring and back, forever. Both endpoint <code>d</code> strings are parsed <i>once</i> and cached, so each frame only interpolates points — no re-parse, no allocation churn, built for the "runs in a game at 60fps" bar. Same <code>OGSVGView</code> + <code>overrides</code> path as the gauge above, identical on both platforms. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
 
+…and the newest — **morph the *clip mask* itself** (v1.10.0). The same idea applied to clipping: the outline that masks a *running* video (or GIF) animates circle → diamond → triangle → lasso while the media plays on:
+
+<p align="center">
+  <img src="demo-screenshots/morph-clip-demo.gif" width="30%" alt="Shape-morph clips on Android — a running video clipped by a mask that animates between a circle, a diamond, a triangle and a star lasso, the dark stage revealing the morphing silhouette at the corners" />
+</p>
+<sub><b>Morph the clip itself, live — Android.</b> One <code>OGMorphShape</code> drives the mask; the video keeps playing underneath as the outline tweens circle → diamond → triangle → lasso (the dark stage shows the silhouette at the corners). The <i>same</i> <code>Shape</code> feeds <code>OGImageView.clipShape</code> (photos/GIFs), <code>OGPlayerConfig.clipShape</code> (video) and any <code>Modifier.clip</code> — no new surface API. Each endpoint outline is resampled <i>once</i> (cached by shape + size) and only the points are lerped per frame, so it holds 60fps. See <a href="docs/SHAPE_MORPH_CLIPS.md">docs/SHAPE_MORPH_CLIPS.md</a>.</sub>
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
@@ -107,6 +114,7 @@ And **animated GIFs** — one `OGImageView` pointed at a `.gif`, playing on both
 - **🦾 Jointed Shapes** — the building block behind it: shape-clipped photos pinned at one pixel with a movable angular limit, chained into a draggable two-link arm and a clamped pendulum.
 - **🎞️ Animated GIF** — point one `OGImageView` at a `.gif` and it plays: looping frames on Android (`AnimatedImageDrawable`) and iOS (Skia `Codec`), the same code. The shape clip that crops a photo animates the moving frames inside a circle / diamond too.
 - **🎬 Video Playback** — one cross-platform `OGAVPlayer` (ExoPlayer on Android, AVPlayer on iOS), re-framed live into any shape, with transport controls, loop and load-any-URL.
+- **🫧 Morph the clip itself** — the clip *mask* animates circle → diamond → triangle → lasso while a video and a GIF keep playing, all driven by one [`OGMorphShape`](docs/SHAPE_MORPH_CLIPS.md). Clipping moving media to a morphing outline at 60fps, identical on Android & iOS.
 - **🛸 UFO Dodge (mini-game)** — every sprite is a static SVG animated by the library; crop your own photos into shapes and drop them into the field as live game objects.
 - **🎛️ Playground · 🧪 Edge Cases · ⚡ Performance** — load anything from any URL/resource and tune every config live; deliberately broken inputs that prove `onError` fires cleanly; and load-timing / many-layer stress benchmarks with live numbers.
 
@@ -146,7 +154,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.2.0")
+            implementation("se.solidkey:kmpmedia-lib:1.10.0")
         }
     }
 }
