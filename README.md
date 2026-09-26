@@ -59,6 +59,13 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Runtime-editable SVG, live — Android (left) &amp; iOS (right).</b> One <code>.svg</code> is parsed <i>once</i>; a slider only mutates an <code>overrides</code> map keyed by node <code>id</code> and the same drawing redraws live — the needle rotates and the arc + status dot recolour green→amber→red. No re-parse, identical on both platforms. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
 
+…and the same mechanism **morphs a path between two shapes** — set a `<path>`'s `pathDataTo` and drive `morphProgress` 0→1 from any Compose animation:
+
+<p align="center">
+  <img src="demo-screenshots/morph-svg-demo.gif" width="26%" alt="SVG path morphing on Android — one node's path tweens smoothly between a star and a ring and back, forever, driven by a Compose infinite transition through morphProgress" />
+</p>
+<sub><b>Path morphing, live.</b> A single node's <code>&lt;path&gt;</code> tweens between a star and a ring and back, forever. Both endpoint <code>d</code> strings are parsed <i>once</i> and cached, so each frame only interpolates points — no re-parse, no allocation churn, built for the "runs in a game at 60fps" bar. Same <code>OGSVGView</code> + <code>overrides</code> path as the gauge above, so it's the identical Compose Multiplatform code on Android &amp; iOS. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
