@@ -62,9 +62,10 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 …and the same mechanism **morphs a path between two shapes** — set a `<path>`'s `pathDataTo` and drive `morphProgress` 0→1 from any Compose animation:
 
 <p align="center">
-  <img src="demo-screenshots/morph-svg-demo.gif" width="26%" alt="SVG path morphing on Android — one node's path tweens smoothly between a star and a ring and back, forever, driven by a Compose infinite transition through morphProgress" />
+  <img src="demo-screenshots/morph-svg-demo.gif" width="30%" alt="SVG path morphing on Android — one node's path tweens smoothly between a star and a ring and back, forever, driven by a Compose infinite transition through morphProgress" />
+  <img src="demo-screenshots/ios-morph-svg-demo.gif" width="30%" alt="The same SVG path morph on an iOS simulator — identical Compose Multiplatform code, one node's path tweening between a star and a ring and back" />
 </p>
-<sub><b>Path morphing, live.</b> A single node's <code>&lt;path&gt;</code> tweens between a star and a ring and back, forever. Both endpoint <code>d</code> strings are parsed <i>once</i> and cached, so each frame only interpolates points — no re-parse, no allocation churn, built for the "runs in a game at 60fps" bar. Same <code>OGSVGView</code> + <code>overrides</code> path as the gauge above, so it's the identical Compose Multiplatform code on Android &amp; iOS. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
+<sub><b>Path morphing, live — Android (left) &amp; iOS (right).</b> A single node's <code>&lt;path&gt;</code> tweens between a star and a ring and back, forever. Both endpoint <code>d</code> strings are parsed <i>once</i> and cached, so each frame only interpolates points — no re-parse, no allocation churn, built for the "runs in a game at 60fps" bar. Same <code>OGSVGView</code> + <code>overrides</code> path as the gauge above, identical on both platforms. See <a href="docs/RUNTIME_SVG.md">docs/RUNTIME_SVG.md</a>.</sub>
 
 And a whole mini-game built from those same primitives:
 
