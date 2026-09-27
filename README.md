@@ -46,6 +46,8 @@ Today that makes KMPMedia **AI-generatable**. A serializable scene-spec + MCP se
 
 KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) built directly against this library's source, so every screen is real, readable library code you can lift into your own app. It's the fastest way to see what "animated, interactive, runtime-editable" actually looks like.
 
+> **⏱️ A note on the GIFs' speed.** The motion clips below — especially the shape and path **morphs** — are deliberately slowed (~2–3×) and are low-frame-rate, palette-limited GIFs, so the shape-shift is easy to follow in a static browser. **They are not the real speed.** Running live, everything animates at your display's refresh rate (**~60fps**) and is smooth, not steppy: each morph resamples its two endpoint outlines *once* (cached) and then only interpolates points per frame — no re-parse, no per-frame allocation. So the dogfood/demo captures read slow-and-clear on purpose; the actual app is fluid.
+
 <p align="center">
   <img src="demo-screenshots/feature-demo.gif" width="32%" alt="The library's core moves — a photo cropped live into circle, triangle and diamond; a running video re-framed into those same shapes; and a fully-static SVG brought to life with Scale, Rotate, Fade and Slide" />
 </p>
