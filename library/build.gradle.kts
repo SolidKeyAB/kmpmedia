@@ -60,6 +60,7 @@ kotlin {
 
                 // ✅ Expose Serialization (sample app needs it)
                 api(libs.kotlinx.serialization.core)
+                api(libs.kotlinx.serialization.json) // JSON codec for the AI-interop layer (OGAiVector)
 
                 // ✅ Expose Ktor (sample app likely does networking)
                 api(libs.ktor.client.core)

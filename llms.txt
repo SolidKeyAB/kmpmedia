@@ -144,6 +144,38 @@ class OGPolygonShape(val points: List<OGPoint>) : Shape {
 }
 ```
 
+### Runtime SVG patch — `com.solidkey.painpoints.image.svg`
+```kotlin
+// Pass overrides = Map<nodeId, OGSvgNodeOverride> to OGSVGView to mutate nodes at runtime (no re-parse).
+// Every field is optional; null = leave that aspect unchanged. See docs/RUNTIME_SVG.md.
+data class OGSvgNodeOverride(
+    val fill: Color? = null, val stroke: Color? = null, val strokeWidth: Float? = null,
+    val translateX: Float? = null, val translateY: Float? = null,
+    val rotation: Float? = null, val rotationCx: Float? = null, val rotationCy: Float? = null,
+    val scaleX: Float? = null, val scaleY: Float? = null,
+    val pathData: String? = null,                 // replace a <path>'s geometry
+    val pathDataTo: String? = null, val morphProgress: Float = 0f,   // morph the path 0f..1f
+)
+```
+
+### AI interop (describe → shape / patch) — `com.solidkey.painpoints.ai`
+```kotlin
+// Provider-agnostic JSON <-> vector primitives. NO network / NO AI SDK in the library: it defines the
+// contract, you own the model + the call. Decoding tolerates ```json fences + surrounding prose.
+object OGAiVector {
+    fun polygonPrompt(instruction: String): String                                   // hand a model the lasso contract
+    fun svgPatchPrompt(instruction: String, nodeIds: List<String> = emptyList()): String // + optional allowed ids
+    fun decodePolygon(text: String): OGPolygonShape                                   // reply -> clip Shape
+    fun decodePolygonOrNull(text: String): OGPolygonShape?
+    fun decodeSvgPatch(text: String): Map<String, OGSvgNodeOverride>                  // reply -> OGSVGView overrides
+    fun decodeSvgPatchOrNull(text: String): Map<String, OGSvgNodeOverride>?
+    fun encodePolygon(shape: OGPolygonShape): String                                  // primitive -> JSON (persist/seed)
+    fun encodeSvgPatch(overrides: Map<String, OGSvgNodeOverride>): String
+}
+// Polygon JSON:  {"points":[{"x":0.5,"y":0.0}, ...]}   (normalized 0..1, top-left origin, >=3, auto-closed)
+// SVG patch JSON:{"overrides":{"needle":{"rotation":120,"fill":"#E53935"}, ...}}  (colors: #RGB/#RRGGBB/#AARRGGBB/rgb()/name)
+```
+
 ## Copy-paste recipes (all compile)
 
 **Photo cropped into a circle:**
@@ -226,6 +258,20 @@ OGDepthField(focalDepth = 0.5f, modifier = Modifier.fillMaxSize()) {
 }
 ```
 
+**AI interop: turn a model's reply into a clip shape / SVG patch (you own the model + call):**
+```kotlin
+import com.solidkey.painpoints.ai.OGAiVector
+
+// describe -> clip region
+val star = OGAiVector.decodePolygonOrNull(myLlm.complete(OGAiVector.polygonPrompt("a five-pointed star")))
+star?.let { OGImageView(source = OGImageUrlType("https://…/face.jpg"), clipShape = it, onEventTriggered = { _, _ -> }) }
+
+// describe -> SVG patch (constrain to real node ids), applied live via overrides
+val prompt = OGAiVector.svgPatchPrompt("point the needle to 80% and turn the arc amber", nodeIds = listOf("needle", "arc"))
+OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 240f,
+          overrides = OGAiVector.decodeSvgPatchOrNull(myLlm.complete(prompt)) ?: emptyMap())
+```
+
 ## Package map
 - `com.solidkey.painpoints.image` — `OGImageView`, color/brush
 - `com.solidkey.painpoints.image.loading` — source types (`OGImageUrlType`, `OGSvgUrlType`, file/resource variants)
@@ -236,11 +282,15 @@ OGDepthField(focalDepth = 0.5f, modifier = Modifier.fillMaxSize()) {
 - `com.solidkey.painpoints.video.loading` — `OGVideoUrlType` (+ file/resource variants)
 - `com.solidkey.painpoints.audio.playing` — `OGAudioPlayer`, `OGAudioPlaybackConfig`
 - `com.solidkey.painpoints.depth` — `Modifier.ogDepth`, `OGDepthField`, `OGDepthObject`, `OGDepthConfig`
-- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`, `OGPolygonShape`, `OGPoint`
+- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`, `OGPolygonShape`, `OGPoint`, `OGMorphShape`
+- `com.solidkey.painpoints.ai` — `OGAiVector` (describe → shape/patch) + `OGPolygonSpec` / `OGSvgPatchSpec` JSON DTOs
 - `com.solidkey.painpoints.layer` — `OGLayer`, `OGLayerRenderer`, gestures
 
 ## Docs
 - Full API + rationale: `docs/AI_GUIDE.md`
+- AI hooks (describe → shape/patch): `docs/AI_HOOKS.md`
+- Runtime-editable SVG (overrides + morph): `docs/RUNTIME_SVG.md`
+- Shape-morph clips: `docs/SHAPE_MORPH_CLIPS.md`
 - Depth/layer API: `docs/DEPTH_LAYER.md`
 - Interactive video (cues + position): `docs/INTERACTIVE_VIDEO.md`
 - README: `README.md`

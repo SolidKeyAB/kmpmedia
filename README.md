@@ -37,8 +37,9 @@ KMPMedia is built to be **generated correctly by AI coding assistants**, not jus
 - **It speaks SVG** — the one graphics format LLMs produce natively as text. An assistant can emit an `<svg>` (including the animated SMIL subset) or a URL, and KMPMedia renders *and animates* it live on both platforms.
 - **Declarative, consistent API** — every entry point is `OG…`, and you describe *what* (a shape, an animation set, a cue at a timestamp, a depth) as data. Generated code compiles more often and hallucinates less surface.
 - **Agent-ready docs in the repo** — a machine-readable [`llms.txt`](llms.txt) API index and an [AI coding guide](docs/AI_GUIDE.md) with prompt→snippet examples.
+- **Runtime prompt-driven editing** *(new in 1.11.0)* — [`OGAiVector`](docs/AI_HOOKS.md) hands a model a stable JSON contract and turns its reply into a live polygon lasso or SVG node patch (*"describe → shape / patch"*), so an app can let its *own users* reshape and restyle vectors with natural language — no AI SDK or networking pulled into the library, and it works with any model.
 
-Today that makes KMPMedia **AI-generatable**. A serializable scene-spec + MCP server (an LLM emits validated *data*, not Kotlin, and previews it before writing code) are on the roadmap to make it fully **AI-ready**.
+Today that makes KMPMedia **AI-generatable** *and* **AI-drivable at runtime**. A full serializable scene-spec + an MCP server (an LLM emits validated *data*, not Kotlin, and previews it before writing code) remain on the roadmap to make it fully **AI-ready**.
 
 ---
 
@@ -156,7 +157,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.10.0")
+            implementation("se.solidkey:kmpmedia-lib:1.11.0")
         }
     }
 }
@@ -389,6 +390,26 @@ OGImageView(..., modifier = Modifier.ogDepth(depth = 0.2f, focalDepth = 0.5f))
 ```
 
 Tune it with `OGDepthConfig(maxBlur, minAlpha, dimFalloff, blurContent, depthScale)`; use `OGDepthConfig.Video` for video/native surfaces (dim + z-order, no blur — a `RenderEffect` blur over a `TextureView`/`AVPlayerLayer` is unreliable). In focus with defaults it applies **only** `zIndex` (no extra layer). Full perf + compatibility analysis in [`docs/DEPTH_LAYER.md`](docs/DEPTH_LAYER.md).
+
+### Generate or patch a vector from a prompt (AI interop)
+
+*New in 1.11.0.* KMPMedia's vector primitives are just data, so a language model can produce them. `OGAiVector` is a **provider-agnostic** JSON interop layer: it hands a model the exact contract with `polygonPrompt(...)` / `svgPatchPrompt(...)`, and turns the reply back into a live clip shape or SVG patch — tolerant of the code fences and prose models add. **No AI SDK or networking is pulled into the library**; you own the model and the call.
+
+```kotlin
+import com.solidkey.painpoints.ai.OGAiVector
+
+// describe → clip region: the model's reply becomes an OGPolygonShape for any clipShape
+val prompt = OGAiVector.polygonPrompt("the outline of a five-pointed star")
+val star = OGAiVector.decodePolygonOrNull(myLlm.complete(prompt))   // your model, your call
+
+// describe → SVG patch: constrain the model to the ids that exist, apply the result live
+val patch = OGAiVector.svgPatchPrompt("point the needle to 80% and turn the arc amber",
+                                      nodeIds = listOf("needle", "arc"))
+OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 240f,
+          overrides = OGAiVector.decodeSvgPatchOrNull(myLlm.complete(patch)) ?: emptyMap())
+```
+
+`encodePolygon` / `encodeSvgPatch` go the other way (persist a lasso, seed a prompt with the current state). All of it runs at generate/patch time, never per frame. See [`docs/AI_HOOKS.md`](docs/AI_HOOKS.md).
 
 ---
 

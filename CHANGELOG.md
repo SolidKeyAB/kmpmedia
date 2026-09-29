@@ -4,6 +4,18 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] — 2026-09-30
+
+> **AI hooks — "describe → shape / patch."** KMPMedia's vector primitives are just data — a free-form polygon [lasso](docs/POLYGON_SHAPE.md) and a runtime [SVG node patch](docs/RUNTIME_SVG.md) — so a language model can produce them. `OGAiVector` makes that first-class: a **stable, provider-agnostic JSON schema** for those primitives with parse/serialize both directions, plus prompt builders that hand a model the exact contract to fill in. Ask for *"a five-pointed star"* or *"point the gauge needle to 80% and make it red"* and the reply drops straight into a `clipShape` or an `overrides` map. The library makes **no network calls and bundles no AI SDK** — it defines the contract and does the JSON; you own the model and the call — so it stays zero-dependency and works with any model. Purely additive: a new `com.solidkey.painpoints.ai` package, nothing existing changed. This is the first shipped piece of **Bet 1 — Runtime & AI-editable vector**'s "AI hooks" item.
+
+### Added
+- `com.solidkey.painpoints.ai.OGAiVector` — the entry point. `polygonPrompt(instruction)` / `svgPatchPrompt(instruction, nodeIds)` build a ready-to-send prompt stating the JSON contract; `decodePolygon` / `decodeSvgPatch` (and `…OrNull` variants) turn a model's reply into a live `OGPolygonShape` / `Map<String, OGSvgNodeOverride>`; `encodePolygon` / `encodeSvgPatch` serialize the other way. Decoding tolerates the markdown code fences and surrounding prose models routinely add (`extractJson`).
+- `OGPolygonSpec`, `OGNodeOverrideSpec`, `OGSvgPatchSpec`, `OGPointSpec` — `@Serializable` DTOs mirroring the Compose-facing primitives but with model-friendly plain values (colors as SVG strings, coordinates as floats). Each has `toShape()` / `toOverride()` / `toOverrides()` and a `from(...)` companion for the reverse.
+- `kotlinx-serialization-json` is now a declared dependency (the same serialization family already in use) exposing the `Json` codec via `OGAiVector.json`.
+
+### Notes
+- Colors are parsed with the **same** parser the SVG renderer uses, so a model may emit `#RGB` / `#RRGGBB` / `#AARRGGBB` / `rgb(...)` / a name like `red`. All conversion runs at generate/patch time, never per frame, so it never touches the 60fps hot path. See `docs/AI_HOOKS.md`; the demo's **AI vector** screen drives a lasso clip and a live SVG patch from model / pasted JSON.
+
 ## [1.10.0] — 2026-09-27
 
 > **Shape-morph clips.** The clip mask itself can now animate. `OGMorphShape(from, to, progress)` is a Compose `Shape` whose outline tweens from one shape to another as you drive `progress` `0f`→`1f`, so a **running video or animated GIF** can shift circle → diamond → triangle → [lasso](docs/POLYGON_SHAPE.md) *while it keeps playing*. It drops into the exact slot a static shape already uses — `OGImageView(clipShape = …)`, `OGPlayerConfig(clipShape = …)`, or any `Modifier.clip(…)` — so **no media-surface API changed**. Built for the 60fps bar: each endpoint outline is resampled to N perimeter points **once** (cached by shape + size) and only the point lists are lerped per frame — the same sample-once / lerp-per-frame budget as the 1.9.0 SVG path morph. Clipping *moving* media to a *morphing* outline, identical on Android and iOS, exists nowhere else in KMP. This is the first item of **Bet 2 — Living shapes** on the roadmap.

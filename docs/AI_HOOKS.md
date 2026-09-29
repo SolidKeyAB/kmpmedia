@@ -1,0 +1,141 @@
+# AI hooks — `com.solidkey.painpoints.ai.OGAiVector` (KMPMedia 1.11.0)
+
+KMPMedia's differentiator is *editable, data-bound vector*: a live SVG scene graph you patch by node
+`id` ([`OGSvgNodeOverride`](./RUNTIME_SVG.md)) and a free-form polygon [lasso](./POLYGON_SHAPE.md) that
+clips any media to a hand- or AI-drawn outline. Both are **just data** — which makes them a natural
+target for a language model. `OGAiVector` closes that loop: a **stable, provider-agnostic JSON schema**
+for those primitives, with parse/serialize both directions and a helper that hands a model the exact
+contract to fill in.
+
+> **"describe → shape / patch."** Ask a model for *"a five-pointed star"* or *"point the gauge needle to
+> 80% and make it red"*, and its reply drops straight into a `clipShape` or an `overrides` map — no glue.
+
+## The library stays zero-dependency and provider-agnostic
+
+`OGAiVector` makes **no network calls** and bundles **no AI SDK**. It defines the contract and does the
+JSON both ways; *you* own the model and the call. That keeps the library simple and free of any provider
+lock-in, and it works with any model (Claude, a local model, a segmentation network that emits vertices).
+The three moving parts:
+
+1. **Ask** — `polygonPrompt(instruction)` / `svgPatchPrompt(instruction, nodeIds)` return a ready-to-send
+   prompt that states the JSON schema and embeds your instruction. Send it however you talk to your model.
+2. **Apply** — `decodePolygon(reply)` → an `OGPolygonShape` for any `clipShape`; `decodeSvgPatch(reply)` →
+   the `Map<String, OGSvgNodeOverride>` that `OGSVGView(overrides = …)` consumes. Decoding is **tolerant**
+   of the markdown code fences and stray prose models routinely add.
+3. **Persist / seed** — `encodePolygon(shape)` / `encodeSvgPatch(overrides)` go the other way, to save a
+   lasso, show the payload, or seed a prompt with the current state.
+
+All of this runs at generate/patch time, not per frame, so it never touches the 60fps hot path that
+clipping and [morphing](./SHAPE_MORPH_CLIPS.md) live on.
+
+## API
+
+```kotlin
+object OGAiVector {
+    val json: Json                                   // the lenient, unknown-key-tolerant codec used below
+
+    // model reply -> live primitive (tolerant of ```json fences + surrounding prose)
+    fun decodePolygon(text: String): OGPolygonShape
+    fun decodePolygonOrNull(text: String): OGPolygonShape?
+    fun decodeSvgPatch(text: String): Map<String, OGSvgNodeOverride>
+    fun decodeSvgPatchOrNull(text: String): Map<String, OGSvgNodeOverride>?
+
+    // live primitive -> JSON
+    fun encodePolygon(shape: OGPolygonShape): String
+    fun encodeSvgPatch(overrides: Map<String, OGSvgNodeOverride>): String
+
+    // hand a model the contract
+    fun polygonPrompt(instruction: String): String
+    fun svgPatchPrompt(instruction: String, nodeIds: List<String> = emptyList()): String
+
+    // pull the JSON payload out of a raw reply (strips fences / prose)
+    fun extractJson(text: String): String
+}
+```
+
+The serializable schema types (`com.solidkey.painpoints.ai`) mirror the Compose-facing primitives but use
+model-friendly plain values (colors as strings, coordinates as floats):
+
+```kotlin
+@Serializable data class OGPointSpec(val x: Float, val y: Float)
+@Serializable data class OGPolygonSpec(val points: List<OGPointSpec>)          // .toShape() -> OGPolygonShape
+@Serializable data class OGNodeOverrideSpec(                                     // .toOverride() -> OGSvgNodeOverride
+    val fill: String? = null, val stroke: String? = null, val strokeWidth: Float? = null,
+    val translateX: Float? = null, val translateY: Float? = null,
+    val rotation: Float? = null, val rotationCx: Float? = null, val rotationCy: Float? = null,
+    val scaleX: Float? = null, val scaleY: Float? = null,
+    val pathData: String? = null, val pathDataTo: String? = null, val morphProgress: Float = 0f,
+)
+@Serializable data class OGSvgPatchSpec(val overrides: Map<String, OGNodeOverrideSpec> = emptyMap()) // .toOverrides()
+```
+
+Colors are parsed with the **same** parser the SVG renderer uses, so the model may emit `#RGB`,
+`#RRGGBB`, `#AARRGGBB`, `rgb(r,g,b)` / `rgba(...)`, or a name like `red` — exactly as in SVG.
+
+## JSON schema
+
+**Polygon lasso** — vertices in normalized `0..1` space (top-left origin), in order; the outline closes
+automatically. `≥ 3` points.
+
+```json
+{ "points": [ {"x":0.5,"y":0.0}, {"x":1.0,"y":0.5}, {"x":0.5,"y":1.0}, {"x":0.0,"y":0.5} ] }
+```
+
+**SVG patch** — `id → override`. Every field is optional; omitting one leaves that aspect of the node
+unchanged.
+
+```json
+{ "overrides": { "needle": {"rotation":120,"fill":"#E53935"}, "bg": {"fill":"#111111"} } }
+```
+
+## Example — describe → clip region
+
+```kotlin
+import com.solidkey.painpoints.ai.OGAiVector
+import com.solidkey.painpoints.image.OGImageView
+import com.solidkey.painpoints.image.loading.OGImageUrlType
+
+// 1) Ask your model (any model — this is your code / your API call).
+val prompt = OGAiVector.polygonPrompt("the outline of a five-pointed star")
+val reply: String = myLlm.complete(prompt)          // whatever you use to reach a model
+
+// 2) Apply — the reply becomes a live clip shape.
+val star = OGAiVector.decodePolygonOrNull(reply) ?: OGPolygonShape.of(/* fallback */)
+
+OGImageView(
+    source = OGImageUrlType("https://example.com/portrait.jpg"),
+    clipShape = star,                                // clips the photo to the model's outline
+    onEventTriggered = { _, _ -> },
+)
+```
+
+## Example — describe → SVG patch
+
+```kotlin
+import com.solidkey.painpoints.ai.OGAiVector
+import com.solidkey.painpoints.image.svg.OGSVGView
+import com.solidkey.painpoints.image.loading.OGSvgResourceFileType
+
+// Constrain the model to the ids that actually exist in your SVG.
+val prompt = OGAiVector.svgPatchPrompt(
+    instruction = "point the gauge needle to about 80% and turn the arc amber",
+    nodeIds = listOf("needle", "arc", "dot"),
+)
+val overrides = OGAiVector.decodeSvgPatchOrNull(myLlm.complete(prompt)) ?: emptyMap()
+
+OGSVGView(
+    source = OGSvgResourceFileType("gauge.svg"),
+    width = 240f, height = 240f,
+    overrides = overrides,                           // the model's patch, applied live — no re-parse
+)
+```
+
+Because a patch is plain data, you can also let the model **morph** a path: it emits `pathDataTo` +
+`morphProgress`, and the node tweens exactly as the [runtime path morph](./RUNTIME_SVG.md) does.
+
+## Where this sits on the roadmap
+
+This is the first shipped piece of **Bet 1 — Runtime & AI-editable vector**'s "AI hooks" item: making
+prompt-driven vector generation/patching first-class. The [`llms.txt`](../llms.txt) API index and the
+[AI coding guide](./AI_GUIDE.md) already help an assistant *write* KMPMedia code; `OGAiVector` lets an app
+let its *own* users drive the vector with natural language at runtime.
