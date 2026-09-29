@@ -37,8 +37,10 @@ graph + a SMIL animation engine** — so make the vector *editable and data-boun
 - ✅ **Path morphing** — tween a shape's `d` between two paths, driven by any Compose
   animation, parse-once/lerp-per-frame so it holds 60fps. Cross-platform vector morphing
   exists nowhere else. *(1.9.0 — `OGSvgNodeOverride.pathDataTo` + `morphProgress`)*
-- 🧭 **AI hooks** — "describe → SVG / clip region." The polygon lasso is already an
-  AI-friendly normalized outline; make prompt-driven vector generation/patching first-class.
+- ✅ **AI hooks** — "describe → SVG / clip region." A provider-agnostic JSON interop layer turns
+  a language model's reply into a live polygon lasso or SVG node patch (and back), with prompt
+  builders that hand the model the exact contract — no network or AI SDK pulled into the library.
+  *(1.11.0 — `OGAiVector` + `OGPolygonSpec`/`OGSvgPatchSpec`, see `docs/AI_HOOKS.md`)*
 
 ## Bet 2 — Living shapes (deepen the signature)
 
