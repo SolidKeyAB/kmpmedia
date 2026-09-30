@@ -61,9 +61,14 @@ KMPMedia already layers image + video + SVG on a shared clock (`OGLayerRenderer`
 `OGCueEngine` timeline cues) and does on-device crop / resize / rotate / color-filters
 (`OGImageProcessor`). Combine into:
 
-- 🧭 **Composition API** — layers + keyframes + one timeline.
-- 🧭 **Export** — render a composition to **GIF / MP4 / frame sequence**. Author on-device,
-  get a shareable file. No KMP library does compose-and-export.
+- ✅ **Composition API** — layers + keyframes + one timeline. `OGComposition` stacks image / solid
+  layers, each with animatable x / y / scale / rotation / opacity tracks and any shape clip, previewed
+  live at 60fps by `OGCompositionView`. *(1.13.0 — see `docs/COMPOSITOR.md`)*
+- ✅ **Export → GIF** — `OGComposition.exportGif()` renders the timeline and encodes a shareable animated
+  GIF with a pure-Kotlin on-device encoder (median-cut palette + LZW, zero deps, identical bytes on both
+  platforms). Author on-device, get a shareable file. No KMP library does compose-and-export. *(1.13.0)*
+- 🧭 **Export → MP4 / frame sequence** — the planned follow-ups (a single frame is already available via
+  `renderFrame`).
 
 ## Bet 4 — Interactivity primitives (productize the demo)
 

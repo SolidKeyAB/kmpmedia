@@ -85,6 +85,14 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Soft &amp; multi-region masks, live — Android (left) &amp; iOS (right).</b> One <code>OGImageView</code>: <code>softEdge</code> feathers the clip edge into a vignette, <code>maskBrush</code> fades the photo along a gradient, and <code>OGMultiRegionShape</code> clips it to more than one region (two portholes, or a diamond with a circular bite). Soft masks are one offscreen <code>BlendMode.DstIn</code> pass — no blur, no API floor; multi-region is a path op computed once per size. The <i>same</i> code on both platforms. See <a href="docs/SOFT_MASKS.md">docs/SOFT_MASKS.md</a>.</sub>
 
+…and the newest, the flagship — **compose layered scenes and export them** (v1.13.0). KMPMedia could put one piece of media in one shape; now it composes *several* layers on *one* timeline, animates them with keyframes, previews the result live at 60fps, and exports it to a single **shareable animated GIF** — all authored on device. `OGComposition` stacks image / solid layers, each with animatable x / y / scale / rotation / opacity tracks and any shape clip over a `[startMs, endMs]` window; `OGCompositionView` plays it on the Compose frame clock (or scrubs to any `positionMs`); and `OGComposition.exportGif()` renders every frame offscreen and encodes one looping GIF with a pure-Kotlin encoder — zero dependencies, identical bytes on Android and iOS. **No other KMP library does compose-and-export.** See [**docs/COMPOSITOR.md**](docs/COMPOSITOR.md).
+
+<p align="center">
+  <img src="demo-screenshots/compositor-demo.gif" width="30%" alt="On-device compositor on Android — a teal circle, a pink triangle, an amber diamond and a rounded badge composed on one timeline, each keyframe-animated (bobbing, spinning, sliding across, pulsing) and clipped to its shape, previewed live" />
+  <img src="demo-screenshots/ios-compositor-demo.gif" width="30%" alt="The same on-device compositor on an iOS simulator — identical Compose Multiplatform code, the same keyframed multi-layer scene playing on one timeline" />
+</p>
+<sub><b>On-device compositor + export, live — Android (left) &amp; iOS (right).</b> Several solid-colour layers on one <code>OGComposition</code> timeline, each with keyframed x / y / scale / rotation / opacity and a shape clip, previewed at 60fps by <code>OGCompositionView</code>. In the app, <b>Export</b> renders the timeline and encodes it to a single looping animated GIF with the pure-Kotlin <code>OGGifEncoder</code> (median-cut palette + LZW, zero deps) — then plays that exact GIF back through the platform's own decoder, proving it's a real, shareable file. The <i>same</i> code on both platforms. See <a href="docs/COMPOSITOR.md">docs/COMPOSITOR.md</a>.</sub>
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
