@@ -11,6 +11,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -29,6 +30,7 @@ import com.solidkey.painpoints.image.loading.OGImageLoader
 import com.solidkey.painpoints.image.processing.OGImageProcessor
 import com.solidkey.painpoints.image.processing.OGImageTransformation
 import com.solidkey.painpoints.image.processing.OGImageTransformation.Resize
+import com.solidkey.painpoints.mask.ogSoftMask
 import com.solidkey.painpoints.layer.*
 import com.solidkey.painpoints.source.OGSource
 import com.solidkey.painpoints.source.OGSourceType
@@ -52,6 +54,14 @@ fun OGImageView(
     // over displayShape/cornerRadius and masks the photo to that arbitrary outline — the same GPU
     // clip, just any Path. Use it to keep only a hand-/AI-outlined region (e.g. lasso a head).
     clipShape: Shape? = null,
+    // 🪶 Soft (feathered) edge, in dp. > 0 replaces the hard clip with a mask that fades the photo
+    // out over this band near the shape's boundary (a feathered vignette) instead of a crisp cut.
+    // 0.dp = unchanged hard clip. Works on photos + GIFs; see com.solidkey.painpoints.mask.
+    softEdge: Dp = 0.dp,
+    // 🌈 Arbitrary gradient alpha mask. A Brush (linear/radial/vertical) running to Color.Transparent
+    // fades the photo along it — an edge fade, a spotlight, a vignette. Only the brush's alpha matters.
+    // Combined with the shape clip (and softEdge) in one offscreen pass. null = no gradient mask.
+    maskBrush: Brush? = null,
     transformations: SnapshotStateList<OGImageTransformation> = mutableStateListOf(),
     draggable: Boolean = false,
     x: MutableState<Float>? = null,
@@ -148,10 +158,21 @@ fun OGImageView(
     val builtInShape = remember(displayShape, cornerRadius) { displayShape.toShape(cornerRadius) }
     val effectiveShape = clipShape ?: builtInShape
 
+    // 🪶🌈 Soft mask path: a feathered edge and/or a gradient brush replaces the hard GPU clip with a
+    // single offscreen DstIn pass (drawn once for a still photo = no per-frame cost). When neither is
+    // set this is the exact hard-clip behavior as before, so existing callers are unaffected.
+    val isSoftMasked = softEdge > 0.dp || maskBrush != null
+
     Box(
         modifier = modifier
             .zIndex(zIndex) // ✅ apply stacking order
-            .then(if (isShaped) Modifier.clip(effectiveShape) else Modifier) // 🔷 crop photo into shape
+            .then(
+                when {
+                    isSoftMasked -> Modifier.ogSoftMask(shape = effectiveShape, feather = softEdge, brush = maskBrush)
+                    isShaped -> Modifier.clip(effectiveShape) // 🔷 crop photo into shape (hard edge)
+                    else -> Modifier
+                }
+            )
             .then(
                 if (effectiveGestureHandler != null)
                     Modifier.ogPointerGestureWrapper(
@@ -169,8 +190,8 @@ fun OGImageView(
             contentDescription = "Processed Image",
             contentScale = contentScale,
             alignment = alignment,
-            // When shaped, fill the (sized) shaped box so contentScale = Crop can pick the piece.
-            modifier = if (isShaped) Modifier.fillMaxSize() else sizeModifier
+            // When shaped or soft-masked, fill the (sized) box so contentScale = Crop can pick the piece.
+            modifier = if (isShaped || isSoftMasked) Modifier.fillMaxSize() else sizeModifier
         )
     }
 }

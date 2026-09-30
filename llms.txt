@@ -30,6 +30,8 @@ fun OGImageView(
     contentScale: ContentScale = ContentScale.Fit,   // Compose ContentScale
     alignment: Alignment = Alignment.Center,
     clipShape: Shape? = null,   // optional free-form clip (e.g. OGPolygonShape); overrides displayShape when set
+    softEdge: Dp = 0.dp,        // > 0 → feather the clip edge (vignette) instead of a hard cut
+    maskBrush: Brush? = null,   // gradient alpha mask (edge fade / spotlight); to Color.Transparent
     draggable: Boolean = false,
     zIndex: Float = 0f,
     onError: ((String) -> Unit)? = null,
@@ -142,6 +144,31 @@ data class OGPoint(val x: Float, val y: Float)
 class OGPolygonShape(val points: List<OGPoint>) : Shape {
     companion object { fun of(vararg points: Pair<Float, Float>): OGPolygonShape }
 }
+
+// Morph the clip mask itself (video/GIF/photo) from one shape to another as progress 0f..1f runs.
+// Sample-once/lerp-per-frame → 60fps. Drop into any clipShape slot. See docs/SHAPE_MORPH_CLIPS.md.
+class OGMorphShape(val from: Shape, val to: Shape, val progress: Float, val sampleCount: Int = 96) : Shape
+fun ogMorphSequence(stops: List<Shape>, progress: Float, sampleCount: Int = 96): Shape
+
+// Multi-region clip: combine several placed sub-shapes with a path op (union/intersect/difference/xor).
+// Each region sits in a normalized 0..1 sub-rect. A plain Shape → any clipShape slot (image/GIF/video).
+enum class OGClipOp { UNION, INTERSECT, DIFFERENCE, XOR }
+data class OGClipRegion(val shape: Shape, val left: Float = 0f, val top: Float = 0f, val right: Float = 1f, val bottom: Float = 1f)
+class OGMultiRegionShape(val regions: List<OGClipRegion>, val op: OGClipOp = OGClipOp.UNION) : Shape {
+    companion object {
+        fun union(vararg shapes: Shape): OGMultiRegionShape
+        fun of(vararg regions: OGClipRegion, op: OGClipOp = OGClipOp.UNION): OGMultiRegionShape
+    }
+}
+```
+
+### Soft & gradient masks — `com.solidkey.painpoints.mask`
+```kotlin
+// Feather (soften) a shape clip's edge, or fade content by an arbitrary gradient brush. One offscreen
+// BlendMode.DstIn pass — no blur, no API floor, 60fps. Compose-drawn content (photo/GIF), NOT video
+// surfaces. Also on OGImageView as softEdge/maskBrush params. See docs/SOFT_MASKS.md.
+fun Modifier.ogSoftClip(shape: Shape, feather: Dp): Modifier    // opaque interior, fades over `feather` at edge
+fun Modifier.ogGradientMask(brush: Brush): Modifier             // multiply alpha by a Brush (to Color.Transparent)
 ```
 
 ### Runtime SVG patch — `com.solidkey.painpoints.image.svg`
@@ -282,7 +309,8 @@ OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 24
 - `com.solidkey.painpoints.video.loading` — `OGVideoUrlType` (+ file/resource variants)
 - `com.solidkey.painpoints.audio.playing` — `OGAudioPlayer`, `OGAudioPlaybackConfig`
 - `com.solidkey.painpoints.depth` — `Modifier.ogDepth`, `OGDepthField`, `OGDepthObject`, `OGDepthConfig`
-- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`, `OGPolygonShape`, `OGPoint`, `OGMorphShape`
+- `com.solidkey.painpoints.shape` — `OGShapeType`, `toShape()`, `OGPolygonShape`, `OGPoint`, `OGMorphShape`, `OGMultiRegionShape` / `OGClipRegion` / `OGClipOp`
+- `com.solidkey.painpoints.mask` — `Modifier.ogSoftClip` (feathered edge), `Modifier.ogGradientMask` (gradient alpha)
 - `com.solidkey.painpoints.ai` — `OGAiVector` (describe → shape/patch) + `OGPolygonSpec` / `OGSvgPatchSpec` JSON DTOs
 - `com.solidkey.painpoints.layer` — `OGLayer`, `OGLayerRenderer`, gestures
 
@@ -291,6 +319,7 @@ OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 24
 - AI hooks (describe → shape/patch): `docs/AI_HOOKS.md`
 - Runtime-editable SVG (overrides + morph): `docs/RUNTIME_SVG.md`
 - Shape-morph clips: `docs/SHAPE_MORPH_CLIPS.md`
+- Soft & gradient masks, multi-region clips: `docs/SOFT_MASKS.md`
 - Depth/layer API: `docs/DEPTH_LAYER.md`
 - Interactive video (cues + position): `docs/INTERACTIVE_VIDEO.md`
 - README: `README.md`

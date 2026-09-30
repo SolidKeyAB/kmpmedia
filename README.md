@@ -77,6 +77,14 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Morph the clip itself, live — Android.</b> One <code>OGMorphShape</code> drives the mask; the video keeps playing underneath as the outline tweens circle → diamond → triangle → lasso (the dark stage shows the silhouette at the corners). The <i>same</i> <code>Shape</code> feeds <code>OGImageView.clipShape</code> (photos/GIFs), <code>OGPlayerConfig.clipShape</code> (video) and any <code>Modifier.clip</code> — no new surface API. Each endpoint outline is resampled <i>once</i> (cached by shape + size) and only the points are lerped per frame, so it holds 60fps. See <a href="docs/SHAPE_MORPH_CLIPS.md">docs/SHAPE_MORPH_CLIPS.md</a>.</sub>
 
+…and the mask can now also be **soft** and **multi-region** (v1.12.0). A clip no longer has to be one shape with a hard edge: `Modifier.ogSoftClip(shape, feather)` fades a photo/GIF out over a feathered band (a vignette) and `Modifier.ogGradientMask(brush)` fades it along any gradient (edge fade, spotlight) — both surfaced on `OGImageView` as `softEdge` / `maskBrush`; and `OGMultiRegionShape` combines several placed sub-shapes with a path op (union / intersect / difference / xor) so one clip can show two portholes, or a diamond with a circular bite. It's an ordinary `Shape`, so it drops into the same `clipShape` slot for photos, GIFs and video. Soft masks are a single offscreen `BlendMode.DstIn` pass (no blur, no API floor); multi-region combines outlines once per size — both hold 60fps. See [**docs/SOFT_MASKS.md**](docs/SOFT_MASKS.md).
+
+<p align="center">
+  <img src="demo-screenshots/soft-mask-demo.gif" width="30%" alt="Soft & multi-region masks on Android — a photo whose circular clip edge feathers into a vignette as the feather grows, then a feathered triangle / diamond / rounded rect, then a gradient bottom-fade, then the photo shown through two circular portholes and a diamond with a circular bite removed" />
+  <img src="demo-screenshots/ios-soft-mask-demo.gif" width="30%" alt="The same soft & multi-region masks screen on an iOS simulator — a photo's circular edge breathing into a feathered vignette, a gradient fade, and two circular portholes, identical Compose Multiplatform code" />
+</p>
+<sub><b>Soft &amp; multi-region masks, live — Android (left) &amp; iOS (right).</b> One <code>OGImageView</code>: <code>softEdge</code> feathers the clip edge into a vignette, <code>maskBrush</code> fades the photo along a gradient, and <code>OGMultiRegionShape</code> clips it to more than one region (two portholes, or a diamond with a circular bite). Soft masks are one offscreen <code>BlendMode.DstIn</code> pass — no blur, no API floor; multi-region is a path op computed once per size. The <i>same</i> code on both platforms. See <a href="docs/SOFT_MASKS.md">docs/SOFT_MASKS.md</a>.</sub>
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
@@ -118,6 +126,7 @@ And **animated GIFs** — one `OGImageView` pointed at a `.gif`, playing on both
 - **🎞️ Animated GIF** — point one `OGImageView` at a `.gif` and it plays: looping frames on Android (`AnimatedImageDrawable`) and iOS (Skia `Codec`), the same code. The shape clip that crops a photo animates the moving frames inside a circle / diamond too.
 - **🎬 Video Playback** — one cross-platform `OGAVPlayer` (ExoPlayer on Android, AVPlayer on iOS), re-framed live into any shape, with transport controls, loop and load-any-URL.
 - **🫧 Morph the clip itself** — the clip *mask* animates circle → diamond → triangle → lasso while a video and a GIF keep playing, all driven by one [`OGMorphShape`](docs/SHAPE_MORPH_CLIPS.md). Clipping moving media to a morphing outline at 60fps, identical on Android & iOS.
+- **🪶 Soft & multi-region masks** — feather a photo's edge into a vignette (`softEdge`), fade it along a gradient (`maskBrush`), or clip it to more than one region at once — two portholes, a diamond with a circular bite — with [`OGMultiRegionShape`](docs/SOFT_MASKS.md). Soft edges via one offscreen `DstIn` pass; multi-region via a path op computed once. Same code on Android & iOS.
 - **🛸 UFO Dodge (mini-game)** — every sprite is a static SVG animated by the library; crop your own photos into shapes and drop them into the field as live game objects.
 - **🎛️ Playground · 🧪 Edge Cases · ⚡ Performance** — load anything from any URL/resource and tune every config live; deliberately broken inputs that prove `onError` fires cleanly; and load-timing / many-layer stress benchmarks with live numbers.
 
@@ -157,7 +166,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.11.0")
+            implementation("se.solidkey:kmpmedia-lib:1.12.0")
         }
     }
 }

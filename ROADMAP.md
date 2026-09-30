@@ -49,7 +49,11 @@ graph + a SMIL animation engine** — so make the vector *editable and data-boun
   *(1.10.0 — `OGMorphShape` + `ogMorphSequence`, drops into the existing `clipShape` slot)*
 - 🧭 **Auto-cutout** — on-device subject/background segmentation → auto-generate an
   `OGPolygonShape`. "Drop a photo, get the subject clipped out," no manual lasso.
-- 🧭 **Soft & gradient masks, multi-region clips** — feathered edges and more than one region.
+- ✅ **Soft & gradient masks, multi-region clips** — feathered edges and more than one region. Soft
+  masks (`Modifier.ogSoftClip` / `ogGradientMask`, and `OGImageView(softEdge=…, maskBrush=…)`) fade a
+  photo/GIF at the boundary or along a gradient via one offscreen `DstIn` pass; `OGMultiRegionShape`
+  combines placed sub-shapes with a path op (union/intersect/difference/xor) into one clip.
+  *(1.12.0 — see `docs/SOFT_MASKS.md`)*
 
 ## Bet 3 — On-device mini-compositor + export (the flagship)
 
