@@ -1,8 +1,9 @@
-# On-device compositor + GIF export — KMPMedia 1.13.0
+# On-device compositor + export — KMPMedia 1.13.0 (GIF) · 1.14.0 (MP4)
 
 KMPMedia could already put *one* piece of media in *one* shape. 1.13.0 adds the flagship **Bet 3**
 feature: compose **several** layers on **one timeline**, animate them with **keyframes**, preview the
-result live at 60fps, and **export it to a shareable animated GIF** — all authored on device.
+result live at 60fps, and **export it to a shareable animated GIF** — all authored on device. 1.14.0
+adds a second export target: the same composition renders to a **real H.264 MP4** (`exportMp4()`).
 
 - **`OGComposition`** — a fixed `width` × `height` canvas, a `durationMs` timeline at `fps`, a
   background colour, and a back-to-front stack of `OGCompositionLayer`s. Each layer is a still image or
@@ -16,9 +17,15 @@ result live at 60fps, and **export it to a shareable animated GIF** — all auth
   GIF with the built-in **pure-Kotlin `OGGifEncoder`** (median-cut palette + LZW). No dependency, no
   platform encoder — the **exact same bytes** come out on Android and iOS. It returns the encoded
   `ByteArray`; where to save or share it is the app's call.
+- **`OGComposition.exportMp4()`** *(1.14.0)* — render every frame offscreen and encode a **real H.264
+  MP4** with the **OS video encoder** (Android `MediaCodec` + `MediaMuxer`, iOS `AVAssetWriter`), still
+  with **no third-party dependency**. The encoded bytes are not identical across platforms (each OS has
+  its own encoder), but the *input* is: compositing and the RGB→YUV / RGB→BGRA colour maths are shared,
+  tested `commonMain`, so both encoders compress the same rendered frames. Returns the `ByteArray` too.
 
-Everything is pure `commonMain` — the model, the drawing, and the encoder — so a composition behaves
-identically on both platforms.
+The model, the drawing, the GIF encoder and the MP4 colour conversions are pure `commonMain`; only the
+MP4's final video encode is a thin platform layer over the OS encoder. A composition looks the same on
+both platforms.
 
 ## Holds 60fps — the perf + simplicity gate
 
@@ -91,6 +98,11 @@ fun OGCompositionView(
 
 // ---- export ----
 fun OGComposition.exportGif(loopCount: Int = 0, alphaThreshold: Int = 128): ByteArray
+fun OGComposition.exportMp4(                                      // H.264 MP4 via the OS encoder (1.14.0)
+    bitRate: Int = defaultMp4BitRate(width, height, fps),
+    background: Color = Color.Black,                             // transparent pixels resolve to this (no alpha in H.264)
+): ByteArray
+fun defaultMp4BitRate(width: Int, height: Int, fps: Int): Int    // resolution/fps-scaled, 0.75–16 Mbps
 fun OGComposition.renderFrame(timeMs: Long): ImageBitmap          // grab any single frame
 fun ImageBitmap.toArgbPixels(): IntArray                          // row-major 0xAARRGGBB
 
@@ -135,6 +147,9 @@ OGCompositionView(composition, modifier = Modifier.fillMaxWidth().aspectRatio(16
 
 // Export to a shareable GIF (loops forever), then save/share the bytes yourself:
 val gifBytes: ByteArray = composition.exportGif()
+
+// …or to an H.264 MP4 via the OS encoder (run off the main thread — it blocks on the encoder):
+val mp4Bytes: ByteArray = withContext(Dispatchers.Default) { composition.exportMp4() }
 ```
 
 ## Notes & guarantees
@@ -150,6 +165,12 @@ val gifBytes: ByteArray = composition.exportGif()
   areas never accumulate across frames. Pass `alphaThreshold > 255` to force a fully opaque GIF.
 - **Palette is shared + quantized.** Every frame maps to one ≤256-colour median-cut palette, so smooth
   gradients band as any GIF does; flat colours and clip edges stay crisp.
+- **MP4 uses the OS encoder, not pure Kotlin.** `exportMp4()` is the one place a platform encoder is
+  involved (`MediaCodec` / `AVAssetWriter`), so the encoded bytes differ per platform — but no
+  third-party dependency is pulled in, and the frames fed in are the same shared render. H.264 is
+  **opaque** (no alpha): transparent pixels composite onto the `background` param (default black). It
+  needs **even** dimensions, so an odd canvas is cropped by its last row/column. `exportMp4()` **blocks**
+  on the encoder — call it off the main thread (e.g. `Dispatchers.Default`).
 
 ## Where it fits
 
@@ -157,5 +178,6 @@ This is **Bet 3 — On-device mini-compositor + export** on the [roadmap](../ROA
 device, get a shareable file — no KMP library does compose-and-export." It builds directly on the shape
 system ([shapes](./POLYGON_SHAPE.md), [morph](./SHAPE_MORPH_CLIPS.md),
 [soft/multi-region](./SOFT_MASKS.md)) — any of those shapes is a valid layer clip. Run it in the demo
-app: **Compositor + export** (`CompositorScreen`). MP4 / frame-sequence export are the planned follow-ups
-(a single frame is already available via `renderFrame`).
+app: **Compositor + export** (`CompositorScreen`), which exports both a GIF and an MP4 and plays each
+back through the platform's own decoder. Frame-sequence export is the planned follow-up (a single frame
+is already available via `renderFrame`).

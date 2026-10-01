@@ -67,7 +67,11 @@ KMPMedia already layers image + video + SVG on a shared clock (`OGLayerRenderer`
 - ✅ **Export → GIF** — `OGComposition.exportGif()` renders the timeline and encodes a shareable animated
   GIF with a pure-Kotlin on-device encoder (median-cut palette + LZW, zero deps, identical bytes on both
   platforms). Author on-device, get a shareable file. No KMP library does compose-and-export. *(1.13.0)*
-- 🧭 **Export → MP4 / frame sequence** — the planned follow-ups (a single frame is already available via
+- ✅ **Export → MP4** — `OGComposition.exportMp4()` renders the timeline and encodes an H.264 MP4 with the
+  **OS video encoder** (Android `MediaCodec` + `MediaMuxer`, iOS `AVAssetWriter`), still with no third-party
+  dependency; the shared compositing / colour maths mean both encoders compress the same rendered frames.
+  *(1.14.0)*
+- 🧭 **Export → frame sequence** — the planned follow-up (a single frame is already available via
   `renderFrame`).
 
 ## Bet 4 — Interactivity primitives (productize the demo)
