@@ -79,7 +79,11 @@ KMPMedia already layers image + video + SVG on a shared clock (`OGLayerRenderer`
 Pinch-to-depth, tilt, jointed rigs and draggable layers already run in the demo app —
 promote them into the library:
 
-- 🧭 **Gesture modifiers + spring/physics** for shapes; hit-testing on clipped regions.
+- ✅ **Gesture modifiers + spring/physics** — `Modifier.ogInteractive` makes any composable
+  grab-drag / pinch-zoom / twist-rotate interactive, with a momentum fling and a spring settle, all on
+  one `graphicsLayer` (no recomposition, 60fps). `OGHitArea` ray-casts the touch against the clip
+  silhouette so transparent corners fall through — you grab the *shape*, not its bounding box. Pure
+  hit-test / clamp maths unit-tested on JVM + iOS; zero new dependency. *(1.15.0)*
 - 🧭 **Depth/parallax** primitive (builds on the existing `Modifier.ogDepth`).
 - 🧭 **Live camera into any shape** — an AR-sticker primitive (a `camera` package is scaffolded).
 
