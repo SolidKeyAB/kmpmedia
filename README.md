@@ -118,7 +118,7 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 
 - **🪄 Auto-cutout → live lasso** *(v1.19.0)* — drop a photo and the subject is clipped out: a pluggable `OGSegmenter` seam (plug in ML Kit / Vision / a cloud model) plus a cross-platform mask → lasso tracer (flood-fill → Moore-neighbour trace → Douglas–Peucker simplify) whose output drops straight into the same `clipShape` slot. No ML model is bundled. See [**docs/AUTO_CUTOUT.md**](docs/AUTO_CUTOUT.md).
 - **📷 Live camera in any shape** *(v1.22.0)* — `OGCameraPreview(shape, facing)` masks the live camera feed to any shape (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive, built on the platform camera APIs (Camera2 / AVFoundation) with no third-party dependency. See [**docs/CAMERA.md**](docs/CAMERA.md).
-- **🖊️ Data-defined drawing styles** *(v1.23.0)* — a drawing style is now just data: an `OGStyleSpec` is a JSON pipeline of `{op, params}` that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame — **boil** (a living, hand-drawn line), **quantize** (a stepped, stop-motion line) and **pixelate** (a low-res mosaic fill). A designer or a language model can author and share a `.style` pack with no code and no rebuild, mirroring how `OGAiVector` turns a model's JSON into shapes. Zero new dependency; the demo's 🖊️ *Boiling lines* screen (with a live "Style from JSON" editor) dogfoods it.
+- **🖊️ Data-defined drawing styles** *(v1.23.0)* — a drawing style is now just data: an `OGStyleSpec` is a JSON pipeline of `{op, params}` that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame — **boil** (a living, hand-drawn line), **quantize** (a stepped, stop-motion line) and **pixelate** (a low-res mosaic fill). A designer or a language model can author and share a `.style` pack with no code and no rebuild, mirroring how `OGAiVector` turns a model's JSON into shapes. Zero new dependency; the demo's 🖊️ *Boiling lines* screen (with a live "Style from JSON" editor) dogfoods it. See [**docs/STYLES.md**](docs/STYLES.md).
 
 *(These join the GIF tour above once their captures land — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see them live now.)*
 
@@ -167,7 +167,7 @@ And **animated GIFs** — one `OGImageView` pointed at a `.gif`, playing on both
 - **🤹 Interactive shapes** — grab a shape-clipped photo and drag it, pinch to zoom, twist to rotate — then fling it and watch it spring back, with a live offset / scale / rotation HUD. One [`Modifier.ogInteractive`](docs/INTERACTIVE.md) adds the transform + momentum + spring; `OGHitArea` means only touches inside the actual silhouette grab it, not its bounding box. Zero-dep, 60fps, same code on Android & iOS.
 - **🪄 Auto-cutout** — drop a photo and the subject is clipped out automatically: a pluggable [`OGSegmenter`](docs/AUTO_CUTOUT.md) seam (ML Kit / Vision / cloud) plus a zero-dependency mask → lasso tracer that feeds the same `clipShape` slot. No bundled ML model.
 - **📷 Live camera in any shape** — [`OGCameraPreview(shape, facing)`](docs/CAMERA.md) masks the live camera feed to any shape (built-in / lasso / `CircleShape`), front or back: the AR-sticker primitive, on Camera2 / AVFoundation with no third-party dependency.
-- **🖊️ Data-defined drawing styles** — a style is just data: an `OGStyleSpec` JSON pipeline of `{op, params}` (`boil` / `quantize` / `pixelate`) that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame. Author and share `.style` packs with no code; the 🖊️ *Boiling lines* screen has a live "Style from JSON" editor.
+- **🖊️ Data-defined drawing styles** — a style is just data: an [`OGStyleSpec`](docs/STYLES.md) JSON pipeline of `{op, params}` (`boil` / `quantize` / `pixelate`) that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame. Author and share `.style` packs with no code; the 🖊️ *Boiling lines* screen has a live "Style from JSON" editor.
 - **🛸 UFO Dodge (mini-game)** — every sprite is a static SVG animated by the library; crop your own photos into shapes and drop them into the field as live game objects.
 - **🎛️ Playground · 🧪 Edge Cases · ⚡ Performance** — load anything from any URL/resource and tune every config live; deliberately broken inputs that prove `onError` fires cleanly; and load-timing / many-layer stress benchmarks with live numbers.
 
@@ -460,6 +460,41 @@ OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 24
 ```
 
 `encodePolygon` / `encodeSvgPatch` go the other way (persist a lasso, seed a prompt with the current state). All of it runs at generate/patch time, never per frame. See [`docs/AI_HOOKS.md`](docs/AI_HOOKS.md).
+
+### Apply a data-defined drawing style
+
+*New in 1.23.0.* A drawing style is just data — a JSON pipeline of `{op, params}`. `OGStyles.decode(...)` compiles it **once** into a live `OGStyle`; `apply` it each frame with a rising `timeMs`. The ops are `boil` (the living hand-drawn line), `quantize` (a stepped line) and `pixelate` (a low-res sprite fill); a designer or a model can author and share a `.style` pack with no code.
+
+```kotlin
+import com.solidkey.painpoints.style.OGStyles
+
+val style = OGStyles.decode(
+    """{"name":"pixel sprite","ops":[
+         {"op":"boil","amplitude":0.03,"boilFps":10},
+         {"op":"pixelate","resolution":20}
+       ]}""",
+)
+
+val frame = style.apply(outline, timeMs)   // outline: List<OGPoint> in 0..1 space
+if (frame.isPixelated) { /* draw frame.pixelSize squares at frame.pixels */ }
+else                   { /* stroke or fill frame.outline */ }
+```
+
+Or give a media clip a living, hand-cut edge — a boiled `OGPolygonShape` drops into any `clipShape` slot, recreated each frame from a rising time:
+
+```kotlin
+import com.solidkey.painpoints.style.OGBoil
+import com.solidkey.painpoints.style.boiled
+
+OGImageView(
+    source = OGImageUrlType("https://example.com/photo.jpg"),
+    clipShape = OGPolygonShape(outline).boiled(OGBoil(amplitude = 0.02f), timeMs),
+    onEventTriggered = { _, _ -> },
+    onError = { /* ... */ },
+)
+```
+
+`OGStyles.stylePrompt("a nervous pencil sketch")` hands any model the exact JSON contract, so a style can be AI-authored too. See [`docs/STYLES.md`](docs/STYLES.md).
 
 ---
 
