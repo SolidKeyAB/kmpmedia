@@ -4,6 +4,23 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.24.0] — 2026-10-03
+
+> **Any graphic → a button.** KMPMedia ships no UI components or theme system — it ships the *bridge*: one modifier, `Modifier.ogButton`, turns any graphic (a photo, an SVG, a shape-clipped or lasso-cut cut-out, a raw `Canvas` drawing) into a real, accessible, shape-aware button. It is the **tap twin** of `Modifier.ogInteractive` (the drag half from 1.15.0) — both live in `com.solidkey.painpoints.gesture` and both reuse `OGHitArea`, so a tap only counts **inside the real silhouette** and the transparent corners of a triangle / circle / lasso fall through. Purely additive, no new dependency. This release also fixes a gesture bug in `ogInteractive`: dragging a **rotated or zoomed** layer now follows the finger instead of drifting off at an angle.
+
+### Added
+- `com.solidkey.painpoints.gesture.Modifier.ogButton(hitArea, enabled, pressEffect, onLongClick, contentDescription, onClick)` — make any composable a shape-aware button: a tap → `onClick`, an optional `onLongClick`, a pressed-state visual, and `Role.Button` accessibility, with no UI component.
+- `OGPressEffect` sealed interface — the pressed-state feedback: `Scale(scale = 0.94f)` (a squeeze), `Dim(alpha = 0.6f)` (a fade), `Brutalist(offset, shadowColor)` (the flat/pop-art hard-shadow push-in — the modifier draws its own hard-offset silhouette shadow and the content slides onto it on press), and `None`.
+- `OGHitArea.outlineNormalized(samples = 48)` — the normalized outline of a hit area (exact verts for a polygon, sampled for a circle), which feeds the `Brutalist` shadow path. Pure + unit-tested.
+
+### Fixed
+- `Modifier.ogInteractive` — a drag on a **rotated** (or zoomed) layer drifted off-finger because the gesture, which runs inside the transformed `graphicsLayer`, reported the pan delta in the content's own rotated/scaled frame but applied it as a screen-space translation. The pan delta and the fling velocity are now mapped back to parent space, so a drag follows the finger at any rotation / zoom.
+
+### Notes
+- **No double-tap**, by design — recognizing one would add the double-tap timeout (~300ms) of latency to *every* press. When `enabled` is `false` the touch inside the silhouette is still consumed (a no-op), so a disabled button never leaks taps to content behind it. Don't apply `ogButton` and `ogInteractive` to the same node — the press and the drag would fight.
+- **Perf**: the hit-test is one pure ray-cast on the down event; the press visual rides one `graphicsLayer` (plus one cached-outline `drawBehind` for `Brutalist`), so there's nothing per frame but the short press/settle — the same 60fps gate as the rest of the library.
+- **Verification**: 11 button unit tests (press-transform maths + `outlineNormalized`) plus the remapped-pan maths green on **JVM and iOS**; the demo's 🔘 *Any graphic → a button* screen dogfoods all three press effects + shape-aware fall-through, verified live on an API 35 emulator.
+
 ## [1.23.0] — 2026-10-03
 
 > **Data-defined drawing styles.** A drawing style is now just data — an `OGStyleSpec` is a JSON **pipeline of `{op, params}`** that `OGStyles.decode()` compiles into a live `OGStyle`, applied to any outline every frame. A designer (or a language model) can author, tweak and share a `.style` pack with no code and no rebuild, mirroring how `OGAiVector` turns a model's JSON into shapes. The first procedural ops ship in the new zero-dependency `com.solidkey.painpoints.style` package: **boil** (the hand-drawn "living line" vertex jitter), **quantize** (snap vertices to a grid — the stepped, stop-motion line), and **pixelate** (a low-res pixel / mosaic fill). Purely additive; reuses the existing `kotlinx-serialization` dependency (no new deps).
