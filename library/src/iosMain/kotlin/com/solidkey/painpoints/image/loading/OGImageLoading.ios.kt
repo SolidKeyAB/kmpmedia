@@ -119,6 +119,14 @@ actual fun loadImageFromUrl(url: String, onError: ((String) -> Unit)?, onLoaded:
 }
 
 private fun fetchImageFromUrl(url: String, onComplete: (ImageBitmap?) -> Unit) {
+    val key = OGStableHash.hex(url)
+    // 1) disk cache (survives app restarts) — decode the cached bytes without touching the network.
+    OGIosDiskCache.read(key)?.let { cached ->
+        val img = UIImage.imageWithData(cached)?.normalizedForDecode(MAX_DECODE_DIM)
+        onComplete(img?.toComposeImageBitmap())
+        return
+    }
+    // 2) network → write-through to disk.
     val nsUrl = NSURL(string = url)
     val request = NSURLRequest.requestWithURL(nsUrl)
     val session = NSURLSession.sharedSession
@@ -128,6 +136,7 @@ private fun fetchImageFromUrl(url: String, onComplete: (ImageBitmap?) -> Unit) {
             onComplete(null)
             return@dataTaskWithRequest
         }
+        if (data != null) OGIosDiskCache.write(key, data)
         val uiImage = data?.let { UIImage.imageWithData(it) }?.normalizedForDecode(MAX_DECODE_DIM)
         onComplete(uiImage?.toComposeImageBitmap())
     }

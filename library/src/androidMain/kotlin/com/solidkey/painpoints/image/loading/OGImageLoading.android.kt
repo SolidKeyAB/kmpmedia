@@ -54,6 +54,53 @@ private object OGBitmapCache {
     fun put(key: String, bitmap: Bitmap) = synchronized(cache) { cache.put(key, bitmap) }
 }
 
+/**
+ * A persistent, size-bounded **disk** cache of the raw bytes of remote images / GIFs, so a URL
+ * fetched once isn't re-downloaded on the next app launch (the in-memory [OGBitmapCache] only lives
+ * for the process). Content-addressed by [OGStableHash] of the URL, under `cacheDir/og_image_cache`.
+ * When the directory grows past [MAX_BYTES] the least-recently-used files (by last-modified time) are
+ * deleted. Any IO failure is swallowed — the cache is an optimisation, never a hard dependency.
+ */
+internal object OGImageDiskCache {
+    private const val SUBDIR = "og_image_cache"
+    private const val MAX_BYTES = 128L * 1024 * 1024 // 128 MB on disk
+
+    private fun dir(cacheRoot: File): File = File(cacheRoot, SUBDIR).apply { if (!exists()) mkdirs() }
+
+    fun read(cacheRoot: File, key: String): ByteArray? = try {
+        val f = File(dir(cacheRoot), key)
+        if (f.exists()) {
+            f.setLastModified(System.currentTimeMillis()) // touch for LRU
+            f.readBytes()
+        } else null
+    } catch (e: Exception) {
+        Logger.w("OG>> disk cache read failed: ${e.message}"); null
+    }
+
+    fun write(cacheRoot: File, key: String, bytes: ByteArray) {
+        try {
+            val d = dir(cacheRoot)
+            val tmp = File(d, "$key.tmp")
+            tmp.writeBytes(bytes)
+            tmp.renameTo(File(d, key)) // atomic swap so a reader never sees a half-written file
+            evictIfNeeded(d)
+        } catch (e: Exception) {
+            Logger.w("OG>> disk cache write failed: ${e.message}")
+        }
+    }
+
+    private fun evictIfNeeded(d: File) {
+        val files = d.listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= MAX_BYTES) return
+        for (f in files.sortedBy { it.lastModified() }) { // oldest first
+            if (total <= MAX_BYTES) break
+            val len = f.length()
+            if (f.delete()) total -= len
+        }
+    }
+}
+
 /** Power-of-two sample factor so the decoded bitmap's longest edge is ≤ [maxDim]. */
 private fun computeInSampleSize(width: Int, height: Int, maxDim: Int): Int {
     var sample = 1
@@ -110,35 +157,49 @@ private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
 @Composable
 actual fun loadImageFromUrl(url: String, onError: ((String) -> Unit)?, onLoaded: (Painter) -> Unit) {
     Logger.i("OG>> loadImageFromUrl: $url")
+    val cacheRoot = LocalContext.current.cacheDir
     LaunchedEffect(url) {
         val bitmap = OGBitmapCache.get(url)
-            ?: withContext(Dispatchers.IO) { fetchImageFromUrl(url) }?.also { OGBitmapCache.put(url, it) }
+            ?: withContext(Dispatchers.IO) { fetchImageFromUrl(url, cacheRoot) }?.also { OGBitmapCache.put(url, it) }
         if (bitmap == null) onError?.invoke("Failed to load image from URL: $url")
         onLoaded(bitmap?.let { BitmapPainter(it.asImageBitmap()) } ?: ColorPainter(Color.Yellow))
     }
 }
 
-private fun fetchImageFromUrl(url: String): Bitmap? {
+/** Decode `bytes` into an upright, downsampled bitmap (shared by the disk-cache and network paths). */
+private fun decodeUrlBytes(bytes: ByteArray): Bitmap? =
+    decodeSampled { opts -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
+        ?.let { applyExifOrientation(it, readExifOrientation { ByteArrayInputStream(bytes) }) }
+
+private fun fetchImageFromUrl(url: String, cacheRoot: File?): Bitmap? {
+    val key = OGStableHash.hex(url)
+    // 1) disk cache (survives app restarts), then 2) network → write-through to disk.
+    cacheRoot?.let { OGImageDiskCache.read(it, key) }?.let { cached ->
+        decodeUrlBytes(cached)?.let { return it }
+    }
+    val bytes = downloadBytes(url) ?: return null
+    cacheRoot?.let { OGImageDiskCache.write(it, key, bytes) }
+    return decodeUrlBytes(bytes).also { Logger.i("🌍!! OG>> Loaded image from $url, bytes=${bytes.size}") }
+}
+
+/** Download raw bytes for [url] with a Google-DNS fallback when host resolution fails. */
+private fun downloadBytes(url: String): ByteArray? {
     return try {
         Logger.i("🌍 OG>> Trying to load image from: $url")
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             doInput = true
             connect()
         }
-        val bytes = connection.inputStream.use { it.readBytes() }
-        val bitmap = decodeSampled { opts -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
-            ?.let { applyExifOrientation(it, readExifOrientation { ByteArrayInputStream(bytes) }) }
-        Logger.i("🌍!! OG>> Loaded image from $url, bitmap bytes=${bitmap?.byteCount}")
-        bitmap
+        connection.inputStream.use { it.readBytes() }
     } catch (e: UnknownHostException) {
         Logger.e("⚠️ OG>> DNS resolution failed for: $url")
         Logger.w("🌐 OG>> Attempting fallback using Google DNS (8.8.8.8)")
         try {
-            fetchWithGoogleDNS(url)
+            downloadBytesViaGoogleDNS(url)
         } catch (e2: Exception) {
             Logger.e("❌ OG>> First fallback attempt failed: ${e2.message}")
             try {
-                fetchWithGoogleDNS(url).also { Logger.i("✅ OG>> Fallback succeeded on second attempt.") }
+                downloadBytesViaGoogleDNS(url).also { Logger.i("✅ OG>> Fallback succeeded on second attempt.") }
             } catch (e3: Exception) {
                 Logger.e("❌ OG>> Second fallback attempt failed: ${e3.message}")
                 null
@@ -150,7 +211,7 @@ private fun fetchImageFromUrl(url: String): Bitmap? {
     }
 }
 
-private fun fetchWithGoogleDNS(url: String): Bitmap? {
+private fun downloadBytesViaGoogleDNS(url: String): ByteArray {
     val fallbackIp = "8.8.8.8" // Google Public DNS
     val originalUrl = URL(url)
     val fallbackUrl = URL(
@@ -166,9 +227,7 @@ private fun fetchWithGoogleDNS(url: String): Bitmap? {
         connect()
     }
 
-    val bytes = connection.inputStream.use { it.readBytes() }
-    return decodeSampled { opts -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
-        ?.let { applyExifOrientation(it, readExifOrientation { ByteArrayInputStream(bytes) }) }
+    return connection.inputStream.use { it.readBytes() }
 }
 
 

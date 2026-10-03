@@ -4,6 +4,21 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] — 2026-10-03
+
+> **Persistent disk cache + GIF frame-memory cap.** Two transparent parity additions (no new API, nothing to opt into). (1) Remote images and GIFs were cached only **in memory** (dies with the process), so every cold start re-downloaded them; 1.18 adds a **disk cache** under the OS cache directory — lookup is in-memory → disk → network, a network fetch is written through to disk, and the next launch reads from disk. Keyed by a stable 128-bit content hash, bounded to 128 MB with LRU eviction, best-effort (any IO failure is a cache miss, writes are atomic). (2) A large/long animated GIF could blow up memory, especially on iOS where **every** frame is decoded into RAM; 1.18 caps GIF decode — a per-frame longest-edge cap on both platforms, plus a total-frames budget (≤ 64 MB) on iOS. Finishes the **memory/disk cache + large-GIF** line of table-stakes parity. Zero new dependency, purely additive.
+
+### Added
+- Internal: a persistent disk cache (`cacheDir/og_image_cache` on Android, `Caches/og_image_cache` on iOS) for remote image/GIF bytes, keyed by `OGStableHash` (128-bit FNV-1a hex). No public API — `OGImageView` and the GIF loader use it automatically.
+- Internal: `OGGifDecodeBudget.frameScale(width, height, frameCount, allFramesInMemory)` — the shared, tested decision for how far to downscale GIF frames.
+
+### Changed
+- Remote images/GIFs now survive app restarts via the disk cache instead of re-downloading. Lookup order is in-memory → disk → network.
+- GIF decode is memory-capped: Android caps each frame's edge via `ImageDecoder.setTargetSize` (frames already decode on demand); iOS caps edge **and** a 64 MB total-frames budget (all frames live in RAM there), downscaling at decode time.
+
+### Notes
+- Pure maths (`OGStableHash`, `OGGifDecodeBudget`) unit-tested on **JVM and iOS** (9 tests). Verified on Android: three remote GIFs populate the disk cache, and with **airplane mode + a cold restart** all three still render (loaded from disk); all GIFs still animate, so the frame cap doesn't break decoding. See `docs/CACHING.md`.
+
 ## [1.17.0] — 2026-10-03
 
 > **EXIF orientation — automatic upright photos.** Phone cameras store raw sensor pixels and record how the phone was held in EXIF tag `0x0112`; platform decoders ignore it, so a portrait photo decodes **sideways**. 1.17.0 reads the tag and rotates, so any image `OGImageView` loads — from a file, URL, or bytes — now shows **upright automatically**. All eight orientation values are covered (the four rotations and four mirrored variants). No new API and nothing to opt into — it's a pure correctness fix, and already-upright images are untouched. Finishes the "large-image downsampling + EXIF" line of **table-stakes parity** on the roadmap (downsampling already shipped). Zero new dependency, purely additive.

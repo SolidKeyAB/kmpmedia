@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import co.touchlab.kermit.Logger
+import com.solidkey.painpoints.image.loading.OGImageDiskCache
+import com.solidkey.painpoints.image.loading.OGStableHash
 import com.solidkey.painpoints.source.OGSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,7 +91,19 @@ private fun decodeAnimatedDrawable(bytes: ByteArray, loop: Boolean): Drawable =
 @RequiresApi(Build.VERSION_CODES.P)
 private fun decodeWithImageDecoder(bytes: ByteArray, loop: Boolean): Drawable {
     val src = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-    val drawable = ImageDecoder.decodeDrawable(src)
+    // Cap each frame's longest edge (AnimatedImageDrawable decodes frames on demand, so no total-frame
+    // budget is needed here — hence allFramesInMemory = false). Keeps a huge-dimension GIF cheap.
+    val drawable = ImageDecoder.decodeDrawable(src) { decoder, info, _ ->
+        val w = info.size.width
+        val h = info.size.height
+        val scale = OGGifDecodeBudget.frameScale(w, h, frameCount = 0, allFramesInMemory = false)
+        if (scale < 1f) {
+            decoder.setTargetSize(
+                (w * scale).roundToInt().coerceAtLeast(1),
+                (h * scale).roundToInt().coerceAtLeast(1),
+            )
+        }
+    }
     if (drawable is AnimatedImageDrawable) {
         drawable.repeatCount =
             if (loop) AnimatedImageDrawable.REPEAT_INFINITE else 0
@@ -99,7 +113,7 @@ private fun decodeWithImageDecoder(bytes: ByteArray, loop: Boolean): Drawable {
 
 /** Fetch the raw bytes of [source] (URL / file / `res/raw` or `res/drawable`). */
 private fun readGifBytes(source: OGSource, context: Context): ByteArray? = when (source) {
-    is OGSource.Url -> readUrlBytes(source.url)
+    is OGSource.Url -> readUrlBytes(source.url, context.cacheDir)
     is OGSource.FilePath -> File(source.path).takeIf { it.exists() }?.readBytes()
     is OGSource.Resource -> {
         val resources = context.resources
@@ -111,14 +125,21 @@ private fun readGifBytes(source: OGSource, context: Context): ByteArray? = when 
     }
 }
 
-private fun readUrlBytes(url: String): ByteArray? = try {
-    (URL(url).openConnection() as HttpURLConnection).apply {
-        doInput = true
-        connect()
-    }.inputStream.use { it.readBytes() }
-} catch (e: Exception) {
-    Logger.e("OG>> GIF url fetch failed: ${e.message}")
-    null
+private fun readUrlBytes(url: String, cacheRoot: File?): ByteArray? {
+    val key = OGStableHash.hex(url)
+    // Reuse a previously-downloaded GIF across launches (disk cache), else fetch + write-through.
+    cacheRoot?.let { OGImageDiskCache.read(it, key) }?.let { return it }
+    return try {
+        val bytes = (URL(url).openConnection() as HttpURLConnection).apply {
+            doInput = true
+            connect()
+        }.inputStream.use { it.readBytes() }
+        cacheRoot?.let { OGImageDiskCache.write(it, key, bytes) }
+        bytes
+    } catch (e: Exception) {
+        Logger.e("OG>> GIF url fetch failed: ${e.message}")
+        null
+    }
 }
 
 /**

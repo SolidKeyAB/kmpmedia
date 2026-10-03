@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import co.touchlab.kermit.Logger
+import com.solidkey.painpoints.image.loading.OGIosDiskCache
+import com.solidkey.painpoints.image.loading.OGStableHash
 import com.solidkey.painpoints.source.OGSource
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -20,6 +22,8 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Codec
 import org.jetbrains.skia.Data
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Surface
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.dataWithContentsOfFile
@@ -68,9 +72,18 @@ private fun decodeGif(bytes: ByteArray): OGGifAnimation? {
         val frameCount = codec.frameCount
         if (frameCount <= 0) return null
 
+        val info = codec.imageInfo
+        // Unlike Android (which decodes frames on demand), iOS holds EVERY frame in memory, so a long
+        // or huge GIF can OOM. Cap per-frame edge AND the total-frames budget by decoding downscaled.
+        val scale = OGGifDecodeBudget.frameScale(info.width, info.height, frameCount, allFramesInMemory = true)
+        val targetW = (info.width * scale).toInt().coerceAtLeast(1)
+        val targetH = (info.height * scale).toInt().coerceAtLeast(1)
+
         val framesInfo = codec.framesInfo
         val bitmap = Bitmap()
-        bitmap.allocPixels(codec.imageInfo)
+        bitmap.allocPixels(info)
+        // Only allocate a scaling surface when we actually need to downscale.
+        val surface = if (scale < 1f) Surface.makeRasterN32Premul(targetW, targetH) else null
 
         val frames = ArrayList<ImageBitmap>(frameCount)
         val durations = ArrayList<Int>(frameCount)
@@ -79,12 +92,25 @@ private fun decodeGif(bytes: ByteArray): OGGifAnimation? {
                 // Decode sequentially into the SAME bitmap so Skia can composite frames that
                 // depend on the previous one (disposal method "keep").
                 codec.readPixels(bitmap, i)
-                frames += Image.makeFromBitmap(bitmap).toComposeImageBitmap()
+                val frame = if (surface != null) {
+                    val img = Image.makeFromBitmap(bitmap)
+                    try {
+                        surface.canvas.clear(0) // transparent — each bitmap is already a full composited frame
+                        surface.canvas.drawImageRect(img, Rect.makeWH(targetW.toFloat(), targetH.toFloat()))
+                        surface.makeImageSnapshot().toComposeImageBitmap()
+                    } finally {
+                        img.close()
+                    }
+                } else {
+                    Image.makeFromBitmap(bitmap).toComposeImageBitmap()
+                }
+                frames += frame
                 val duration = framesInfo.getOrNull(i)?.duration ?: 0
                 durations += if (duration <= 0) OGGifClock.DEFAULT_FRAME_MS else duration
             }
         } finally {
             bitmap.close()
+            surface?.close()
         }
         return OGGifAnimation(frames, durations)
     } finally {
@@ -96,7 +122,13 @@ private fun decodeGif(bytes: ByteArray): OGGifAnimation? {
 @OptIn(ExperimentalForeignApi::class)
 private fun readGifBytes(source: OGSource): ByteArray? {
     val data: NSData? = when (source) {
-        is OGSource.Url -> NSURL.URLWithString(source.url)?.let { NSData.dataWithContentsOfURL(it) }
+        is OGSource.Url -> {
+            // Reuse a previously-downloaded GIF across launches (disk cache), else fetch + write-through.
+            val key = OGStableHash.hex(source.url)
+            OGIosDiskCache.read(key)
+                ?: NSURL.URLWithString(source.url)?.let { NSData.dataWithContentsOfURL(it) }
+                    ?.also { OGIosDiskCache.write(key, it) }
+        }
         is OGSource.FilePath -> NSData.dataWithContentsOfFile(source.path)
         is OGSource.Resource -> NSData.dataWithContentsOfFile(source.resource)
     }

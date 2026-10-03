@@ -91,9 +91,11 @@ promote them into the library:
 
 Not differentiators, but things adopters expect — cheap to add and they remove objections:
 
-- 🟡 **Memory/disk cache** for remote images & GIFs + frame-memory control for large GIFs. *(Memory
-  cache already ships: an LRU bitmap cache on Android, a bounded cache on iOS. Remaining: a persistent
-  disk cache across launches + a GIF frame-memory cap.)*
+- ✅ **Memory/disk cache** for remote images & GIFs + frame-memory control for large GIFs. In-memory
+  cache (LRU bitmaps on Android, a bounded cache on iOS) plus a **persistent disk cache** so a URL
+  fetched once isn't re-downloaded across app launches, and a **GIF frame-memory cap** (per-frame edge
+  cap on both platforms; a total-frames budget on iOS, where every frame is held in RAM).
+  *(1.18.0 — see `docs/CACHING.md`)*
 - ✅ **Large-image downsampling**, EXIF rotation. Downsampling caps the decode to a max edge on both
   platforms; EXIF orientation is read and applied so photos shot in portrait / upside down decode
   upright automatically (all 8 orientation values, no new dependency, no API change).
