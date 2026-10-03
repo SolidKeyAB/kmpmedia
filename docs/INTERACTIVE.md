@@ -103,6 +103,14 @@ under a fast fling — concurrent snap coroutines read a stale value and lose de
 came out under-counted during development). Accumulating the running totals in the loop and snapping
 absolutes fixes it.
 
+A second subtlety, for the same reason the gesture is fast — it runs **inside** the transformed
+`graphicsLayer` — is that `calculatePan()` reports the drag in the content's *own* rotated + scaled
+frame, while `translationX/Y` move the layer in its *parent* (screen) frame. Applied raw, a drag on a
+rotated layer drifts off at an angle (and lags the finger when zoomed). So the pan delta and the fling
+velocity are mapped back to parent space (`scale · R(rotation) · delta`) before they're applied — a
+drag follows the finger at any rotation / zoom. The shape-aware down-test stays in the local frame on
+purpose: the clip shape lives in that same frame, so that's the correct space to hit-test against.
+
 ## Tested & verified
 
 - **Pure maths unit-tested on JVM + iOS** (16 tests): the `OGHitArea` ray-cast (inside / on-edge /

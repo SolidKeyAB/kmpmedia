@@ -52,6 +52,40 @@ class OGInteractionTest {
     }
 
     @Test
+    fun localPanToParentIsIdentityWithNoRotationOrScale() {
+        val v = Offset(12f, -7f)
+        val mapped = localPanToParent(v, rotationDeg = 0f, scale = 1f)
+        assertEquals(12f, mapped.x, 0.0001f)
+        assertEquals(-7f, mapped.y, 0.0001f)
+    }
+
+    @Test
+    fun localPanToParentRotates90Degrees() {
+        // At +90° the layer's local +x points along screen +y and local +y along screen -x,
+        // so a local drag of (1,0) must land in parent space as (0,1).
+        val mapped = localPanToParent(Offset(1f, 0f), rotationDeg = 90f, scale = 1f)
+        assertEquals(0f, mapped.x, 0.0001f)
+        assertEquals(1f, mapped.y, 0.0001f)
+    }
+
+    @Test
+    fun localPanToParentRotates180DegreesFlipsDirection() {
+        // The reported bug: once rotated, dragging went the wrong way. At 180° a local (1,1)
+        // must become (-1,-1) in parent space.
+        val mapped = localPanToParent(Offset(1f, 1f), rotationDeg = 180f, scale = 1f)
+        assertEquals(-1f, mapped.x, 0.0001f)
+        assertEquals(-1f, mapped.y, 0.0001f)
+    }
+
+    @Test
+    fun localPanToParentAppliesScaleSoDragTracksTheFinger() {
+        // Zoomed 2×, a local delta covers twice the screen distance, so the parent delta doubles.
+        val mapped = localPanToParent(Offset(3f, -4f), rotationDeg = 0f, scale = 2f)
+        assertEquals(6f, mapped.x, 0.0001f)
+        assertEquals(-8f, mapped.y, 0.0001f)
+    }
+
+    @Test
     fun presetsToggleTheRightGestures() {
         assertTrue(OGInteractionConfig.DragOnly.enablePan)
         assertTrue(!OGInteractionConfig.DragOnly.enableZoom)

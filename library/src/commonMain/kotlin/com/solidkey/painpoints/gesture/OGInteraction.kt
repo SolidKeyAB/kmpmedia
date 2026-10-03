@@ -12,7 +12,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * How [Modifier.ogInteractive][ogInteractive] behaves: which gestures are live, scale limits, and
@@ -87,6 +90,27 @@ internal fun applyZoom(current: Float, zoomChange: Float, min: Float, max: Float
 /** Clamp a pan [offset] into the symmetric pixel [bounds]. Infinite bounds leave it untouched. */
 internal fun clampOffset(offset: Offset, bounds: OGPanBounds): Offset =
     Offset(offset.x.coerceIn(-bounds.maxX, bounds.maxX), offset.y.coerceIn(-bounds.maxY, bounds.maxY))
+
+/**
+ * Map a vector from the layer's **local** (rotated + uniformly scaled) space back into its
+ * **parent / screen** space.
+ *
+ * The gesture loop lives *inside* the transformed `graphicsLayer`, so a drag delta / fling velocity
+ * arrives expressed in the content's own rotated+scaled frame. The pan it feeds, however, is written
+ * into `translationX/Y`, which the layer applies in parent space. Without this remap a drag drifts
+ * off-finger once the content is rotated (direction wrong) or zoomed (magnitude wrong). The linear
+ * part of the layer transform is `scale * R(rotationDeg)`, so recovering the parent-space vector is
+ * exactly that applied to the local [v].
+ */
+internal fun localPanToParent(v: Offset, rotationDeg: Float, scale: Float): Offset {
+    val rad = rotationDeg * (PI.toFloat() / 180f)
+    val c = cos(rad)
+    val s = sin(rad)
+    return Offset(
+        (v.x * c - v.y * s) * scale,
+        (v.x * s + v.y * c) * scale,
+    )
+}
 
 // ---------------------------------------------------------------------------
 // State holder

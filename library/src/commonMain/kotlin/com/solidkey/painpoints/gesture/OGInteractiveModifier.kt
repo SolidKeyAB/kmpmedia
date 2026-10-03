@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.unit.Velocity
 import kotlinx.coroutines.launch
 
 /**
@@ -100,7 +101,12 @@ fun Modifier.ogInteractive(
                         scaleTotal = clampScale(scaleTotal * event.calculateZoom(), config.minScale, config.maxScale)
                     }
                     if (config.enableRotate) rotationTotal += event.calculateRotation()
-                    if (config.enablePan) panTotal += event.calculatePan()
+                    // The gesture loop runs inside the rotated+scaled graphicsLayer, so calculatePan()
+                    // is in the content's local frame. Map it to parent space (where translationX/Y
+                    // live) using the current rotation/scale so the drag always follows the finger.
+                    if (config.enablePan) {
+                        panTotal += localPanToParent(event.calculatePan(), rotationTotal, scaleTotal)
+                    }
                     scope.launch { state.snapTransform(panTotal, scaleTotal, rotationTotal) }
                     event.changes.firstOrNull { it.pressed }
                         ?.let { tracker.addPosition(it.uptimeMillis, it.position) }
@@ -110,7 +116,10 @@ fun Modifier.ogInteractive(
 
                 if (!canceled) {
                     val velocity = tracker.calculateVelocity()
-                    scope.launch { state.settle(velocity, size) }
+                    // Velocity is tracked in the same local frame as the pan — remap it to parent
+                    // space so the momentum fling carries on in the direction the finger flicked.
+                    val parentVel = localPanToParent(Offset(velocity.x, velocity.y), rotationTotal, scaleTotal)
+                    scope.launch { state.settle(Velocity(parentVel.x, parentVel.y), size) }
                 }
             }
         }
