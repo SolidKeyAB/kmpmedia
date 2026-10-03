@@ -4,6 +4,10 @@
 
 # KMPMedia
 
+<p align="center">
+  <a href="https://central.sonatype.com/artifact/se.solidkey/kmpmedia-lib"><img src="https://img.shields.io/maven-central/v/se.solidkey/kmpmedia-lib?label=Maven%20Central&color=blue" alt="KMPMedia on Maven Central — always the latest published version"></a>
+</p>
+
 **A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, **animated GIFs**, audio, and video, on **Android and iOS**.
 
 Everything renders into native Compose primitives (`Canvas`/`drawScope`), so SVGs are live vectors you can animate, drag, layer, and edit at runtime — not rasterized bitmaps.
