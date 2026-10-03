@@ -3,6 +3,8 @@ package com.solidkey.painpoints.image.loading
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,7 +19,9 @@ import androidx.compose.ui.platform.LocalContext
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.UnknownHostException
@@ -68,6 +72,40 @@ private fun decodeSampled(decodeInto: (BitmapFactory.Options) -> Bitmap?): Bitma
     return decodeInto(opts)
 }
 
+/**
+ * Read EXIF tag `0x0112` from the same source we decoded. `BitmapFactory` ignores it, so a portrait
+ * photo decodes sideways unless we read the tag and rotate. Any failure (no EXIF, corrupt header)
+ * degrades silently to [OGExifOrientation.NORMAL] — the pre-EXIF behaviour.
+ */
+private fun readExifOrientation(openStream: () -> InputStream): Int = try {
+    openStream().use {
+        ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    }
+} catch (e: Exception) {
+    Logger.w("OG>> EXIF orientation read failed: ${e.message}")
+    ExifInterface.ORIENTATION_NORMAL
+}
+
+/**
+ * Rotate/mirror a decoded bitmap into its upright orientation using the shared [OGExifOrientation]
+ * mapping (mirror-then-rotate-clockwise). Returns the bitmap unchanged when no correction is needed,
+ * so the common upright case stays allocation-free.
+ */
+private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+    val t = OGExifOrientation.transformFor(orientation)
+    if (t.isIdentity) return bitmap
+    val matrix = Matrix().apply {
+        if (t.mirrored) postScale(-1f, 1f)                 // horizontal mirror first…
+        if (t.rotationDegrees != 0) postRotate(t.rotationDegrees.toFloat()) // …then clockwise rotation
+    }
+    return try {
+        Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    } catch (e: OutOfMemoryError) {
+        Logger.w("OG>> EXIF rotation OOM, using un-rotated bitmap")
+        bitmap
+    }
+}
+
 
 @Composable
 actual fun loadImageFromUrl(url: String, onError: ((String) -> Unit)?, onLoaded: (Painter) -> Unit) {
@@ -89,6 +127,7 @@ private fun fetchImageFromUrl(url: String): Bitmap? {
         }
         val bytes = connection.inputStream.use { it.readBytes() }
         val bitmap = decodeSampled { opts -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
+            ?.let { applyExifOrientation(it, readExifOrientation { ByteArrayInputStream(bytes) }) }
         Logger.i("🌍!! OG>> Loaded image from $url, bitmap bytes=${bitmap?.byteCount}")
         bitmap
     } catch (e: UnknownHostException) {
@@ -129,6 +168,7 @@ private fun fetchWithGoogleDNS(url: String): Bitmap? {
 
     val bytes = connection.inputStream.use { it.readBytes() }
     return decodeSampled { opts -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
+        ?.let { applyExifOrientation(it, readExifOrientation { ByteArrayInputStream(bytes) }) }
 }
 
 
@@ -154,6 +194,7 @@ private fun fetchImageFromFile(path: String): Bitmap? {
     val file = File(path)
     return if (file.exists()) {
         decodeSampled { opts -> BitmapFactory.decodeFile(path, opts) }
+            ?.let { applyExifOrientation(it, readExifOrientation { file.inputStream() }) }
     } else {
         Logger.w("OG>> Image file not found: $path")
         null

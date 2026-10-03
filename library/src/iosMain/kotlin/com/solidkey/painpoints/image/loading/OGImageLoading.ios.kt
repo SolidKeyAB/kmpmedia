@@ -30,6 +30,7 @@ import platform.UIKit.UIGraphicsBeginImageContextWithOptions
 import platform.UIKit.UIGraphicsEndImageContext
 import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
+import platform.UIKit.UIImageOrientation
 import platform.UIKit.UIImagePNGRepresentation
 
 /**
@@ -69,13 +70,24 @@ private fun ogCachePut(key: String, bitmap: ImageBitmap) {
     }
 }
 
-/** Downscale a [UIImage] so its longest edge is ≤ [maxDim] (drawn at scale 1 so pixels == points). */
+/**
+ * Prepare a decoded [UIImage] for the Compose bitmap round-trip: downscale so its longest edge is
+ * ≤ [maxDim], AND bake in its EXIF orientation.
+ *
+ * Both happen in one `drawInRect` pass. The orientation step matters because the later
+ * [UIImagePNGRepresentation] round-trip writes the raw `CGImage` pixels and drops `imageOrientation`
+ * — so a portrait photo that did NOT need downscaling would otherwise reach Compose sideways. UIKit
+ * draws every image upright into the context, so redrawing is all the correction we need. `.size` is
+ * already the orientation-aware (display) size, so the context dimensions come out right either way.
+ */
 @OptIn(ExperimentalForeignApi::class)
-private fun UIImage.downscaledToMax(maxDim: Double): UIImage {
+private fun UIImage.normalizedForDecode(maxDim: Double): UIImage {
     val (w, h) = this.size.useContents { Pair(width, height) }
     val longest = maxOf(w, h)
-    if (longest <= maxDim || longest <= 0.0) return this
-    val scale = maxDim / longest
+    val needsDownscale = longest > maxDim && longest > 0.0
+    val needsOrient = this.imageOrientation != UIImageOrientation.UIImageOrientationUp
+    if (!needsDownscale && !needsOrient) return this
+    val scale = if (needsDownscale) maxDim / longest else 1.0
     val newW = w * scale
     val newH = h * scale
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(newW, newH), false, 1.0)
@@ -116,7 +128,7 @@ private fun fetchImageFromUrl(url: String, onComplete: (ImageBitmap?) -> Unit) {
             onComplete(null)
             return@dataTaskWithRequest
         }
-        val uiImage = data?.let { UIImage.imageWithData(it) }?.downscaledToMax(MAX_DECODE_DIM)
+        val uiImage = data?.let { UIImage.imageWithData(it) }?.normalizedForDecode(MAX_DECODE_DIM)
         onComplete(uiImage?.toComposeImageBitmap())
     }
     task.resume()
@@ -129,7 +141,7 @@ actual fun loadImageFromPath(path: String, onError: ((String) -> Unit)?, onLoade
         ogCacheGet(path)?.let { onLoaded(BitmapPainter(it)); return@LaunchedEffect }
         // Decode OFF the main thread (mirrors Android's Dispatchers.IO) so a large gallery photo
         // doesn't stall the UI on first spawn — the same main-thread stall we removed on Android —
-        // then cache it for reuse. downscaledToMax is already run off-main in the URL path below.
+        // then cache it for reuse. normalizedForDecode is already run off-main in the URL path below.
         val bitmap = withContext(Dispatchers.Default) { decodeImageFromFile(path) }
         if (bitmap == null) onError?.invoke("Failed to load image from path: $path")
         else ogCachePut(path, bitmap)
@@ -150,10 +162,10 @@ actual fun loadImageFromResource(resource: String, onError: ((String) -> Unit)?,
 }
 
 private fun decodeImageFromFile(path: String): ImageBitmap? =
-    UIImage.imageWithContentsOfFile(path)?.downscaledToMax(MAX_DECODE_DIM)?.toComposeImageBitmap()
+    UIImage.imageWithContentsOfFile(path)?.normalizedForDecode(MAX_DECODE_DIM)?.toComposeImageBitmap()
 
 private fun decodeImageFromResource(resource: String): ImageBitmap? =
-    UIImage.imageWithContentsOfFile(resource)?.downscaledToMax(MAX_DECODE_DIM)?.toComposeImageBitmap()
+    UIImage.imageWithContentsOfFile(resource)?.normalizedForDecode(MAX_DECODE_DIM)?.toComposeImageBitmap()
 
 
 // Helper: convert a decoded UIImage into a Compose ImageBitmap (via PNG → Skia).

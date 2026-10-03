@@ -4,6 +4,29 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] — 2026-10-03
+
+> **EXIF orientation — automatic upright photos.** Phone cameras store raw sensor pixels and record how the phone was held in EXIF tag `0x0112`; platform decoders ignore it, so a portrait photo decodes **sideways**. 1.17.0 reads the tag and rotates, so any image `OGImageView` loads — from a file, URL, or bytes — now shows **upright automatically**. All eight orientation values are covered (the four rotations and four mirrored variants). No new API and nothing to opt into — it's a pure correctness fix, and already-upright images are untouched. Finishes the "large-image downsampling + EXIF" line of **table-stakes parity** on the roadmap (downsampling already shipped). Zero new dependency, purely additive.
+
+### Added
+- `com.solidkey.painpoints.image.loading.OGExifOrientation.transformFor(orientation): OGExifTransform` — the shared, tested mapping from an EXIF orientation value (1–8) to the *mirror-then-rotate-clockwise* correction that restores upright, plus the eight `OGExifOrientation` constants.
+
+### Fixed
+- Photos with a non-default EXIF orientation now decode upright on both platforms. Android reads the tag with the SDK's built-in `android.media.ExifInterface` (no new dependency) and applies a `Matrix` after downsampling; iOS normalises orientation inside the existing redraw pass, so even images that skip downsampling no longer lose orientation through the PNG → Skia round-trip.
+
+### Notes
+- **Zero new dependency, zero API change.** The transpose/transverse (5/7) cases most libraries get wrong are pinned by a geometry test (four corners vs. the canonical per-orientation mapping) green on **JVM and iOS**; verified visually on Android with the standard eight-orientation test set, all rendering upright. A missing/corrupt EXIF header degrades to `NORMAL`, never a crash. Bundled drawable resources carry no EXIF (re-encoded by the build tools), so only decoded photos (file/URL/bytes) are affected. See `docs/EXIF.md`; the demo's **EXIF auto-rotate** screen shows the test set upright.
+
+## [1.16.0] — 2026-10-02
+
+> **Placeholder / loading / error slots + accessibility on `OGImageView`.** The table-stakes parity an image view is expected to have: a **placeholder** composable shown while loading (a spinner, a brand colour) in place of the old grey box, an **error** composable shown on failure (the visual partner to `onError`, which still fires) in place of the old solid-colour box, and a **`contentDescription`** read aloud by TalkBack / VoiceOver (null = decorative). Both slots are drawn **inside the same shape clip / soft mask** as the image, so a placeholder fills the shape too. RTL is inherent — `alignment` resolves against `LayoutDirection`. Everything defaults to the previous behavior, so existing calls compile and render exactly as before.
+
+### Added
+- `OGImageView(placeholder: (@Composable () -> Unit)? = null, error: (@Composable () -> Unit)? = null, contentDescription: String? = null, …)` — custom loading / error composables (clipped to the image's shape) and an accessibility description. All null by default (old behavior).
+
+### Notes
+- The load state is a pure `ogImagePhase(hasPainter, failed)` state machine (4 commonTest green JVM + iOS); the error slot and `onError` are driven by one signal, so they can't disagree. Dogfooded in the demo's **Edge Cases** screen (spinner placeholder + ⚠️ error slot). See `docs/PLACEHOLDERS.md`.
+
 ## [1.15.0] — 2026-10-01
 
 > **Gesture + physics interactivity primitives.** KMPMedia could clip media to any shape; now that shape can be **grabbed, dragged, pinch-zoomed and twist-rotated**, with a momentum fling and a spring settle — the interactivity half of **Bet 4** on the roadmap, productized out of the demo. One modifier, `Modifier.ogInteractive(state, hitArea)`, does both halves: it **applies** the pan / zoom / rotation through a single `graphicsLayer` (a GPU-layer transform, so motion never triggers recomposition and holds 60fps) and **drives** that transform from a custom `awaitEachGesture` loop — one- or two-finger drag pans, pinch zooms (clamped), twist rotates, and on release the pan carries on with an exponential-decay fling then springs back inside its bounds. Pass an `OGHitArea` to make the gesture **shape-aware**: a drag only starts if the finger lands inside the clip's silhouette, so the transparent corners of a triangle / circle / lasso no longer grab it (and touches there fall through to whatever is behind). Everything size-independent (pan limits are a *fraction* of the content size) and purely additive — a new `com.solidkey.painpoints.gesture` package, nothing existing changed. Zero new dependency; identical on Android & iOS.

@@ -94,8 +94,10 @@ Not differentiators, but things adopters expect — cheap to add and they remove
 - 🟡 **Memory/disk cache** for remote images & GIFs + frame-memory control for large GIFs. *(Memory
   cache already ships: an LRU bitmap cache on Android, a bounded cache on iOS. Remaining: a persistent
   disk cache across launches + a GIF frame-memory cap.)*
-- 🟡 **Large-image downsampling**, EXIF rotation. *(Downsampling already ships: decode is capped to a
-  max edge on both platforms, so huge images don't blow memory. Remaining: EXIF-orientation rotation.)*
+- ✅ **Large-image downsampling**, EXIF rotation. Downsampling caps the decode to a max edge on both
+  platforms; EXIF orientation is read and applied so photos shot in portrait / upside down decode
+  upright automatically (all 8 orientation values, no new dependency, no API change).
+  *(1.17.0 — see `docs/EXIF.md`)*
 - ✅ **Placeholder / loading / error** slots. `OGImageView(placeholder = …, error = …)` — any composable
   shown while loading / on failure, drawn inside the shape clip, with the error slot and `onError` driven
   by one signal. *(1.16.0 — see `docs/PLACEHOLDERS.md`)*
