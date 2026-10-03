@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] — 2026-10-03
+
+> **Auto-cutout — subject → live lasso.** "Drop a photo, get the subject clipped out." KMPMedia could already clip media to a free-form `OGPolygonShape`; 1.19.0 adds the piece that **generates** that lasso from a segmentation mask. True to the library's no-SDK philosophy, it does **not** bundle an ML model: it ships a pluggable `OGSegmenter` seam (hand it a mask from ML Kit / Vision / a cloud model for cluttered scenes), two zero-dependency built-in segmenters for plain backgrounds, and — the genuinely reusable, cross-platform part — the **mask → lasso tracer** (largest-component flood fill → Moore-neighbor boundary trace → Douglas-Peucker simplify → normalised polygon). The polygon drops straight into the existing `clipShape` slot. This completes **Bet 2 — Living shapes** on the roadmap. Purely additive, zero new dependency.
+
+### Added
+- `com.solidkey.painpoints.cutout` package:
+  - `autoCutoutPolygon(image, segmenter, threshold, simplifyTolerance, maxVertices): OGPolygonShape?` — one-call segment → trace.
+  - `OGMaskContour.maskToPolygon(mask, …)` — the mask → lasso tracer.
+  - `OGSegmenter` (fun interface) + `OGSegmentationMask` — the pluggable seam (plug in ML Kit / Vision / cloud).
+  - `OGChromaKeySegmenter(background, tolerance)` and `OGLumaKeySegmenter(minLuma, maxLuma)` — zero-dependency segmenters for plain-background / brightness-keyed photos (read pixels via `ImageBitmap.toPixelMap()`, pure `commonMain`).
+
+### Notes
+- **Compute once, clip forever.** The tracer runs once off the main thread (reads every pixel); the resulting lasso is then the same GPU clip as any shape, so there's no per-frame cost. Tracer unit-tested on **JVM and iOS** (6 tests: empty → null, square → bounding box, picks the larger of two blobs, vertex cap). Verified on-device: a synthetic subject on white is chroma-keyed and traced into a ~17-point lasso that removes the background. For real cluttered photos, supply an ML mask via `OGSegmenter` — the library's value is the mask → live-lasso tracing. See `docs/AUTO_CUTOUT.md`; the demo's **Auto-cutout** screen shows it.
+
 ## [1.18.0] — 2026-10-03
 
 > **Persistent disk cache + GIF frame-memory cap.** Two transparent parity additions (no new API, nothing to opt into). (1) Remote images and GIFs were cached only **in memory** (dies with the process), so every cold start re-downloaded them; 1.18 adds a **disk cache** under the OS cache directory — lookup is in-memory → disk → network, a network fetch is written through to disk, and the next launch reads from disk. Keyed by a stable 128-bit content hash, bounded to 128 MB with LRU eviction, best-effort (any IO failure is a cache miss, writes are atomic). (2) A large/long animated GIF could blow up memory, especially on iOS where **every** frame is decoded into RAM; 1.18 caps GIF decode — a per-frame longest-edge cap on both platforms, plus a total-frames budget (≤ 64 MB) on iOS. Finishes the **memory/disk cache + large-GIF** line of table-stakes parity. Zero new dependency, purely additive.

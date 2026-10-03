@@ -47,8 +47,11 @@ graph + a SMIL animation engine** — so make the vector *editable and data-boun
 - ✅ **Morph the clip itself** — animate a video/GIF mask circle → diamond → lasso.
   Clipping *moving* media to a *morphing* shape is unique to KMPMedia.
   *(1.10.0 — `OGMorphShape` + `ogMorphSequence`, drops into the existing `clipShape` slot)*
-- 🧭 **Auto-cutout** — on-device subject/background segmentation → auto-generate an
-  `OGPolygonShape`. "Drop a photo, get the subject clipped out," no manual lasso.
+- ✅ **Auto-cutout** — turn a segmentation mask into a live `OGPolygonShape` lasso (contour trace +
+  simplify, pure `commonMain`), with zero-dependency chroma/luma-key segmenters for plain backgrounds
+  and a pluggable `OGSegmenter` seam for ML Kit / Vision / cloud models on cluttered scenes. "Drop a
+  photo, get the subject clipped out" — no ML dependency pulled into the library.
+  *(1.19.0 — see `docs/AUTO_CUTOUT.md`)*
 - ✅ **Soft & gradient masks, multi-region clips** — feathered edges and more than one region. Soft
   masks (`Modifier.ogSoftClip` / `ogGradientMask`, and `OGImageView(softEdge=…, maskBrush=…)`) fade a
   photo/GIF at the boundary or along a gradient via one offscreen `DstIn` pass; `OGMultiRegionShape`
