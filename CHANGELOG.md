@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.0] — 2026-10-03
+
+> **Live camera in any shape.** `OGImageView` clips a photo to any shape and `OGAVPlayer` clips a video; 1.22.0 completes the set with the **live camera** — `OGCameraPreview(shape, facing)` masks the camera feed to any `Shape` (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive. Built on the **platform camera APIs with no third-party dependency** — Camera2 on Android, AVFoundation on iOS — keeping the zero-dependency promise. This completes **Bet 4 — Interactivity primitives** on the roadmap. Purely additive (a new, isolated `com.solidkey.painpoints.camera` package).
+
+### Added
+- `com.solidkey.painpoints.camera.OGCameraPreview(modifier, shape, facing, mirror, onError)` — a live camera preview clipped to any shape.
+- `OGCameraFacing { BACK, FRONT }`.
+
+### Notes
+- **Permission is the app's job** (a library can't own that UX): `OGCameraPreview` only *opens* the camera and fires `onError` if permission isn't granted / no device. Declare `android.permission.CAMERA` / iOS `NSCameraUsageDescription` and request at runtime before showing it (the demo shows the full flow).
+- **Android**: a `TextureView` fed by a Camera2 repeating-preview session on its own `HandlerThread`, rotated upright (sensor + display) and center-crop-filled into the shape, front camera mirrored, closed with the composition. **iOS**: an `AVCaptureSession` + `AVCaptureVideoPreviewLayer` (`resizeAspectFill`) in a `UIKitView`. Both wrap the feed in `Modifier.clip(shape)` — the same GPU mask `OGImageView`/`OGAVPlayer` use.
+- **Verification**: compiles on both platforms; the Android pipeline is verified on the emulator via logcat (camera opens + a 1280×960 preview stream configures into the surface) with the permission flow + shape/facing controls working. Live frames don't render in a *headless* emulator (the `ranchu` camera HAL doesn't feed a GPU surface under software rendering); they render on a real device. iOS is compile-verified (the simulator has no camera). See `docs/CAMERA.md`.
+
 ## [1.21.0] — 2026-10-03
 
 > **Depth parallax.** Where `Modifier.ogDepth` placed content on the front-to-back axis (z-order, depth-of-field blur, dim), 1.21.0 adds the **motion** half: `Modifier.ogParallax(depth, viewpoint)` slides layers by different amounts as a *viewpoint* moves — a scroll position, a device tilt, a drag, whatever the app feeds in — so a flat stack reads as a scene with real depth. Motion is relative to a focal plane (consistent with `ogDepth`): the focal layer is pinned, nearer layers move with the viewpoint, farther ones against it. Rides one `graphicsLayer` translation (a GPU transform — no recomposition), composes with `ogDepth`, and advances **Bet 4 — Interactivity primitives** on the roadmap. Purely additive, zero new dependency.

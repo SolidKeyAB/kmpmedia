@@ -91,7 +91,9 @@ promote them into the library:
 - ✅ **Depth/parallax** primitive — `Modifier.ogParallax(depth, viewpoint)` slides layers by different
   amounts as a viewpoint (scroll/tilt/drag) moves, relative to a focal plane, on one GPU `graphicsLayer`.
   Composes with `Modifier.ogDepth`. *(1.21.0 — see `docs/DEPTH_LAYER.md`)*
-- 🧭 **Live camera into any shape** — an AR-sticker primitive (a `camera` package is scaffolded).
+- ✅ **Live camera into any shape** — `OGCameraPreview(shape, facing)` masks the live camera feed to any
+  shape (the AR-sticker primitive), on the platform camera APIs with no third-party dependency (Camera2 /
+  AVFoundation). *(1.22.0 — see `docs/CAMERA.md`)*
 
 ## Table-stakes parity (so we don't lose on the basics)
 
