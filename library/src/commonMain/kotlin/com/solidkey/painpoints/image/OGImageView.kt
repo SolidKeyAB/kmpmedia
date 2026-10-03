@@ -70,6 +70,18 @@ fun OGImageView(
     label: OGLayerItemLabel = OGLayerItemLabel(),
     gestureHandler: OGItemGestureHandler? = null,
     onError: ((String) -> Unit)? = null,
+    // ♿ Accessibility label read aloud by screen readers (TalkBack / VoiceOver). null = decorative,
+    // so the reader skips it — the right default for a purely visual image. Set it to the photo's
+    // meaning ("Profile photo of Ada") whenever the image conveys information.
+    contentDescription: String? = null,
+    // ⏳ Shown while the image is still loading, before the first bitmap/frame arrives. null keeps the
+    // previous behavior (a neutral light-grey box). Use it for a spinner or a blurred thumbnail. It is
+    // drawn inside the same shape clip / soft mask as the image, so a placeholder fills the shape too.
+    placeholder: (@Composable () -> Unit)? = null,
+    // ⚠️ Shown when the image fails to load (bad URL, decode error, missing/unsupported file) — the
+    // visual partner to [onError], which still fires. null keeps the previous behavior (a solid
+    // fallback colour). Also shown if the source location can't be resolved at all.
+    error: (@Composable () -> Unit)? = null,
     onEventTriggered: (OGLayerItemEvent, String) -> Unit,
     debugVisual: Boolean = false // 🧪 NEW: enables colored box background for debug
 ) {
@@ -84,8 +96,20 @@ fun OGImageView(
     var imagePainter by remember { mutableStateOf<Painter?>(null) }
     var transformedPainter by remember { mutableStateOf<Painter?>(null) }
 
+    // ⚠️ Did this source fail to load? Reset whenever the source changes. Drives the [error] slot and
+    // keeps [onError] firing as before. We wrap the caller's [onError] so the slot and the callback
+    // stay in lock-step from a single failure signal.
+    var failed by remember(imageId) { mutableStateOf(false) }
+    val effectiveOnError: (String) -> Unit = { message ->
+        if (!failed) failed = true
+        onError?.invoke(message)
+    }
+
     if (location == null) {
-        onError?.invoke("❌ Failed to resolve image location.")
+        effectiveOnError("❌ Failed to resolve image location.")
+        if (error != null) {
+            Box(modifier, contentAlignment = Alignment.Center) { error() }
+        }
         return
     }
 
@@ -103,11 +127,11 @@ fun OGImageView(
     val isGif = remember(location) {
         location.substringBefore('?').substringAfterLast('.', "").equals("gif", ignoreCase = true)
     }
-    val gifPainter = if (isGif) rememberOGAnimatedPainter(imageSource, onError = onError) else null
+    val gifPainter = if (isGif) rememberOGAnimatedPainter(imageSource, onError = effectiveOnError) else null
 
     // Load image (static path only — GIFs are handled by [gifPainter] above).
     if (!isGif) {
-        OGImageLoader.loadImage(imageSource, onError) { painter ->
+        OGImageLoader.loadImage(imageSource, effectiveOnError) { painter ->
             imagePainter = painter
             transformedPainter = painter
         }
@@ -184,14 +208,67 @@ fun OGImageView(
             )
             .then(if (debugVisual) Modifier.background(Color.Red.copy(alpha = 0.3f)) else Modifier)
     ) {
-        Image(
-            painter = if (isGif) gifPainter ?: ColorPainter(Color.LightGray)
-            else transformedPainter ?: imagePainter ?: ColorPainter(Color.LightGray),
-            contentDescription = "Processed Image",
-            contentScale = contentScale,
-            alignment = alignment,
-            // When shaped or soft-masked, fill the (sized) box so contentScale = Crop can pick the piece.
-            modifier = if (isShaped || isSoftMasked) Modifier.fillMaxSize() else sizeModifier
-        )
+        // The painter we'd draw if loaded: the GIF painter, or the (optionally transformed) still.
+        val displayPainter = if (isGif) gifPainter else (transformedPainter ?: imagePainter)
+        // When shaped or soft-masked, fill the (sized) box so contentScale = Crop can pick the piece.
+        val imageModifier = if (isShaped || isSoftMasked) Modifier.fillMaxSize() else sizeModifier
+
+        when (ogImagePhase(hasPainter = displayPainter != null, failed = failed)) {
+            // ⚠️ Failed: prefer the caller's error slot; otherwise keep the old solid-colour fallback.
+            OGImagePhase.Error ->
+                if (error != null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { error() }
+                } else {
+                    Image(
+                        painter = displayPainter ?: ColorPainter(Color.LightGray),
+                        contentDescription = contentDescription,
+                        contentScale = contentScale,
+                        alignment = alignment,
+                        modifier = imageModifier,
+                    )
+                }
+
+            // ⏳ Loading: prefer the caller's placeholder; otherwise the old neutral light-grey box.
+            OGImagePhase.Loading ->
+                if (placeholder != null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { placeholder() }
+                } else {
+                    Image(
+                        painter = ColorPainter(Color.LightGray),
+                        contentDescription = contentDescription,
+                        contentScale = contentScale,
+                        alignment = alignment,
+                        modifier = imageModifier,
+                    )
+                }
+
+            // ✅ Loaded: draw the image with the caller's accessibility description.
+            OGImagePhase.Success ->
+                Image(
+                    painter = displayPainter!!,
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    alignment = alignment,
+                    modifier = imageModifier,
+                )
+        }
     }
+}
+
+/**
+ * The three visual states [OGImageView] can be in. Pure data so the state machine is unit-testable
+ * with no Compose runtime (mirrors the library's other pure-logic helpers).
+ */
+internal enum class OGImagePhase { Loading, Success, Error }
+
+/**
+ * Resolve the current [OGImagePhase] from the two inputs the view tracks: whether a painter has
+ * arrived ([hasPainter]) and whether the load has [failed]. A failure wins over a stale/fallback
+ * painter so the error slot shows; otherwise a painter means success, and its absence means we're
+ * still loading.
+ */
+internal fun ogImagePhase(hasPainter: Boolean, failed: Boolean): OGImagePhase = when {
+    failed -> OGImagePhase.Error
+    hasPainter -> OGImagePhase.Success
+    else -> OGImagePhase.Loading
 }

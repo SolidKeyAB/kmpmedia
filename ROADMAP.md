@@ -91,10 +91,16 @@ promote them into the library:
 
 Not differentiators, but things adopters expect — cheap to add and they remove objections:
 
-- 🧭 **Memory/disk cache** for remote images & GIFs + frame-memory control for large GIFs.
-- 🧭 **Large-image downsampling**, EXIF rotation.
-- 🧭 **Placeholder / loading / error** slots.
-- 🧭 **Accessibility** — `contentDescription`, RTL.
+- 🟡 **Memory/disk cache** for remote images & GIFs + frame-memory control for large GIFs. *(Memory
+  cache already ships: an LRU bitmap cache on Android, a bounded cache on iOS. Remaining: a persistent
+  disk cache across launches + a GIF frame-memory cap.)*
+- 🟡 **Large-image downsampling**, EXIF rotation. *(Downsampling already ships: decode is capped to a
+  max edge on both platforms, so huge images don't blow memory. Remaining: EXIF-orientation rotation.)*
+- ✅ **Placeholder / loading / error** slots. `OGImageView(placeholder = …, error = …)` — any composable
+  shown while loading / on failure, drawn inside the shape clip, with the error slot and `onError` driven
+  by one signal. *(1.16.0 — see `docs/PLACEHOLDERS.md`)*
+- ✅ **Accessibility** — `OGImageView(contentDescription = …)` read by TalkBack / VoiceOver (null =
+  decorative); RTL is inherent (alignment resolves against `LayoutDirection`). *(1.16.0)*
 
 ---
 
