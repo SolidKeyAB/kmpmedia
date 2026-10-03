@@ -3,6 +3,7 @@ package com.solidkey.painpoints.style
 import com.solidkey.painpoints.shape.OGPoint
 import com.solidkey.painpoints.shape.OGPolygonShape
 import kotlin.math.floor
+import kotlin.math.round
 
 /**
  * A **"boiling" / wiggly-line animation** — the hand-drawn "living line" look where every vertex of an
@@ -86,6 +87,23 @@ fun pixelateFill(polygon: List<OGPoint>, resolution: Int): List<OGPoint> {
         }
     }
     return out
+}
+
+/**
+ * Snap every vertex to a [grid]×[grid] lattice in **normalized `0..1`** space — a stepped /
+ * "stop-motion-on-a-grid" line. On its own it blockifies an outline; placed *after* a boil it makes
+ * the jitter land on grid cells (a chunky, quantized wobble instead of a smooth one) — the
+ * stepped-vertex cousin of [pixelateFill]'s pixel sprite, and the "quantize"/"step" op of the
+ * procedural style family.
+ *
+ * Order and cardinality are preserved (a vertex that lands on the same cell as its neighbour just
+ * yields a zero-length segment, which renders harmlessly), so it composes with [OGBoil.displace]
+ * index-for-index. One round per vertex — holds 60fps.
+ */
+fun quantizeVertices(points: List<OGPoint>, grid: Int): List<OGPoint> {
+    if (grid < 1 || points.isEmpty()) return points
+    val g = grid.toFloat()
+    return points.map { OGPoint(round(it.x * g) / g, round(it.y * g) / g) }
 }
 
 /** Even-odd point-in-polygon test for a normalized outline. */
