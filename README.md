@@ -191,7 +191,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.12.0")
+            implementation("se.solidkey:kmpmedia-lib:1.23.0")
         }
     }
 }

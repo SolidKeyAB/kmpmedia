@@ -4,6 +4,34 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.23.0] — 2026-10-03
+
+> **Data-defined drawing styles.** A drawing style is now just data — an `OGStyleSpec` is a JSON **pipeline of `{op, params}`** that `OGStyles.decode()` compiles into a live `OGStyle`, applied to any outline every frame. A designer (or a language model) can author, tweak and share a `.style` pack with no code and no rebuild, mirroring how `OGAiVector` turns a model's JSON into shapes. The first procedural ops ship in the new zero-dependency `com.solidkey.painpoints.style` package: **boil** (the hand-drawn "living line" vertex jitter), **quantize** (snap vertices to a grid — the stepped, stop-motion line), and **pixelate** (a low-res pixel / mosaic fill). Purely additive; reuses the existing `kotlinx-serialization` dependency (no new deps).
+
+### Added
+- `com.solidkey.painpoints.style.OGStyleSpec(name, ops)` + `OGStyleOp(op, …)` — the serializable style-pack schema (a `{op, params}` pipeline).
+- `OGStyle` + `OGStyle.apply(points | shape, timeMs): OGStyleFrame` — the live, compiled applier. `OGStyleFrame` carries the transformed `outline`, or `pixels` + `pixelSize` when the pipeline ends in `pixelate` (`isPixelated`).
+- `OGStyles` — the JSON codec: `decode` / `decodeOrNull` / `decodeSpec` / `encode` + `stylePrompt(instruction)` (hands a model the contract). Tolerant of code fences / prose; unknown ops are dropped and unknown keys ignored.
+- `OGBoil(amplitude, boilFps, smooth, seed)` + `displace(points, timeMs)`, and `OGPolygonShape.boiled(boil, timeMs)` — the boiling / wiggly "living line".
+- `pixelateFill(polygon, resolution)` and `quantizeVertices(points, grid)` — the pixelate and quantize / step ops.
+
+### Notes
+- **60fps, zero-dep.** A spec is compiled to typed steps once (op names resolved, `OGBoil` instances built up front); per frame `apply` is pure integer-hash offset / round / lerp per vertex, allocating only each op's output list — the same perf gate the rest of the library clears. `boil` is deterministic (no RNG), so a live preview, an export, and Android vs iOS agree frame-for-frame.
+- `pixelate` is a **terminal** op (any op placed after it is ignored). An `OGStyle` composes with any `clipShape` slot via `OGPolygonShape.boiled(...)`, so a photo / GIF / video / live-camera clip gets a living, hand-cut edge with no other change.
+- **Verification**: 28 style unit tests green on **JVM and iOS**; the demo's 🖊️ *Boiling lines* screen (including a "Style from JSON" editor) dogfoods it, verified live on an API 35 emulator.
+
+## [1.22.1] — 2026-10-03
+
+> **Live-camera real-device fixes.** Patches to 1.22.0's `OGCameraPreview` found on a physical device, plus an SVG path fix.
+
+### Fixed
+- **Front/back switch in place** — toggling `facing` now restarts the camera (previously `start()` only fired on first surface creation, so switching to the front camera came up blank).
+- **Preview orientation (Android)** — the back feed was double-rotated on-device; the auto path now compensates the display rotation only (`(360 - display) % 360`), which resolves to upright on a real device.
+- **SVG** — a multi-subpath path with `Z` (e.g. a glyph with two closed loops) now closes each subpath independently instead of linking them.
+
+### Added
+- `OGCameraPreview(rotationOverride: Int?)` — force the preview rotation (`0` / `90` / `180` / `270`, clockwise); `null` (default) = auto. A per-device escape hatch (iOS ignores it; AVFoundation orients itself).
+
 ## [1.22.0] — 2026-10-03
 
 > **Live camera in any shape.** `OGImageView` clips a photo to any shape and `OGAVPlayer` clips a video; 1.22.0 completes the set with the **live camera** — `OGCameraPreview(shape, facing)` masks the camera feed to any `Shape` (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive. Built on the **platform camera APIs with no third-party dependency** — Camera2 on Android, AVFoundation on iOS — keeping the zero-dependency promise. This completes **Bet 4 — Interactivity primitives** on the roadmap. Purely additive (a new, isolated `com.solidkey.painpoints.camera` package).
