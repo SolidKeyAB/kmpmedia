@@ -6,7 +6,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,8 +16,13 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -192,14 +196,14 @@ fun Modifier.ogButton(
                 val longClick = onLongClickState.value
                 val released = if (longClick != null) {
                     try {
-                        withTimeout(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation() }
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) { awaitButtonUp(down.id) }
                     } catch (_: PointerEventTimeoutCancellationException) {
                         longClick()
-                        waitForUpOrCancellation() // swallow the eventual lift; no click after a long-press
+                        awaitButtonUp(down.id) // swallow the eventual lift; no click after a long-press
                         null
                     }
                 } else {
-                    waitForUpOrCancellation()
+                    awaitButtonUp(down.id)
                 }
                 if (released != null) {
                     released.consume()
@@ -228,4 +232,29 @@ fun Modifier.ogButton(
     }
 
     return m
+}
+
+/**
+ * Wait for the pressing pointer ([pointerId]) to lift, **consuming its movement** as it goes — the one
+ * thing that makes a tap survive an ancestor scroll. A real finger is never perfectly still; once its
+ * drift crosses the touch-slop threshold, a parent `verticalScroll`/`LazyColumn` will otherwise claim
+ * the pointer and cancel the press (the plain `waitForUpOrCancellation` gives it up the moment someone
+ * else consumes a move). By owning the in-bounds movement here — exactly as
+ * [ogInteractive]'s drag loop does — the button keeps the gesture, so a slightly-moving tap still fires.
+ *
+ * Returns the up change to click on, or `null` to cancel: the pointer was consumed elsewhere, or it
+ * slid **outside the box** (a deliberate drag-off — the press cancels and, since that move is left
+ * unconsumed, the parent scroll can take over from there, so you can still scroll starting on a button).
+ */
+private suspend fun AwaitPointerEventScope.awaitButtonUp(pointerId: PointerId): PointerInputChange? {
+    while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.id == pointerId } ?: return null
+        if (change.isConsumed) return null // another node already claimed this gesture
+        val inside = change.position.x in 0f..size.width.toFloat() &&
+            change.position.y in 0f..size.height.toFloat()
+        if (change.changedToUp()) return if (inside) change else null // lift inside = click; outside = cancel
+        if (!inside) return null // slid off the button → cancel, leaving the move for the parent (scroll)
+        if (change.positionChanged()) change.consume() // own in-bounds drift so the scroll can't steal the tap
+    }
 }

@@ -88,14 +88,21 @@ when `enabled = false`, so the button is announced and operable by TalkBack / Vo
   leaks a tap to content sitting behind it.
 - **Don't apply `ogButton` and `ogInteractive` to the same node** — the press and the drag would
   fight over the same pointer. Use one or the other per node.
+- **Taps survive an ancestor scroll.** Inside a `verticalScroll` / `LazyColumn`, a real finger always
+  drifts a little; `ogButton` consumes that in-bounds movement so the scroll can't steal the tap past
+  touch-slop (a tap stays a tap). The trade-off is deliberate: because the button owns its in-bounds
+  movement, you **can't start a page scroll by dragging *on* a button** — scroll from the surrounding
+  area instead. Sliding off the button still cancels the press and hands the gesture back to the parent.
 
 ## Tested & verified
 
 - **Pure maths unit-tested on JVM + iOS** (11 tests): the press-depth transform for each effect and
   `OGHitArea.outlineNormalized()` (the outline the `Brutalist` shadow traces).
 - **Live-verified on Android**: all three press effects render (the `Brutalist` hard shadow is visible
-  behind the cut-out), and shape-aware taps register inside the silhouette while a tap on a
-  transparent corner of the same photo falls through.
+  behind the cut-out); shape-aware taps register inside the silhouette while a tap on a transparent
+  corner of the same photo falls through; and — inside a `verticalScroll` — a *jittery* tap (a finger
+  that drifts 30–60px, like a real one) still fires on every button, while the page still scrolls from
+  non-button areas.
 
 The tap-driving code is Compose UI (one file); the hit region and the press maths are shared,
 testable `commonMain`.

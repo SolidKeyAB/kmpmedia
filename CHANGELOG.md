@@ -4,6 +4,14 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.24.1] — 2026-10-04
+
+> **`Modifier.ogButton` now reliably registers taps inside a scrolling screen.** A real finger is never perfectly still, and `ogButton` was handing its gesture to any ancestor scroll (`verticalScroll` / `LazyColumn`) the instant the touch drifted past the touch-slop threshold — so a slightly-moving tap was cancelled and the button felt dead (a perfectly still tap still worked, which is why it slipped through earlier testing). It now **owns its tap** the same principled way its drag twin `ogInteractive` owns a drag: by consuming in-bounds pointer movement. Taps that drift still fire; taps outside the silhouette still fall through; sliding off the button still cancels; and the page still scrolls from non-button areas.
+
+### Fixed
+- `Modifier.ogButton` — a tap with any finger drift was stolen by an ancestor scrollable. The press waited on `waitForUpOrCancellation`, which gives the gesture up the moment another node (the scroll) consumes a move, so once the finger crossed touch-slop the tap was cancelled. `ogButton` now consumes its in-bounds movement so the tap survives the drift and the scroll can't claim it — mirroring the gesture-ownership `ogInteractive` already uses for drag. Shape-aware fall-through, long-press, and parent scrolling (from non-button areas) are preserved.
+- `OGHitArea` — added value equality (by kind + outline). An inline hit area such as `OGHitArea.polygon(lasso)` created a fresh instance on every recomposition, which changed the `ogButton` / `ogInteractive` `pointerInput` key and restarted the gesture mid-press; value equality keeps the key stable. (Committed on `main` after 1.24.0; released here.)
+
 ## [1.24.0] — 2026-10-03
 
 > **Any graphic → a button.** KMPMedia ships no UI components or theme system — it ships the *bridge*: one modifier, `Modifier.ogButton`, turns any graphic (a photo, an SVG, a shape-clipped or lasso-cut cut-out, a raw `Canvas` drawing) into a real, accessible, shape-aware button. It is the **tap twin** of `Modifier.ogInteractive` (the drag half from 1.15.0) — both live in `com.solidkey.painpoints.gesture` and both reuse `OGHitArea`, so a tap only counts **inside the real silhouette** and the transparent corners of a triangle / circle / lasso fall through. Purely additive, no new dependency. This release also fixes a gesture bug in `ogInteractive`: dragging a **rotated or zoomed** layer now follows the finger instead of drifting off at an angle.
