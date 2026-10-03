@@ -104,6 +104,11 @@ fun OGComposition.exportMp4(                                      // H.264 MP4 v
 ): ByteArray
 fun defaultMp4BitRate(width: Int, height: Int, fps: Int): Int    // resolution/fps-scaled, 0.75–16 Mbps
 fun OGComposition.renderFrame(timeMs: Long): ImageBitmap          // grab any single frame
+fun OGComposition.renderFrameAt(index: Int): ImageBitmap          // grab frame by index (1.20.0)
+fun OGComposition.exportFrames(): List<ImageBitmap>               // the whole frame sequence (1.20.0)
+fun OGComposition.exportFramesArgb(): List<IntArray>             // frames as raw 0xAARRGGBB pixels (1.20.0)
+fun OGComposition.forEachFrame(action: (i: Int, timeMs: Long, frame: ImageBitmap) -> Unit) // stream frames, low memory (1.20.0)
+fun OGComposition.frameTimesMs(): List<Long>                      // the frame plan — pure, no rendering (1.20.0)
 fun ImageBitmap.toArgbPixels(): IntArray                          // row-major 0xAARRGGBB
 
 // ---- the encoder (reusable on its own) ----
@@ -178,6 +183,19 @@ This is **Bet 3 — On-device mini-compositor + export** on the [roadmap](../ROA
 device, get a shareable file — no KMP library does compose-and-export." It builds directly on the shape
 system ([shapes](./POLYGON_SHAPE.md), [morph](./SHAPE_MORPH_CLIPS.md),
 [soft/multi-region](./SOFT_MASKS.md)) — any of those shapes is a valid layer clip. Run it in the demo
-app: **Compositor + export** (`CompositorScreen`), which exports both a GIF and an MP4 and plays each
-back through the platform's own decoder. Frame-sequence export is the planned follow-up (a single frame
-is already available via `renderFrame`).
+app: **Compositor + export** (`CompositorScreen`), which exports a GIF, an MP4, **and a frame sequence**
+(shown as a filmstrip), playing the GIF/MP4 back through the platform's own decoder.
+
+### Export → frame sequence *(1.20.0)*
+
+Beyond the one-file GIF/MP4 encoders, you can take the **individual frames** — to write a PNG sequence,
+feed a custom encoder, run per-frame analysis, or build a filmstrip:
+
+- `exportFrames(): List<ImageBitmap>` — the whole sequence as bitmaps.
+- `exportFramesArgb(): List<IntArray>` — the same as raw, row-major `0xAARRGGBB` pixels (most portable).
+- `forEachFrame { i, timeMs, frame -> … }` — streams one frame at a time (lowest memory; prefer this for
+  long compositions).
+- `renderFrameAt(index)` / `frameTimesMs()` — one frame by index, and the pure (render-free) frame plan.
+
+Each frame uses the same `renderFrame` the GIF/MP4 exporters use, so frames are identical across
+platforms. They allocate a bitmap per frame — run off the main thread.

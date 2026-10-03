@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] — 2026-10-03
+
+> **Compositor export → frame sequence.** The on-device compositor could export a whole-timeline GIF (1.13.0) and MP4 (1.14.0); 1.20.0 adds the planned follow-up — handing you the **individual frames**, so you can write a PNG sequence, feed a custom encoder, run per-frame analysis, or build a filmstrip. Each frame uses the same pure-Compose `renderFrame` the GIF/MP4 exporters use, so frames are identical on Android and iOS. Completes **Bet 3 — On-device mini-compositor + export** on the roadmap. Purely additive, zero new dependency.
+
+### Added
+- `com.solidkey.painpoints.compositor.OGComposition.exportFrames(): List<ImageBitmap>` — the whole timeline as one bitmap per frame.
+- `OGComposition.exportFramesArgb(): List<IntArray>` — the same as raw, row-major `0xAARRGGBB` pixels (most portable, for custom encoders / analysis).
+- `OGComposition.forEachFrame(action: (index, timeMs, frame) -> Unit)` — streams one frame at a time (lowest memory; prefer for long compositions).
+- `OGComposition.renderFrameAt(index): ImageBitmap` — render a frame by index (clamped).
+- `OGComposition.frameTimesMs(): List<Long>` — the pure, render-free frame plan.
+
+### Notes
+- Frame rendering is allocation-heavy (one bitmap per frame) — run off the main thread. The frame plan (`frameTimesMs`) is pure and unit-tested on **JVM and iOS** (4 tests); the rendering reuses the already-proven `renderFrame` and is verified on-device in the demo's new **frame-sequence filmstrip** (40 frames). See `docs/COMPOSITOR.md`.
+
 ## [1.19.0] — 2026-10-03
 
 > **Auto-cutout — subject → live lasso.** "Drop a photo, get the subject clipped out." KMPMedia could already clip media to a free-form `OGPolygonShape`; 1.19.0 adds the piece that **generates** that lasso from a segmentation mask. True to the library's no-SDK philosophy, it does **not** bundle an ML model: it ships a pluggable `OGSegmenter` seam (hand it a mask from ML Kit / Vision / a cloud model for cluttered scenes), two zero-dependency built-in segmenters for plain backgrounds, and — the genuinely reusable, cross-platform part — the **mask → lasso tracer** (largest-component flood fill → Moore-neighbor boundary trace → Douglas-Peucker simplify → normalised polygon). The polygon drops straight into the existing `clipShape` slot. This completes **Bet 2 — Living shapes** on the roadmap. Purely additive, zero new dependency.

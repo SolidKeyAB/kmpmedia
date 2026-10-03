@@ -74,8 +74,9 @@ KMPMedia already layers image + video + SVG on a shared clock (`OGLayerRenderer`
   **OS video encoder** (Android `MediaCodec` + `MediaMuxer`, iOS `AVAssetWriter`), still with no third-party
   dependency; the shared compositing / colour maths mean both encoders compress the same rendered frames.
   *(1.14.0)*
-- 🧭 **Export → frame sequence** — the planned follow-up (a single frame is already available via
-  `renderFrame`).
+- ✅ **Export → frame sequence** — `exportFrames()` / `exportFramesArgb()` / `forEachFrame { … }` hand you
+  the individual frames (bitmaps or raw pixels) to save a PNG sequence, feed a custom encoder, or build a
+  filmstrip; `renderFrameAt` / `frameTimesMs` round it out. *(1.20.0 — see `docs/COMPOSITOR.md`)*
 
 ## Bet 4 — Interactivity primitives (productize the demo)
 
