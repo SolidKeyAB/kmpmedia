@@ -4,7 +4,9 @@ import com.solidkey.painpoints.shape.OGPoint
 import com.solidkey.painpoints.shape.OGPolygonShape
 import com.solidkey.painpoints.shape.OGShapeType
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class OGHitAreaTest {
@@ -87,5 +89,21 @@ class OGHitAreaTest {
         val square = listOf(OGPoint(0f, 0f), OGPoint(1f, 0f), OGPoint(1f, 1f), OGPoint(0f, 1f))
         assertTrue(pointInPolygon(square, 0.5f, 0.5f))
         assertFalse(pointInPolygon(square, 1.5f, 0.5f))
+    }
+
+    @Test
+    fun equalByValueSoAnInlineHitAreaIsAStablePointerInputKey() {
+        // Two areas built from the SAME data must be equal (and share a hashCode) — otherwise a fresh
+        // `OGHitArea.polygon(shape)` on every recomposition would look like a new pointerInput key and
+        // restart (cancel) an in-flight gesture. A different outline must NOT be equal.
+        val shape = OGPolygonShape.of(0.1f to 0.1f, 0.4f to 0.1f, 0.4f to 0.4f, 0.1f to 0.4f)
+        assertEquals(OGHitArea.polygon(shape), OGHitArea.polygon(shape))
+        assertEquals(OGHitArea.polygon(shape).hashCode(), OGHitArea.polygon(shape).hashCode())
+        assertEquals(OGHitArea.RECT, OGHitArea.RECT)
+        assertNotEquals(OGHitArea.RECT, OGHitArea.CIRCLE)
+        assertNotEquals(
+            OGHitArea.polygon(shape),
+            OGHitArea.polygon(OGPolygonShape.of(0.5f to 0.5f, 0.9f to 0.5f, 0.9f to 0.9f, 0.5f to 0.9f)),
+        )
     }
 }

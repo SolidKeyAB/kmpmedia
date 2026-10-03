@@ -66,6 +66,18 @@ class OGHitArea private constructor(
         Kind.POLYGON -> polygon
     }
 
+    // Value equality (by kind + outline) so two areas built from the same data are equal. This matters
+    // because callers construct a hit area INLINE — e.g. `OGHitArea.polygon(headLasso)` in a composable —
+    // so a fresh instance appears on every recomposition. [ogButton]/[ogInteractive] key their
+    // `pointerInput` on the hit area; with reference equality every recomposition (including the one the
+    // press state triggers) would look like a *new* key and RESTART the gesture, cancelling an in-flight
+    // tap/drag the moment the finger moved — so a quick tap landed but one with any finger drift did not.
+    // Value equality keeps the key stable, so the gesture survives the press recomposition.
+    override fun equals(other: Any?): Boolean =
+        other is OGHitArea && other.kind == kind && other.polygon == polygon
+
+    override fun hashCode(): Int = 31 * kind.hashCode() + polygon.hashCode()
+
     companion object {
         /** The whole box — every touch counts (the default; same as passing no hit area). */
         val RECT: OGHitArea = OGHitArea(Kind.RECT, emptyList())
