@@ -51,4 +51,33 @@ class OGBoilTest {
         val t = 250L
         assertEquals(b.displace(square, t), OGPolygonShape(square).boiled(b, t).points)
     }
+
+    @Test
+    fun pixelateFill_fullBoxFillsEveryCell() {
+        // The unit square covers the whole grid, so every cell center is inside.
+        assertEquals(16, pixelateFill(square, 4).size)
+        assertEquals(1, pixelateFill(square, 1).size)
+    }
+
+    @Test
+    fun pixelateFill_cellCentersOnGrid() {
+        val cells = pixelateFill(square, 2) // centers at 0.25 / 0.75 on each axis
+        assertEquals(4, cells.size)
+        assertTrue(cells.all { it.x == 0.25f || it.x == 0.75f })
+        assertTrue(cells.all { it.y == 0.25f || it.y == 0.75f })
+    }
+
+    @Test
+    fun pixelateFill_degenerateInputsEmpty() {
+        assertTrue(pixelateFill(square, 0).isEmpty())
+        assertTrue(pixelateFill(listOf(OGPoint(0f, 0f), OGPoint(1f, 1f)), 4).isEmpty()) // < 3 points
+    }
+
+    @Test
+    fun pixelateFill_smallTriangleFillsFewerThanFullGrid() {
+        val tri = listOf(OGPoint(0f, 0f), OGPoint(0.3f, 0f), OGPoint(0f, 0.3f))
+        val cells = pixelateFill(tri, 10)
+        assertTrue(cells.isNotEmpty())
+        assertTrue(cells.size < 100, "a small triangle must not fill the whole 10x10 grid")
+    }
 }

@@ -64,3 +64,39 @@ data class OGBoil(
  */
 fun OGPolygonShape.boiled(boil: OGBoil, timeMs: Long): OGPolygonShape =
     OGPolygonShape(boil.displace(points, timeMs))
+
+/**
+ * Rasterize a normalized [polygon] (`0..1`) into a [resolution]×[resolution] grid and return the
+ * **center of every cell that falls inside it** — a pixel-art / mosaic fill. Pair it with a boil
+ * (pixelate the *boiled* outline each frame) for the chunky "8-bit sprite whose edge shimmers" look.
+ *
+ * Pure even-odd ray-cast, cheap for coarse grids (e.g. 20×20), zero dependencies. Draw a filled
+ * `1f/resolution`-sized square at each returned center. This is the "pixelate" op of the procedural
+ * style family, composable after boil: `pixelateFill(boil.displace(points, t), res)`.
+ */
+fun pixelateFill(polygon: List<OGPoint>, resolution: Int): List<OGPoint> {
+    if (polygon.size < 3 || resolution < 1) return emptyList()
+    val step = 1f / resolution
+    val out = ArrayList<OGPoint>()
+    for (gy in 0 until resolution) {
+        val cy = (gy + 0.5f) * step
+        for (gx in 0 until resolution) {
+            val cx = (gx + 0.5f) * step
+            if (pointInPolygon(cx, cy, polygon)) out.add(OGPoint(cx, cy))
+        }
+    }
+    return out
+}
+
+/** Even-odd point-in-polygon test for a normalized outline. */
+private fun pointInPolygon(x: Float, y: Float, poly: List<OGPoint>): Boolean {
+    var inside = false
+    var j = poly.size - 1
+    for (i in poly.indices) {
+        val xi = poly[i].x; val yi = poly[i].y
+        val xj = poly[j].x; val yj = poly[j].y
+        if (((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside
+        j = i
+    }
+    return inside
+}
