@@ -26,12 +26,13 @@ import kotlinx.serialization.Serializable
  * - **`quantize`** (aliases `step`, `stepped`) — [quantizeVertices]; snap vertices to a grid.
  *   Params: `grid` (or `resolution`).
  * - **`pixelate`** (alias `pixel`) — [pixelateFill]; a terminal *fill* op producing a pixel grid.
- *   Param: `resolution` (or `grid`). Put it last.
+ *   Param: `resolution` (or `grid`). Terminal: any op placed after it is ignored.
  *
- * Decoding/encoding + a prompt builder live on [OGStyles]. Everything here is pure + deterministic
- * and the apply step is offset/round/lerp per vertex (no re-measuring, no allocation beyond the
- * output list), so it holds 60fps — the same perf gate [OGBoil] clears. Unknown ops and keys are
- * ignored on decode, so a newer pack degrades gracefully on an older library.
+ * Decoding/encoding + a prompt builder live on [OGStyles]. Everything here is pure + deterministic;
+ * the spec is compiled to typed steps once (op names resolved, `OGBoil` instances built up front),
+ * so [OGStyle.apply] is offset/round/lerp per vertex with each op allocating only its output list —
+ * it holds 60fps, the same perf gate [OGBoil] clears. Unknown ops are dropped and unknown keys
+ * ignored, so a newer pack degrades gracefully on an older library.
  */
 
 /**
@@ -82,8 +83,13 @@ data class OGStyleFrame(
     val pixels: List<OGPoint> = emptyList(),
     val pixelSize: Float = 0f,
 ) {
-    /** True when the pipeline produced a pixel fill (draw [pixels] as squares, not [outline]). */
-    val isPixelated: Boolean get() = pixels.isNotEmpty()
+    /**
+     * True when the pipeline ended in a `pixelate` op — draw [pixels] as squares of [pixelSize], not
+     * [outline]. Keyed on [pixelSize] (set whenever pixelate runs), **not** on [pixels] being
+     * non-empty, so a pixelate that happens to produce zero cells (a tiny shape on a coarse grid)
+     * still renders as "empty pixels" rather than silently falling back to a solid [outline] fill.
+     */
+    val isPixelated: Boolean get() = pixelSize > 0f
 }
 
 /**
@@ -92,31 +98,52 @@ data class OGStyleFrame(
  * and stateless — call [apply] every frame with a monotonically rising `timeMs`.
  */
 class OGStyle internal constructor(ops: List<OGStyleOp>) {
-    // Normalize op names once so the per-frame loop does no string allocation.
-    private val ops: List<OGStyleOp> = ops.map { it.copy(op = it.op.lowercase()) }
+    /**
+     * One compiled pipeline step, resolved from an [OGStyleOp] once so [apply] does no per-frame
+     * name dispatch or parameter boxing (the [OGBoil] is built here, up front, not each frame).
+     */
+    private sealed interface Step {
+        class Boil(val boil: OGBoil) : Step
+        class Quantize(val grid: Int) : Step
+        class Pixelate(val resolution: Int) : Step
+    }
 
-    /** Run [points] through the pipeline at [timeMs]. Output units match the input. */
+    // Compile the spec ONCE. Op names are resolved, OGBoil instances built; an op with an
+    // out-of-range grid/resolution (< 1) or an unknown name is dropped (a no-op), so every frame
+    // runs a fixed, valid step list — pure offset/round/lerp with no name compares or allocation
+    // beyond each op's output.
+    private val steps: List<Step> = ops.mapNotNull { o ->
+        when (o.op.lowercase()) {
+            "boil" -> Step.Boil(
+                OGBoil(
+                    amplitude = o.amplitude ?: 0.02f,
+                    boilFps = o.boilFps ?: 8f,
+                    smooth = o.smooth ?: true,
+                    seed = o.seed ?: 0,
+                ),
+            )
+            "quantize", "step", "stepped" ->
+                (o.grid ?: o.resolution ?: 16).takeIf { it >= 1 }?.let { Step.Quantize(it) }
+            "pixelate", "pixel" ->
+                (o.resolution ?: o.grid ?: 20).takeIf { it >= 1 }?.let { Step.Pixelate(it) }
+            else -> null // unknown op: dropped (forward-compatible with newer packs)
+        }
+    }
+
+    /**
+     * Run [points] through the pipeline at [timeMs]; output units match the input. A `pixelate` step
+     * is **terminal** — it produces the pixel fill and any later step is ignored, so "pixelate last"
+     * is enforced rather than merely advised.
+     */
     fun apply(points: List<OGPoint>, timeMs: Long): OGStyleFrame {
         var outline = points
-        var pixels = emptyList<OGPoint>()
-        var pixelSize = 0f
-        for (o in ops) when (o.op) {
-            "boil" -> outline = OGBoil(
-                amplitude = o.amplitude ?: 0.02f,
-                boilFps = o.boilFps ?: 8f,
-                smooth = o.smooth ?: true,
-                seed = o.seed ?: 0,
-            ).displace(outline, timeMs)
-            "quantize", "step", "stepped" ->
-                outline = quantizeVertices(outline, o.grid ?: o.resolution ?: 16)
-            "pixelate", "pixel" -> {
-                val res = (o.resolution ?: o.grid ?: 20).coerceAtLeast(1)
-                pixels = pixelateFill(outline, res)
-                pixelSize = 1f / res
-            }
-            // Unknown op: pass through unchanged (forward-compatible with newer packs).
+        for (s in steps) when (s) {
+            is Step.Boil -> outline = s.boil.displace(outline, timeMs)
+            is Step.Quantize -> outline = quantizeVertices(outline, s.grid)
+            is Step.Pixelate ->
+                return OGStyleFrame(outline, pixelateFill(outline, s.resolution), 1f / s.resolution)
         }
-        return OGStyleFrame(outline, pixels, pixelSize)
+        return OGStyleFrame(outline)
     }
 
     /** Convenience overload: apply to an [OGPolygonShape]'s points. */
