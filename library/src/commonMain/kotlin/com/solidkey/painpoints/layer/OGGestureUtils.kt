@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import co.touchlab.kermit.Logger
 import com.solidkey.painpoints.image.layering.OGLayerItemEvent
 
 /**
@@ -26,7 +25,6 @@ fun Modifier.ogPointerGestureWrapper(
 ): Modifier {
     val resolvedId = rememberUpdatedState(id)
 
-    Logger.i("OG>> ogPointerGestureWrapper... id: $id, label: $label, gestureHandler: $gestureHandler")
     return this
         .pointerInput(Unit) {
             detectTapGestures(
@@ -55,9 +53,6 @@ fun Modifier.ogPointerGestureWrapper(
         }
         .pointerInput(Unit) {
             detectTransformGestures { _, pan, zoom, _ ->
-
-                Logger.i("OG>> ogPointerGestureWrapper... pan: $pan, zoom: $zoom")
-
                 if (zoom != 1f) {
                     gestureHandler?.onPinchToScale(
                         event = OGLayerItemEvent.PINCH_ZOOM,

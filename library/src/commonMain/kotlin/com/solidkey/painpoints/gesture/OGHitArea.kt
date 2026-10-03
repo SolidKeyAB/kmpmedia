@@ -3,6 +3,9 @@ package com.solidkey.painpoints.gesture
 import com.solidkey.painpoints.shape.OGPoint
 import com.solidkey.painpoints.shape.OGPolygonShape
 import com.solidkey.painpoints.shape.OGShapeType
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * The region of a box that counts as "inside the shape" for a gesture — so
@@ -42,6 +45,25 @@ class OGHitArea private constructor(
             }
             Kind.POLYGON -> pointInPolygon(polygon, nx, ny)
         }
+    }
+
+    /**
+     * A closed, ordered outline of this area in normalized `0..1` space — for **drawing** it (e.g. the
+     * hard-offset shadow of a [Modifier.ogButton][ogButton] `Brutalist` press). [CIRCLE] is sampled into
+     * [samples] points; [RECT] is the four corners; triangles / diamond / a [polygon] lasso return their
+     * exact vertices. Pure data + math, so it's unit-testable with no Compose runtime, like the rest of
+     * this class.
+     */
+    fun outlineNormalized(samples: Int = 48): List<OGPoint> = when (kind) {
+        Kind.RECT -> listOf(OGPoint(0f, 0f), OGPoint(1f, 0f), OGPoint(1f, 1f), OGPoint(0f, 1f))
+        Kind.CIRCLE -> {
+            val n = samples.coerceAtLeast(3)
+            (0 until n).map { i ->
+                val a = i.toFloat() / n * 2f * PI.toFloat()
+                OGPoint(0.5f + 0.5f * cos(a), 0.5f + 0.5f * sin(a))
+            }
+        }
+        Kind.POLYGON -> polygon
     }
 
     companion object {
