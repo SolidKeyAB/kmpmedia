@@ -23,7 +23,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Shape-crop** image & video to any shape (circle/triangle/…) | ✅ | ❌ | ❌ |
 | **Free-form polygon lasso** — clip to any AI-/hand-drawn outline (`OGPolygonShape`) | ✅ | ❌ | ❌ |
 | **Auto-cutout** — turn a segmentation mask into a live lasso (`autoCutoutPolygon`) | ✅ | ❌ | ❌ |
-| **Depth / layer management** — fly over/under + depth-of-field blur (`Modifier.ogDepth`) | ✅ | ❌ | ❌ |
+| **Depth / layer management** — fly over/under + depth-of-field blur + parallax (`Modifier.ogDepth` / `ogParallax`) | ✅ | ❌ | ❌ |
 | **Interactive / draggable / gesture** layers | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 

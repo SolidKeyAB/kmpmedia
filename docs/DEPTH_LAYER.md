@@ -121,6 +121,32 @@ of any content, so it stacks cleanly with every current primitive:
 
 ---
 
+## Parallax — the motion half *(1.21.0)*
+
+Where `ogDepth` places content on the front-to-back axis (z-order, blur, dim), **`Modifier.ogParallax`**
+makes that axis *move*: as a **viewpoint** shifts — a scroll position, a device tilt, a drag, whatever the
+app feeds in — layers at different depths slide by different amounts, so a flat stack reads as a scene
+with real depth.
+
+```kotlin
+import com.solidkey.painpoints.depth.ogParallax
+import com.solidkey.painpoints.depth.OGParallaxConfig
+
+// viewpoint is a normalized Offset in -1..1 (the app drives it from scroll / tilt / drag)
+Text("🦊", modifier = Modifier.ogParallax(depth = 1.0f, viewpoint = viewpoint))               // near → moves most
+Text("⛰️", modifier = Modifier.ogParallax(depth = 0.5f, viewpoint = viewpoint))               // mid
+Text("✦",  modifier = Modifier.ogParallax(depth = 0.0f, viewpoint = viewpoint))               // far → pinned
+```
+
+Motion is **relative to a focal plane** (`focalDepth`, default `0f`), consistent with `ogDepth`: a layer
+at the focal plane doesn't move, **nearer** layers (`depth > focalDepth`) move *with* the viewpoint,
+**farther** ones move *against* it. The shift is `(depth - focalDepth) * viewpoint * OGParallaxConfig.maxShift`.
+
+It rides **one `graphicsLayer` translation** (a GPU transform — no recomposition, no layout pass), so it
+holds 60fps and composes with `ogDepth`: chain `.ogDepth(...).ogParallax(...)` for blur + dim + motion
+together. The shift math (`parallaxShift`) is pure and unit-tested on JVM + iOS; verified on-device in the
+demo's **Depth parallax** screen (drag the viewpoint; far sky pinned, fox moves most).
+
 ## Validation
 
 - **12 unit tests** (`OGDepthTest`, commonTest → runs on Android + iOS) pin the pure math: in-focus =

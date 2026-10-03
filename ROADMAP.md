@@ -88,7 +88,9 @@ promote them into the library:
   one `graphicsLayer` (no recomposition, 60fps). `OGHitArea` ray-casts the touch against the clip
   silhouette so transparent corners fall through — you grab the *shape*, not its bounding box. Pure
   hit-test / clamp maths unit-tested on JVM + iOS; zero new dependency. *(1.15.0)*
-- 🧭 **Depth/parallax** primitive (builds on the existing `Modifier.ogDepth`).
+- ✅ **Depth/parallax** primitive — `Modifier.ogParallax(depth, viewpoint)` slides layers by different
+  amounts as a viewpoint (scroll/tilt/drag) moves, relative to a focal plane, on one GPU `graphicsLayer`.
+  Composes with `Modifier.ogDepth`. *(1.21.0 — see `docs/DEPTH_LAYER.md`)*
 - 🧭 **Live camera into any shape** — an AR-sticker primitive (a `camera` package is scaffolded).
 
 ## Table-stakes parity (so we don't lose on the basics)

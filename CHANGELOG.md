@@ -4,6 +4,18 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] — 2026-10-03
+
+> **Depth parallax.** Where `Modifier.ogDepth` placed content on the front-to-back axis (z-order, depth-of-field blur, dim), 1.21.0 adds the **motion** half: `Modifier.ogParallax(depth, viewpoint)` slides layers by different amounts as a *viewpoint* moves — a scroll position, a device tilt, a drag, whatever the app feeds in — so a flat stack reads as a scene with real depth. Motion is relative to a focal plane (consistent with `ogDepth`): the focal layer is pinned, nearer layers move with the viewpoint, farther ones against it. Rides one `graphicsLayer` translation (a GPU transform — no recomposition), composes with `ogDepth`, and advances **Bet 4 — Interactivity primitives** on the roadmap. Purely additive, zero new dependency.
+
+### Added
+- `com.solidkey.painpoints.depth.ogParallax(depth, viewpoint, focalDepth = 0f, config): Modifier` — depth-proportional translation from a normalized `viewpoint` Offset (`-1..1`).
+- `OGParallaxConfig(maxShift, horizontal, vertical)` — tuning (shift magnitude + which axes react).
+- `parallaxShift(depth, focalDepth, viewpoint, maxShiftPx): Float` — the pure, testable shift math.
+
+### Notes
+- **60fps, zero-dep.** One `graphicsLayer` translation per layer (no recomposition, no layout pass); chain `.ogDepth(...).ogParallax(...)` for blur + dim + motion together. `parallaxShift` unit-tested on **JVM and iOS** (5 tests: focal plane pinned, near/far move opposite ways, magnitude scales with depth distance + viewpoint, inputs clamped). Verified on-device: a layered sky scene where dragging the viewpoint pins the far stars and moves the near fox most. See `docs/DEPTH_LAYER.md`.
+
 ## [1.20.0] — 2026-10-03
 
 > **Compositor export → frame sequence.** The on-device compositor could export a whole-timeline GIF (1.13.0) and MP4 (1.14.0); 1.20.0 adds the planned follow-up — handing you the **individual frames**, so you can write a PNG sequence, feed a custom encoder, run per-frame analysis, or build a filmstrip. Each frame uses the same pure-Compose `renderFrame` the GIF/MP4 exporters use, so frames are identical on Android and iOS. Completes **Bet 3 — On-device mini-compositor + export** on the roadmap. Purely additive, zero new dependency.
