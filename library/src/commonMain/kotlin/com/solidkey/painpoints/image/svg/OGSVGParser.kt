@@ -1749,15 +1749,16 @@ private fun parseCommandWithAbsoluteCoords(
                 val x = values[i++].toAbsX()
                 val y = values[i++].toAbsY()
 
-                if (firstMove[0] == null && firstMove[1] == null) {
+                if (result.isEmpty()) {
+                    result.add(MoveTo(x, y)) // First pair => MoveTo = start of a NEW subpath
+                    // A following `Z` closes back to the start of the CURRENT subpath, so record it
+                    // per subpath (not just once for the whole path). Otherwise a second subpath's
+                    // `Z` draws a stray line back to the first subpath's origin — e.g. the two bars
+                    // of a pause glyph "M.. Z M.. Z" get joined into a trouser shape.
                     firstMove[0] = x
                     firstMove[1] = y
-                }
-
-                if (result.isEmpty()) {
-                    result.add(MoveTo(x, y)) // First pair => MoveTo
                 } else {
-                    result.add(LineTo(x, y)) // Subsequent pairs => LineTo
+                    result.add(LineTo(x, y)) // Subsequent pairs => implicit LineTo
                 }
                 position[0] = x
                 position[1] = y

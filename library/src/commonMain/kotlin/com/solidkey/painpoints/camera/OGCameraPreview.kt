@@ -26,6 +26,10 @@ enum class OGCameraFacing { BACK, FRONT }
  * @param shape the clip outline the preview is masked to (default: the full rectangle).
  * @param facing [OGCameraFacing.BACK] or [OGCameraFacing.FRONT].
  * @param mirror horizontally mirror the preview (defaults on for the front camera, the expected selfie look).
+ * @param rotationOverride force the preview rotation, in degrees clockwise (0/90/180/270). `null` (default)
+ *   uses the automatic sensor-orientation math. An escape hatch for the handful of devices whose reported
+ *   `SENSOR_ORIENTATION` doesn't match reality, where the auto feed comes out sideways. Android only;
+ *   ignored on iOS (AVFoundation orients the preview layer itself).
  * @param onError called with a message if the camera can't be opened (no permission, no device, busy).
  */
 @Composable
@@ -34,5 +38,6 @@ expect fun OGCameraPreview(
     shape: Shape = RectangleShape,
     facing: OGCameraFacing = OGCameraFacing.BACK,
     mirror: Boolean = facing == OGCameraFacing.FRONT,
+    rotationOverride: Int? = null,
     onError: ((String) -> Unit)? = null,
 )

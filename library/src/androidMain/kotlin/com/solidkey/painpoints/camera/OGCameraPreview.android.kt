@@ -38,6 +38,7 @@ actual fun OGCameraPreview(
     shape: Shape,
     facing: OGCameraFacing,
     mirror: Boolean,
+    rotationOverride: Int?,
     onError: ((String) -> Unit)?,
 ) {
     val context = LocalContext.current
@@ -49,34 +50,42 @@ actual fun OGCameraPreview(
             LaunchedEffect(Unit) { onError?.invoke("Camera permission not granted") }
             return@Box
         }
-        // Re-create the session when the camera to show changes.
-        val session = remember(facing) { OGCamera2Session(context, facing, mirror, onError) }
+        // One long-lived session for the whole composable. It switches camera *in place* when
+        // `facing` changes — the TextureView's SurfaceTexture is created only once, so
+        // onSurfaceTextureAvailable never fires again on a toggle; the facing change has to be
+        // driven from the recomposition (`update`) instead, or the front camera would never start.
+        val session = remember { OGCamera2Session(context, onError) }
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 TextureView(ctx).apply {
                     surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) =
-                            session.start(this@apply)
+                            session.onSurfaceAvailable(this@apply)
                         override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) =
                             session.applyTransform(this@apply)
                         override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean {
-                            session.close(); return true
+                            session.onSurfaceDestroyed(); return true
                         }
-                        override fun onSurfaceTextureUpdated(s: SurfaceTexture) {}
+                        // Re-apply the fill/rotate transform as soon as real frames flow — by then
+                        // the view is laid out, so this is immune to the onConfigured post() racing
+                        // an unmeasured view (which would leave the raw, sideways preview on screen).
+                        override fun onSurfaceTextureUpdated(s: SurfaceTexture) =
+                            session.onFrame(this@apply)
                     }
                 }
             },
+            // Runs on every recomposition: pick up a facing / mirror / rotation change and restart
+            // (or just re-transform) on the existing surface.
+            update = { view -> session.setFacing(facing, mirror, rotationOverride, view) },
         )
-        DisposableEffect(facing) { onDispose { session.close() } }
+        DisposableEffect(Unit) { onDispose { session.close() } }
     }
 }
 
 /** Self-contained Camera2 preview session — opens a camera, runs a repeating preview into a TextureView. */
 private class OGCamera2Session(
     private val context: Context,
-    private val facing: OGCameraFacing,
-    private val mirror: Boolean,
     private val onError: ((String) -> Unit)?,
 ) {
     private var thread: HandlerThread? = null
@@ -86,11 +95,57 @@ private class OGCamera2Session(
     private var previewSize = Size(1280, 720)
     private var sensorOrientation = 0
 
-    @SuppressLint("MissingPermission") // permission is checked by the composable before start()
-    fun start(textureView: TextureView) {
+    private var facing: OGCameraFacing = OGCameraFacing.BACK
+    private var mirror: Boolean = false
+    /** When non-null, forces the preview rotation (deg CW) instead of the auto sensor-orientation math. */
+    private var rotationOverride: Int? = null
+    private var textureView: TextureView? = null
+    /** Cleared whenever the camera (re)starts; the first frame re-applies the transform once. */
+    private var transformApplied = false
+
+    /** The preview surface is ready: remember it and open the current camera. */
+    fun onSurfaceAvailable(view: TextureView) {
+        textureView = view
+        open()
+    }
+
+    fun onSurfaceDestroyed() {
+        closeCamera()
+        textureView = null
+    }
+
+    /** Drive the live camera/mirror/rotation from recomposition; restart in place when it changes. */
+    fun setFacing(newFacing: OGCameraFacing, newMirror: Boolean, newRotationOverride: Int?, view: TextureView) {
+        textureView = view
+        val restart = newFacing != facing || newMirror != mirror
+        val reTransform = newRotationOverride != rotationOverride
+        facing = newFacing
+        mirror = newMirror
+        rotationOverride = newRotationOverride
+        if (!view.isAvailable) return // onSurfaceAvailable will open() with these values
+        when {
+            restart -> { closeCamera(); open() }
+            device == null -> open()
+            // Just the rotation override changed: re-apply the transform live, no camera restart.
+            reTransform && view.width > 0 && view.height > 0 -> applyTransform(view)
+        }
+    }
+
+    /** Re-apply the fill/rotate transform once real frames arrive (the view is laid out by then). */
+    fun onFrame(view: TextureView) {
+        if (!transformApplied) applyTransform(view)
+    }
+
+    @SuppressLint("MissingPermission") // permission is checked by the composable before open()
+    private fun open() {
+        val view = textureView ?: return
+        if (!view.isAvailable) return
         if (device != null) return
-        thread = HandlerThread("OGCamera").also { it.start() }
-        handler = Handler(thread!!.looper)
+        transformApplied = false
+        if (thread == null) {
+            thread = HandlerThread("OGCamera").also { it.start() }
+            handler = Handler(thread!!.looper)
+        }
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             val id = pickCameraId(manager) ?: run { onError?.invoke("No $facing camera found"); return }
@@ -102,7 +157,7 @@ private class OGCamera2Session(
             manager.openCamera(id, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     device = camera
-                    createPreview(camera, textureView)
+                    createPreview(camera, view)
                 }
                 override fun onDisconnected(camera: CameraDevice) { camera.close(); device = null }
                 override fun onError(camera: CameraDevice, error: Int) {
@@ -127,6 +182,7 @@ private class OGCamera2Session(
             @Suppress("DEPRECATION")
             camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(session: CameraCaptureSession) {
+                    if (device == null) { session.close(); return } // camera was torn down mid-config
                     captureSession = session
                     try {
                         session.setRepeatingRequest(builder.build(), null, handler)
@@ -170,20 +226,23 @@ private class OGCamera2Session(
             if (mirror) postScale(-1f, 1f, cx, cy)
         }
         textureView.setTransform(matrix)
+        transformApplied = true
     }
 
     private fun totalRotationDegrees(): Int {
+        rotationOverride?.let { return ((it % 360) + 360) % 360 }
+        // Only compensate for DEVICE rotation away from natural. The sensor orientation is already
+        // applied to the preview Surface by the platform, so folding it in here double-rotates (it
+        // put a portrait-natural device's feed 90° sideways for both cameras). This mirrors Google's
+        // Camera2Basic `configureTransform`: no rotation at ROTATION_0, display-delta otherwise.
+        // Verified on-device: both front and back read upright at 0° in portrait.
         val display = when (currentDisplayRotation()) {
             Surface.ROTATION_90 -> 90
             Surface.ROTATION_180 -> 180
             Surface.ROTATION_270 -> 270
             else -> 0
         }
-        return if (facing == OGCameraFacing.FRONT) {
-            (sensorOrientation + display) % 360
-        } else {
-            (sensorOrientation - display + 360) % 360
-        }
+        return (360 - display) % 360
     }
 
     @Suppress("DEPRECATION")
@@ -211,18 +270,31 @@ private class OGCamera2Session(
             .maxByOrNull { it.width.toLong() * it.height } ?: sizes.first()
     }
 
-    fun close() {
+    /** Tear down just the camera + session (kept when switching facing). */
+    private fun closeCamera() {
         try {
             captureSession?.close()
             device?.close()
-            thread?.quitSafely()
         } catch (e: Exception) {
             Logger.w("OG>> camera close: ${e.message}")
         } finally {
             captureSession = null
             device = null
+            transformApplied = false
+        }
+    }
+
+    /** Full dispose: camera + background thread (when the composable leaves). */
+    fun close() {
+        closeCamera()
+        try {
+            thread?.quitSafely()
+        } catch (e: Exception) {
+            Logger.w("OG>> camera thread stop: ${e.message}")
+        } finally {
             thread = null
             handler = null
+            textureView = null
         }
     }
 }

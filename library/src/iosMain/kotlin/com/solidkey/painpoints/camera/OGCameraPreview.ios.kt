@@ -17,6 +17,7 @@ import platform.AVFoundation.AVCaptureDeviceInput
 import platform.AVFoundation.AVCaptureDevicePositionBack
 import platform.AVFoundation.AVCaptureDevicePositionFront
 import platform.AVFoundation.AVCaptureDeviceTypeBuiltInWideAngleCamera
+import platform.AVFoundation.AVCaptureInput
 import platform.AVFoundation.AVCaptureSession
 import platform.AVFoundation.AVCaptureSessionPresetHigh
 import platform.AVFoundation.AVCaptureVideoPreviewLayer
@@ -37,6 +38,7 @@ actual fun OGCameraPreview(
     shape: Shape,
     facing: OGCameraFacing,
     mirror: Boolean,
+    @Suppress("UNUSED_PARAMETER") rotationOverride: Int?, // Android-only; AVFoundation orients the layer itself.
     onError: ((String) -> Unit)?,
 ) {
     val authorized = AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo) ==
@@ -48,15 +50,22 @@ actual fun OGCameraPreview(
             return@Box
         }
 
-        val session = remember(facing) { buildCaptureSession(facing, onError) }
-        val previewLayer = remember(session) {
+        // One long-lived session + preview layer. The camera is switched by swapping the input in
+        // place — recreating them would orphan the layer, since UIKitView's factory runs only once
+        // (so a facing toggle would leave the old camera / a blank view on screen).
+        val session = remember { AVCaptureSession().apply { sessionPreset = AVCaptureSessionPresetHigh } }
+        val previewLayer = remember {
             AVCaptureVideoPreviewLayer(session = session).apply {
                 videoGravity = AVLayerVideoGravityResizeAspectFill
-                connection?.let {
-                    if (it.isVideoMirroringSupported()) {
-                        it.automaticallyAdjustsVideoMirroring = false
-                        it.setVideoMirrored(mirror)
-                    }
+            }
+        }
+
+        LaunchedEffect(facing, mirror) {
+            configureCameraInput(session, facing, onError)
+            previewLayer.connection?.let {
+                if (it.isVideoMirroringSupported()) {
+                    it.automaticallyAdjustsVideoMirroring = false
+                    it.setVideoMirrored(mirror)
                 }
             }
         }
@@ -84,11 +93,17 @@ actual fun OGCameraPreview(
     }
 }
 
+/** Swap the capture session's camera input in place (remove any current input, add [facing]). */
 @OptIn(ExperimentalForeignApi::class)
-private fun buildCaptureSession(facing: OGCameraFacing, onError: ((String) -> Unit)?): AVCaptureSession {
-    val session = AVCaptureSession()
+private fun configureCameraInput(
+    session: AVCaptureSession,
+    facing: OGCameraFacing,
+    onError: ((String) -> Unit)?,
+) {
     session.beginConfiguration()
-    session.sessionPreset = AVCaptureSessionPresetHigh
+    (session.inputs as? List<*>)?.forEach { input ->
+        (input as? AVCaptureInput)?.let { session.removeInput(it) }
+    }
     val position = if (facing == OGCameraFacing.FRONT) AVCaptureDevicePositionFront else AVCaptureDevicePositionBack
     val discovery = AVCaptureDeviceDiscoverySession.discoverySessionWithDeviceTypes(
         deviceTypes = listOf(AVCaptureDeviceTypeBuiltInWideAngleCamera),
@@ -101,7 +116,7 @@ private fun buildCaptureSession(facing: OGCameraFacing, onError: ((String) -> Un
     if (device == null) {
         onError?.invoke("No $facing camera device")
         session.commitConfiguration()
-        return session
+        return
     }
     val input = AVCaptureDeviceInput.deviceInputWithDevice(device, null)
     if (input != null && session.canAddInput(input)) {
@@ -110,5 +125,4 @@ private fun buildCaptureSession(facing: OGCameraFacing, onError: ((String) -> Un
         onError?.invoke("Cannot add camera input")
     }
     session.commitConfiguration()
-    return session
 }
