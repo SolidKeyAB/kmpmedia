@@ -29,6 +29,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Auto-cutout** — turn a segmentation mask into a live lasso (`autoCutoutPolygon`) | ✅ | ❌ | ❌ |
 | **Live camera clipped to any shape** (`OGCameraPreview`) | ✅ | ❌ | ❌ |
 | **Depth / layer management** — fly over/under + depth-of-field blur + parallax (`Modifier.ogDepth` / `ogParallax`) | ✅ | ❌ | ❌ |
+| **Data-defined drawing styles** — JSON `{op}` pipeline → live boil / quantize / pixelate (`OGStyleSpec`) | ✅ | ❌ | ❌ |
 | **Interactive / draggable / gesture** layers | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
@@ -113,6 +114,14 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Interactive shapes, live — Android (left) &amp; iOS (right).</b> The <i>same</i> Compose Multiplatform code: a photo clipped to a shape, made draggable / pinch-zoomable / twist-rotatable by one <code>Modifier.ogInteractive</code>, with a momentum fling and a bouncy spring settle. <code>OGHitArea</code> makes the touch shape-aware (grab the silhouette, not its bounding box). The motion here is driven by a scripted loop so both platforms show the full pan / zoom / rotate / spring identically (the capture tooling can't inject multi-touch); in the app it's your fingers. The transform rides one GPU <code>graphicsLayer</code>, so it holds 60fps; the hit-test and clamp maths are unit-tested on JVM + iOS. <b>New in v1.15.0.</b> See <a href="docs/INTERACTIVE.md">docs/INTERACTIVE.md</a>.</sub>
 
+…and the three newest headliners — **auto-cutout**, **live camera in any shape**, and **data-defined drawing styles** — are already live in the demo; their paired Android/iOS GIFs are still being captured, so here they're described rather than shown:
+
+- **🪄 Auto-cutout → live lasso** *(v1.19.0)* — drop a photo and the subject is clipped out: a pluggable `OGSegmenter` seam (plug in ML Kit / Vision / a cloud model) plus a cross-platform mask → lasso tracer (flood-fill → Moore-neighbour trace → Douglas–Peucker simplify) whose output drops straight into the same `clipShape` slot. No ML model is bundled. See [**docs/AUTO_CUTOUT.md**](docs/AUTO_CUTOUT.md).
+- **📷 Live camera in any shape** *(v1.22.0)* — `OGCameraPreview(shape, facing)` masks the live camera feed to any shape (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive, built on the platform camera APIs (Camera2 / AVFoundation) with no third-party dependency. See [**docs/CAMERA.md**](docs/CAMERA.md).
+- **🖊️ Data-defined drawing styles** *(v1.23.0)* — a drawing style is now just data: an `OGStyleSpec` is a JSON pipeline of `{op, params}` that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame — **boil** (a living, hand-drawn line), **quantize** (a stepped, stop-motion line) and **pixelate** (a low-res mosaic fill). A designer or a language model can author and share a `.style` pack with no code and no rebuild, mirroring how `OGAiVector` turns a model's JSON into shapes. Zero new dependency; the demo's 🖊️ *Boiling lines* screen (with a live "Style from JSON" editor) dogfoods it.
+
+*(These join the GIF tour above once their captures land — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see them live now.)*
+
 And a whole mini-game built from those same primitives:
 
 <p align="center">
@@ -156,6 +165,9 @@ And **animated GIFs** — one `OGImageView` pointed at a `.gif`, playing on both
 - **🫧 Morph the clip itself** — the clip *mask* animates circle → diamond → triangle → lasso while a video and a GIF keep playing, all driven by one [`OGMorphShape`](docs/SHAPE_MORPH_CLIPS.md). Clipping moving media to a morphing outline at 60fps, identical on Android & iOS.
 - **🪶 Soft & multi-region masks** — feather a photo's edge into a vignette (`softEdge`), fade it along a gradient (`maskBrush`), or clip it to more than one region at once — two portholes, a diamond with a circular bite — with [`OGMultiRegionShape`](docs/SOFT_MASKS.md). Soft edges via one offscreen `DstIn` pass; multi-region via a path op computed once. Same code on Android & iOS.
 - **🤹 Interactive shapes** — grab a shape-clipped photo and drag it, pinch to zoom, twist to rotate — then fling it and watch it spring back, with a live offset / scale / rotation HUD. One [`Modifier.ogInteractive`](docs/INTERACTIVE.md) adds the transform + momentum + spring; `OGHitArea` means only touches inside the actual silhouette grab it, not its bounding box. Zero-dep, 60fps, same code on Android & iOS.
+- **🪄 Auto-cutout** — drop a photo and the subject is clipped out automatically: a pluggable [`OGSegmenter`](docs/AUTO_CUTOUT.md) seam (ML Kit / Vision / cloud) plus a zero-dependency mask → lasso tracer that feeds the same `clipShape` slot. No bundled ML model.
+- **📷 Live camera in any shape** — [`OGCameraPreview(shape, facing)`](docs/CAMERA.md) masks the live camera feed to any shape (built-in / lasso / `CircleShape`), front or back: the AR-sticker primitive, on Camera2 / AVFoundation with no third-party dependency.
+- **🖊️ Data-defined drawing styles** — a style is just data: an `OGStyleSpec` JSON pipeline of `{op, params}` (`boil` / `quantize` / `pixelate`) that `OGStyles.decode()` compiles into a live `OGStyle` applied every frame. Author and share `.style` packs with no code; the 🖊️ *Boiling lines* screen has a live "Style from JSON" editor.
 - **🛸 UFO Dodge (mini-game)** — every sprite is a static SVG animated by the library; crop your own photos into shapes and drop them into the field as live game objects.
 - **🎛️ Playground · 🧪 Edge Cases · ⚡ Performance** — load anything from any URL/resource and tune every config live; deliberately broken inputs that prove `onError` fires cleanly; and load-timing / many-layer stress benchmarks with live numbers.
 

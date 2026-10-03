@@ -25,6 +25,12 @@ the tests on every push to `main`.
 
 1. **Land the change on `main`** with tests green, and bump the version in `gradle.properties`
    (`LIBRARY_VERSION_FALLBACK=<x.y.z>`) plus a `CHANGELOG.md` entry.
+   - **Refresh the README feature tour.** If the release adds a user-facing feature, add it to
+     `README.md` — the "…and the newest" tour section and the "What's inside" list (plus the
+     comparison table / a Quick-start snippet if it warrants one). The install coordinate keeps
+     itself current via the Maven Central badge, but the feature narrative is hand-written and goes
+     stale if skipped. Add the text first (so a release is never missed); backfill the paired
+     Android/iOS GIFs once captured.
 
 2. **Publish to Maven Central (local, signed):**
 
