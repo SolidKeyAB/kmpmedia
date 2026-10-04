@@ -39,18 +39,33 @@ object OGAiVector {
     fun decodePolygonOrNull(text: String): OGPolygonShape?
     fun decodeSvgPatch(text: String): Map<String, OGSvgNodeOverride>
     fun decodeSvgPatchOrNull(text: String): Map<String, OGSvgNodeOverride>?
+    fun decodeScene(text: String): OGSceneSpec                 // multi-region (image -> vector scene)
+    fun decodeSceneOrNull(text: String): OGSceneSpec?
+    fun decodeSceneShapes(text: String): List<OGPolygonShape>  // straight to clip shapes
 
     // live primitive -> JSON
     fun encodePolygon(shape: OGPolygonShape): String
     fun encodeSvgPatch(overrides: Map<String, OGSvgNodeOverride>): String
+    fun encodeScene(scene: OGSceneSpec): String
 
     // hand a model the contract
     fun polygonPrompt(instruction: String): String
     fun svgPatchPrompt(instruction: String, nodeIds: List<String> = emptyList()): String
+    fun imageToVectorPrompt(                                   // vision: an image -> editable vectors
+        hint: String? = null,
+        target: OGVectorTarget = OGVectorTarget.POLYGON,       // POLYGON (one silhouette) | SCENE (regions)
+        maxShapes: Int = 1,
+        imageInfo: OGImageInfo? = null,
+    ): String
 
     // pull the JSON payload out of a raw reply (strips fences / prose)
     fun extractJson(text: String): String
 }
+
+// Attach an image to a vision call (library does NO network I/O — these only serialize pixels):
+fun ImageBitmap.toBase64Png(): String                          // ready for an image content block
+fun ImageBitmap.toPngBytes(): ByteArray                        // Android Bitmap.compress / iOS Skia
+data class OGImageInfo(val width: Int, val height: Int)        // .of(bitmap); .aspect for the prompt
 ```
 
 The serializable schema types (`com.solidkey.painpoints.ai`) mirror the Compose-facing primitives but use
@@ -67,6 +82,9 @@ model-friendly plain values (colors as strings, coordinates as floats):
     val pathData: String? = null, val pathDataTo: String? = null, val morphProgress: Float = 0f,
 )
 @Serializable data class OGSvgPatchSpec(val overrides: Map<String, OGNodeOverrideSpec> = emptyMap()) // .toOverrides()
+@Serializable data class OGPlacedShapeSpec(                                      // .toShape() -> OGPolygonShape
+    val points: List<OGPointSpec>, val label: String? = null, val fill: String? = null)
+@Serializable data class OGSceneSpec(val shapes: List<OGPlacedShapeSpec> = emptyList()) // .toShapes() -> List<OGPolygonShape>
 ```
 
 Colors are parsed with the **same** parser the SVG renderer uses, so the model may emit `#RGB`,
@@ -86,6 +104,16 @@ unchanged.
 
 ```json
 { "overrides": { "needle": {"rotation":120,"fill":"#E53935"}, "bg": {"fill":"#111111"} } }
+```
+
+**Scene** (image → vector, `SCENE` target) — an ordered set of regions, each a closed polygon in the
+same normalized `0..1` space, with an optional `label` and representative `fill`.
+
+```json
+{ "shapes": [
+  { "label":"head",  "fill":"#E0B080", "points":[ {"x":0.42,"y":0.08}, {"x":0.58,"y":0.08}, {"x":0.5,"y":0.34} ] },
+  { "label":"torso", "points":[ {"x":0.3,"y":0.35}, {"x":0.7,"y":0.35}, {"x":0.7,"y":0.92}, {"x":0.3,"y":0.92} ] }
+] }
 ```
 
 ## Example — describe → clip region
@@ -132,6 +160,42 @@ OGSVGView(
 
 Because a patch is plain data, you can also let the model **morph** a path: it emits `pathDataTo` +
 `morphProgress`, and the node tweens exactly as the [runtime path morph](./RUNTIME_SVG.md) does.
+
+## Example — image → vector *(new in 1.25.0)*
+
+The same contract, but the input is an **image** instead of a sentence: hand a *vision* model a photo (or
+a frame of a running scene) and get the identical normalized vector JSON back. `imageToVectorPrompt` builds
+the text half; you attach the image yourself with `ImageBitmap.toBase64Png()` (the library still makes **no**
+network call). Decode with `decodePolygon` for one silhouette, or `decodeScene` for several labelled regions.
+
+```kotlin
+import com.solidkey.painpoints.ai.OGAiVector
+import com.solidkey.painpoints.ai.OGImageInfo
+import com.solidkey.painpoints.ai.OGVectorTarget
+import com.solidkey.painpoints.ai.toBase64Png
+
+// 1) Ask a vision model to trace the subject (your model, your call).
+val photo: ImageBitmap = /* a decoded photo or a captured frame */
+val prompt = OGAiVector.imageToVectorPrompt(
+    hint = "trace the person's silhouette",
+    target = OGVectorTarget.POLYGON,
+    imageInfo = OGImageInfo.of(photo),               // lets the prompt state the aspect ratio
+)
+val reply = myVisionLlm.complete(prompt, imageBase64 = photo.toBase64Png())  // base64 PNG, no network in the lib
+
+// 2) Apply — the reply becomes a live clip shape.
+val cutout = OGAiVector.decodePolygonOrNull(reply) ?: OGPolygonShape.of(/* fallback */)
+OGImageView(source = /* the same photo */, clipShape = cutout, onEventTriggered = { _, _ -> })
+```
+
+For a multi-part cut-out — "cut the head, torso and each arm out of this photo" — use `target = SCENE` and
+`decodeScene(reply).toShapes()` (one `OGPolygonShape` per region, with the model's `label`/`fill` as advisory
+metadata).
+
+> **Honest limit.** A general vision model returns *approximate / semantic* vectors (a silhouette, rough
+> regions), not pixel-accurate tracing. For a precise cut-out, pair it with a segmentation model (see
+> [auto-cutout](./AUTO_CUTOUT.md)) and feed those vertices through `OGPolygonSpec` / `OGSceneSpec` directly —
+> the division of labour is *LLM = understand + approximate as editable vectors; segmentation = precise mask.*
 
 ## Where this sits on the roadmap
 

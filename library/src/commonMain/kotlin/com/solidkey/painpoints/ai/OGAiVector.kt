@@ -3,6 +3,16 @@ package com.solidkey.painpoints.ai
 import com.solidkey.painpoints.image.svg.OGSvgNodeOverride
 import com.solidkey.painpoints.shape.OGPolygonShape
 import kotlinx.serialization.json.Json
+import kotlin.math.roundToInt
+
+/** What [OGAiVector.imageToVectorPrompt] asks a vision model to return. */
+enum class OGVectorTarget {
+    /** One closed polygon tracing the main subject's silhouette → [OGAiVector.decodePolygon]. */
+    POLYGON,
+
+    /** Several labelled regions as polygons → [OGAiVector.decodeScene]. */
+    SCENE,
+}
 
 /**
  * The single entry point for KMPMedia's **AI interop** layer — "describe → shape / patch".
@@ -19,8 +29,15 @@ import kotlinx.serialization.json.Json
  *     `clipShape`, or [decodeSvgPatch] → pass the map to `OGSVGView(overrides = ...)`. Decoding is
  *     tolerant of the markdown fences and stray prose models often add (see [extractJson]).
  *
- * You can also go the other way — [encodePolygon] / [encodeSvgPatch] serialize live primitives
- * back to JSON (to persist a lasso, seed a prompt with the current state, or show the payload).
+ * You can also go the other way — [encodePolygon] / [encodeSvgPatch] / [encodeScene] serialize live
+ * primitives back to JSON (to persist a lasso, seed a prompt with the current state, or show the
+ * payload).
+ *
+ * **From an image, not just text.** [imageToVectorPrompt] is the vision twin of [polygonPrompt]: you
+ * attach a photo (or a frame of a running scene) with [ImageBitmap.toBase64Png] and the model
+ * returns the same normalized vector JSON, decoded by [decodePolygon] (one silhouette) or
+ * [decodeScene] (several labelled regions → live clip shapes). Still provider-agnostic, still no
+ * network in the library.
  *
  * Everything here runs at generate/patch time, not per frame, so it never touches the 60fps hot
  * path that clipping and morphing live on.
@@ -64,6 +81,21 @@ object OGAiVector {
     fun decodeSvgPatchOrNull(text: String): Map<String, OGSvgNodeOverride>? =
         runCatching { decodeSvgPatch(text) }.getOrNull()
 
+    /**
+     * Parse a vision model's reply describing a multi-region scene (from [imageToVectorPrompt] with
+     * [OGVectorTarget.SCENE]) into an [OGSceneSpec]. Tolerates surrounding prose / code fences.
+     * Throws if no valid JSON is present; use [decodeSceneOrNull] to get `null` instead.
+     */
+    fun decodeScene(text: String): OGSceneSpec =
+        json.decodeFromString(OGSceneSpec.serializer(), extractJson(text))
+
+    /** [decodeScene] but returns `null` instead of throwing on malformed input. */
+    fun decodeSceneOrNull(text: String): OGSceneSpec? =
+        runCatching { decodeScene(text) }.getOrNull()
+
+    /** [decodeScene] then straight to live clip shapes (one [OGPolygonShape] per region). */
+    fun decodeSceneShapes(text: String): List<OGPolygonShape> = decodeScene(text).toShapes()
+
     // --- Encode: live primitives → JSON --------------------------------------------------------
 
     /** Serialize a live [OGPolygonShape] to the polygon JSON schema. */
@@ -73,6 +105,10 @@ object OGAiVector {
     /** Serialize a live override map to the SVG-patch JSON schema. */
     fun encodeSvgPatch(overrides: Map<String, OGSvgNodeOverride>): String =
         json.encodeToString(OGSvgPatchSpec.serializer(), OGSvgPatchSpec.from(overrides))
+
+    /** Serialize a scene to the multi-region JSON schema (to persist a cut-out set or seed a prompt). */
+    fun encodeScene(scene: OGSceneSpec): String =
+        json.encodeToString(OGSceneSpec.serializer(), scene)
 
     // --- Prompt / schema helpers: hand a model the contract ------------------------------------
 
@@ -140,6 +176,73 @@ object OGAiVector {
 
         Task: $instruction
         """.trimIndent()
+    }
+
+    /**
+     * Build a ready-to-send instruction for a **vision** model that turns an *image* into editable
+     * KMPMedia vectors. You attach the image yourself (see [ImageBitmap.toBase64Png]); this returns
+     * the text half of the call. Pass the model's reply to [decodePolygon] (for [OGVectorTarget.POLYGON])
+     * or [decodeScene] (for [OGVectorTarget.SCENE]).
+     *
+     * This is the image twin of [polygonPrompt] — same normalized `0..1` contract, same library,
+     * still provider-agnostic and network-free (the library makes no model call).
+     *
+     * Honest limit: a general vision model returns *approximate / semantic* vectors (a silhouette,
+     * rough regions), not pixel-accurate tracing. For a precise cut-out pair it with a segmentation
+     * model and feed those points through [OGPolygonSpec] / [OGSceneSpec] instead.
+     *
+     * @param hint optional guidance, e.g. "trace the character's silhouette" or "icon-ify this".
+     * @param target [OGVectorTarget.POLYGON] for one silhouette, [OGVectorTarget.SCENE] for regions.
+     * @param maxShapes cap on regions for [OGVectorTarget.SCENE] (ignored for POLYGON).
+     * @param imageInfo optional dimensions so the prompt can state the aspect ratio.
+     */
+    fun imageToVectorPrompt(
+        hint: String? = null,
+        target: OGVectorTarget = OGVectorTarget.POLYGON,
+        maxShapes: Int = 1,
+        imageInfo: OGImageInfo? = null,
+    ): String {
+        val aspectLine = imageInfo?.let {
+            "\n        The image is ${it.width}x${it.height}px (aspect ${aspectText(it.aspect)}); keep its proportions."
+        } ?: ""
+        val hintLine = hint?.takeIf { it.isNotBlank() }?.let { "\n        Guidance: $it." } ?: ""
+        return when (target) {
+            OGVectorTarget.POLYGON -> """
+                Look at the image provided and output ONLY a JSON object describing ONE closed polygon
+                that traces the main subject's silhouette, for the KMPMedia library.
+
+                Coordinate space is NORMALIZED to the image: (0,0) is the top-left and (1,1) the
+                bottom-right. Keep every value within 0..1. List the vertices in order around the
+                outline; it closes automatically (the last point links back to the first). Use enough
+                points to capture the shape, typically 8 to 40.
+
+                Schema:
+                {"points":[{"x":<0..1>,"y":<0..1>}, ...]}$aspectLine$hintLine
+
+                Output the JSON only, with no prose and no markdown fences.
+            """.trimIndent()
+
+            OGVectorTarget.SCENE -> """
+                Look at the image provided and output ONLY a JSON object describing up to $maxShapes
+                region(s) of it as closed polygons, for the KMPMedia library.
+
+                Coordinate space is NORMALIZED to the image: (0,0) is the top-left and (1,1) the
+                bottom-right. Keep every value within 0..1. For each region give the ordered outline
+                vertices (it closes automatically), an optional short "label", and an optional
+                representative "fill" color as an SVG string ("#RRGGBB" or a name like "red").
+
+                Schema:
+                {"shapes":[{"label":"<name>","fill":"#RRGGBB","points":[{"x":<0..1>,"y":<0..1>}, ...]}, ...]}$aspectLine$hintLine
+
+                Output the JSON only, with no prose and no markdown fences.
+            """.trimIndent()
+        }
+    }
+
+    /** Format an aspect ratio to 2 decimals without `String.format` (not in common Kotlin). */
+    private fun aspectText(a: Float): String {
+        val r = (a * 100f).roundToInt()
+        return "${r / 100}.${(r % 100).toString().padStart(2, '0')}"
     }
 
     // --- Tolerant extraction -------------------------------------------------------------------

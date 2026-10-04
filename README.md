@@ -460,9 +460,13 @@ val patch = OGAiVector.svgPatchPrompt("point the needle to 80% and turn the arc 
                                       nodeIds = listOf("needle", "arc"))
 OGSVGView(source = OGSvgResourceFileType("gauge.svg"), width = 240f, height = 240f,
           overrides = OGAiVector.decodeSvgPatchOrNull(myLlm.complete(patch)) ?: emptyMap())
+
+// image → vector (new in 1.25.0): hand a VISION model a photo/frame, get editable vectors back
+val imgPrompt = OGAiVector.imageToVectorPrompt(hint = "trace the person", imageInfo = OGImageInfo.of(photo))
+val cutout = OGAiVector.decodePolygonOrNull(myVisionLlm.complete(imgPrompt, photo.toBase64Png()))
 ```
 
-`encodePolygon` / `encodeSvgPatch` go the other way (persist a lasso, seed a prompt with the current state). All of it runs at generate/patch time, never per frame. See [`docs/AI_HOOKS.md`](docs/AI_HOOKS.md).
+`encodePolygon` / `encodeSvgPatch` / `encodeScene` go the other way (persist a lasso/scene, seed a prompt with the current state). *New in 1.25.0:* `imageToVectorPrompt(...)` + `decodeScene(...)` turn a photo (or a live frame) into editable vector shapes via any **vision** model — you attach the image with `ImageBitmap.toBase64Png()`, and the library still makes **no** network call. All of it runs at generate/patch time, never per frame. See [`docs/AI_HOOKS.md`](docs/AI_HOOKS.md).
 
 ### Apply a data-defined drawing style
 
