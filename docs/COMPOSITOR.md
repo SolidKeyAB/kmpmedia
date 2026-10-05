@@ -14,8 +14,8 @@ adds a second export target: the same composition renders to a **real H.264 MP4*
   60fps), fit-scales it into the available space, and draws straight to the screen (no intermediate
   bitmap). Pass a `positionMs` to turn it into a scrubber.
 - **`OGComposition.exportGif()`** — render every frame offscreen and encode a single looping animated
-  GIF with the built-in **pure-Kotlin `OGGifEncoder`** (median-cut palette + LZW). No dependency, no
-  platform encoder — the **exact same bytes** come out on Android and iOS. It returns the encoded
+  GIF with the built-in **pure-Kotlin `OGGifEncoder`** (median-cut palette + Floyd–Steinberg dithering +
+  LZW). No dependency, no platform encoder — the **exact same bytes** come out on Android and iOS. It returns the encoded
   `ByteArray`; where to save or share it is the app's call.
 - **`OGComposition.exportMp4()`** *(1.14.0)* — render every frame offscreen and encode a **real H.264
   MP4** with the **OS video encoder** (Android `MediaCodec` + `MediaMuxer`, iOS `AVAssetWriter`), still
@@ -97,7 +97,8 @@ fun OGCompositionView(
 )
 
 // ---- export ----
-fun OGComposition.exportGif(loopCount: Int = 0, alphaThreshold: Int = 128): ByteArray
+fun OGComposition.exportGif(loopCount: Int = 0, alphaThreshold: Int = 128,
+                            dither: OGGifDither = OGGifDither.FLOYD_STEINBERG): ByteArray
 fun OGComposition.exportMp4(                                      // H.264 MP4 via the OS encoder (1.14.0)
     bitRate: Int = defaultMp4BitRate(width, height, fps),
     background: Color = Color.Black,                             // transparent pixels resolve to this (no alpha in H.264)
@@ -114,9 +115,11 @@ fun ImageBitmap.toArgbPixels(): IntArray                          // row-major 0
 // ---- the encoder (reusable on its own) ----
 object OGGifEncoder {
     fun encode(width: Int, height: Int, frames: List<OGGifFrame>, loopCount: Int = 0,
-               alphaThreshold: Int = 128): ByteArray
+               alphaThreshold: Int = 128,
+               dither: OGGifDither = OGGifDither.FLOYD_STEINBERG): ByteArray
 }
 class OGGifFrame(val argb: IntArray, val delayCs: Int)            // argb = width*height, 0xAARRGGBB
+enum class OGGifDither { NONE, FLOYD_STEINBERG }                  // palette mapping (1.26.0)
 ```
 
 ## Example — a title card that fades and slides in, exported to GIF
@@ -168,8 +171,12 @@ val mp4Bytes: ByteArray = withContext(Dispatchers.Default) { composition.exportM
 - **Transparency is one colour.** GIF has a single fully-transparent palette index (no partial alpha):
   pixels below `alphaThreshold` become transparent and the encoder uses disposal method 2 so transparent
   areas never accumulate across frames. Pass `alphaThreshold > 255` to force a fully opaque GIF.
-- **Palette is shared + quantized.** Every frame maps to one ≤256-colour median-cut palette, so smooth
-  gradients band as any GIF does; flat colours and clip edges stay crisp.
+- **Palette is shared + quantized + dithered.** Every frame maps to one ≤256-colour median-cut palette.
+  By default the mapping uses **Floyd–Steinberg error diffusion** (`OGGifDither.FLOYD_STEINBERG`), so
+  smooth gradients and photos stay band-free at the same palette size; flat colours and clip edges stay
+  crisp. The diffusion is pure integer math (deterministic → identical bytes on both platforms) and
+  transparent pixels are a hard boundary, so colour never bleeds into the see-through holes. Pass
+  `dither = OGGifDither.NONE` for a plain nearest-colour match (a touch faster, but gradients band).
 - **MP4 uses the OS encoder, not pure Kotlin.** `exportMp4()` is the one place a platform encoder is
   involved (`MediaCodec` / `AVAssetWriter`), so the encoded bytes differ per platform — but no
   third-party dependency is pulled in, and the frames fed in are the same shared render. H.264 is

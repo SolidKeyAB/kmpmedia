@@ -17,17 +17,20 @@ import androidx.compose.ui.graphics.toPixelMap
  * @param loopCount `0` = loop forever, `n` = play `n` times then stop.
  * @param alphaThreshold pixels below this alpha become the single transparent colour; pass `> 255` to
  *   force an opaque GIF.
+ * @param dither palette mapping; [OGGifDither.FLOYD_STEINBERG] (default) gives smooth, band-free
+ *   gradients, [OGGifDither.NONE] a plain nearest match.
  */
 fun OGComposition.exportGif(
     loopCount: Int = 0,
     alphaThreshold: Int = OGGifEncoder.DEFAULT_ALPHA_THRESHOLD,
+    dither: OGGifDither = OGGifDither.FLOYD_STEINBERG,
 ): ByteArray {
     val frames = ArrayList<OGGifFrame>(frameCount)
     for (i in 0 until frameCount) {
         val bitmap = renderFrame(frameTimeMs(i))
         frames.add(OGGifFrame(bitmap.toArgbPixels(), frameDelayCs))
     }
-    return OGGifEncoder.encode(width, height, frames, loopCount, alphaThreshold)
+    return OGGifEncoder.encode(width, height, frames, loopCount, alphaThreshold, dither)
 }
 
 /**

@@ -99,7 +99,7 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
   <img src="demo-screenshots/compositor-demo.gif" width="30%" alt="On-device compositor on Android — a teal circle, a pink triangle, an amber diamond and a rounded badge composed on one timeline, each keyframe-animated (bobbing, spinning, sliding across, pulsing) and clipped to its shape, previewed live" />
   <img src="demo-screenshots/ios-compositor-demo.gif" width="30%" alt="The same on-device compositor on an iOS simulator — identical Compose Multiplatform code, the same keyframed multi-layer scene playing on one timeline" />
 </p>
-<sub><b>On-device compositor + export, live — Android (left) &amp; iOS (right).</b> Several solid-colour layers on one <code>OGComposition</code> timeline, each with keyframed x / y / scale / rotation / opacity and a shape clip, previewed at 60fps by <code>OGCompositionView</code>. In the app, <b>Export</b> renders the timeline and encodes it to a single looping animated GIF with the pure-Kotlin <code>OGGifEncoder</code> (median-cut palette + LZW, zero deps) — then plays that exact GIF back through the platform's own decoder, proving it's a real, shareable file. The <i>same</i> code on both platforms. See <a href="docs/COMPOSITOR.md">docs/COMPOSITOR.md</a>.</sub>
+<sub><b>On-device compositor + export, live — Android (left) &amp; iOS (right).</b> Several solid-colour layers on one <code>OGComposition</code> timeline, each with keyframed x / y / scale / rotation / opacity and a shape clip, previewed at 60fps by <code>OGCompositionView</code>. In the app, <b>Export</b> renders the timeline and encodes it to a single looping animated GIF with the pure-Kotlin <code>OGGifEncoder</code> (median-cut palette + Floyd–Steinberg dithering + LZW, zero deps, so gradients stay band-free) — then plays that exact GIF back through the platform's own decoder, proving it's a real, shareable file. The <i>same</i> code on both platforms. See <a href="docs/COMPOSITOR.md">docs/COMPOSITOR.md</a>.</sub>
 
 <p align="center">
   <img src="demo-screenshots/compositor-mp4-demo.gif" width="30%" alt="The same compositor exporting an H.264 MP4 on Android — the keyframed multi-layer scene rendered to a real .mp4 through MediaCodec, then played straight back in the platform video player" />
@@ -210,7 +210,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.23.0")
+            implementation("se.solidkey:kmpmedia-lib:1.26.0")
         }
     }
 }

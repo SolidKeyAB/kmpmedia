@@ -2,6 +2,7 @@ package com.solidkey.painpoints.compositor
 
 import androidx.compose.foundation.shape.CircleShape
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -227,7 +228,78 @@ class OGCompositionTest {
         assertContentEquals4(f2, decoded.frames[2].argb)
     }
 
+    // ---- GIF encoder: dithering ----------------------------------------------------------------
+
+    @Test
+    fun ditheringIsOnByDefaultAndEncodesDeterministically() {
+        val w = 32; val h = 32
+        val src = gradient2d(w, h)
+        val a = OGGifEncoder.encode(w, h, listOf(OGGifFrame(src, 8))) // default = FLOYD_STEINBERG
+        val b = OGGifEncoder.encode(w, h, listOf(OGGifFrame(src, 8)), dither = OGGifDither.FLOYD_STEINBERG)
+        assertContentEquals(a, b, "same input + same dither must produce identical bytes")
+        val decoded = decodeGif(a)
+        assertEquals(1, decoded.frames.size)
+        assertEquals(w * h, decoded.frames[0].argb.size)
+    }
+
+    @Test
+    fun ditheringReducesBandingErrorOnAGradient() {
+        // >256 distinct colours force the palette to merge, so plain nearest-match bands. Floyd–Steinberg
+        // should make the LOCAL (block-averaged) colour track the source far more closely.
+        val w = 64; val h = 64
+        val src = gradient2d(w, h) // up to 4096 distinct colours → quantized to ≤256
+        val plain = decodeGif(OGGifEncoder.encode(w, h, listOf(OGGifFrame(src, 8)), dither = OGGifDither.NONE))
+            .frames[0].argb
+        val dithered = decodeGif(OGGifEncoder.encode(w, h, listOf(OGGifFrame(src, 8)), dither = OGGifDither.FLOYD_STEINBERG))
+            .frames[0].argb
+        val plainErr = blockAverageError(src, plain, w, h, block = 8)
+        val ditherErr = blockAverageError(src, dithered, w, h, block = 8)
+        assertTrue(ditherErr < plainErr, "dither block-error ($ditherErr) should beat nearest ($plainErr)")
+    }
+
+    @Test
+    fun ditheringKeepsTransparentPixelsTransparent() {
+        val w = 32; val h = 32
+        val grad = gradient2d(w, h)
+        val src = IntArray(w * h) { i -> if ((i % w) < w / 2) 0 else grad[i] } // left half transparent
+        val out = decodeGif(OGGifEncoder.encode(w, h, listOf(OGGifFrame(src, 8)))).frames[0].argb
+        for (i in src.indices) {
+            if (src[i] == 0) assertEquals(0, out[i] ushr 24 and 0xFF, "transparent pixel $i must stay transparent")
+        }
+    }
+
     // ---- helpers -------------------------------------------------------------------------------
+
+    /** A 2-D RGB gradient: red follows x, green follows y, blue constant — many distinct colours to quantize. */
+    private fun gradient2d(w: Int, h: Int): IntArray = IntArray(w * h) { i ->
+        val r = (i % w) * 255 / (w - 1)
+        val g = (i / w) * 255 / (h - 1)
+        0xFF000000.toInt() or (r shl 16) or (g shl 8) or 128
+    }
+
+    /** Sum over BLOCKS of the squared error between the source's and the decoded image's average colour —
+     *  the metric dithering is built to win: local averages match even when pixels snap to a small palette. */
+    private fun blockAverageError(src: IntArray, out: IntArray, w: Int, h: Int, block: Int): Long {
+        var total = 0L
+        var by = 0
+        while (by < h) {
+            var bx = 0
+            while (bx < w) {
+                var sr = 0L; var sg = 0L; var sb = 0L; var or = 0L; var og = 0L; var ob = 0L; var n = 0
+                for (yy in by until minOf(by + block, h)) for (xx in bx until minOf(bx + block, w)) {
+                    val s = src[yy * w + xx]; val o = out[yy * w + xx]
+                    sr += (s ushr 16 and 0xFF).toLong(); sg += (s ushr 8 and 0xFF).toLong(); sb += (s and 0xFF).toLong()
+                    or += (o ushr 16 and 0xFF).toLong(); og += (o ushr 8 and 0xFF).toLong(); ob += (o and 0xFF).toLong()
+                    n++
+                }
+                val dr = sr / n - or / n; val dg = sg / n - og / n; val db = sb / n - ob / n
+                total += dr * dr + dg * dg + db * db
+                bx += block
+            }
+            by += block
+        }
+        return total
+    }
 
     private fun comp(durationMs: Long, fps: Int) =
         OGComposition(width = 10, height = 10, durationMs = durationMs, layers = emptyList(), fps = fps)

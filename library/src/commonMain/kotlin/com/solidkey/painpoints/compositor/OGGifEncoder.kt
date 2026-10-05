@@ -10,6 +10,17 @@ import kotlin.math.max
 class OGGifFrame(val argb: IntArray, val delayCs: Int)
 
 /**
+ * How [OGGifEncoder] turns each pixel into one of the ≤256 palette colours.
+ *
+ * - [FLOYD_STEINBERG] (default) diffuses each pixel's quantization error onto its not-yet-processed
+ *   neighbours, so smooth gradients and photos — exactly what KMPMedia clips into shapes — render as a
+ *   fine dither pattern instead of hard colour bands. Much better perceived quality at the same palette
+ *   size; pure integer math, so the bytes stay identical on Android and iOS.
+ * - [NONE] maps every pixel straight to its nearest palette colour (a touch faster, but gradients band).
+ */
+enum class OGGifDither { NONE, FLOYD_STEINBERG }
+
+/**
  * A tiny, **pure-Kotlin GIF89a encoder** — no platform APIs, no dependencies, so it produces the exact
  * same bytes on Android and iOS. It quantizes the frames to a shared ≤256-colour palette (median cut),
  * maps each pixel to the nearest palette entry (cached), LZW-compresses, and writes a looping animated
@@ -30,6 +41,8 @@ object OGGifEncoder {
      * @param loopCount `0` = loop forever (the usual choice), `n` = play `n` times then stop.
      * @param alphaThreshold pixels with alpha below this collapse to one transparent colour; pass a
      *   value `> 255` to force a fully opaque GIF (no transparent index) even if the source has alpha.
+     * @param dither how pixels are mapped to the palette; [OGGifDither.FLOYD_STEINBERG] (default) diffuses
+     *   quantization error for smooth, band-free gradients, [OGGifDither.NONE] does a plain nearest match.
      */
     fun encode(
         width: Int,
@@ -37,6 +50,7 @@ object OGGifEncoder {
         frames: List<OGGifFrame>,
         loopCount: Int = 0,
         alphaThreshold: Int = DEFAULT_ALPHA_THRESHOLD,
+        dither: OGGifDither = OGGifDither.FLOYD_STEINBERG,
     ): ByteArray {
         require(width > 0 && height > 0) { "GIF size must be positive, was ${width}x$height" }
         require(frames.isNotEmpty()) { "GIF needs at least one frame" }
@@ -70,14 +84,14 @@ object OGGifEncoder {
         for (frame in frames) {
             writeGraphicControl(out, frame.delayCs, transparentIndex, hasTransparency)
             writeImageDescriptor(out, width, height)
-            val indices = ByteArray(pxPerFrame)
-            for (p in 0 until pxPerFrame) {
-                val argb = frame.argb[p]
-                indices[p] = if (hasTransparency && (argb ushr 24 and 0xFF) < alphaThreshold) {
-                    transparentIndex.toByte()
-                } else {
-                    nearest.indexOf(argb and 0xFFFFFF).toByte()
-                }
+            val indices = when (dither) {
+                OGGifDither.NONE ->
+                    mapNearest(frame.argb, nearest, hasTransparency, alphaThreshold, transparentIndex)
+                OGGifDither.FLOYD_STEINBERG ->
+                    mapFloydSteinberg(
+                        frame.argb, width, height, nearest, paletteRgb,
+                        hasTransparency, alphaThreshold, transparentIndex,
+                    )
             }
             out.byte(minCodeSize)
             writeSubBlocks(out, lzwEncode(indices, minCodeSize))
@@ -85,6 +99,88 @@ object OGGifEncoder {
 
         out.byte(0x3B) // trailer
         return out.toByteArray()
+    }
+
+    // ---- pixel → palette mapping --------------------------------------------------------------------
+
+    /** Plain nearest-colour mapping: every pixel takes its closest palette entry (transparent passes through). */
+    private fun mapNearest(
+        argb: IntArray,
+        nearest: NearestColorCache,
+        hasTransparency: Boolean,
+        alphaThreshold: Int,
+        transparentIndex: Int,
+    ): ByteArray {
+        val indices = ByteArray(argb.size)
+        for (p in argb.indices) {
+            val c = argb[p]
+            indices[p] = if (hasTransparency && (c ushr 24 and 0xFF) < alphaThreshold) {
+                transparentIndex.toByte()
+            } else {
+                nearest.indexOf(c and 0xFFFFFF).toByte()
+            }
+        }
+        return indices
+    }
+
+    /**
+     * Floyd–Steinberg error diffusion: each pixel's quantization error is pushed onto its not-yet-written
+     * neighbours (7/16 right, 3/16 below-left, 5/16 below, 1/16 below-right), so smooth gradients become a
+     * fine dither pattern instead of hard colour bands. Pure integer math (two row-sized error buffers, in
+     * plain channel units) → deterministic, identical bytes on every platform. Transparent pixels are a
+     * hard boundary: they take the transparent index and neither receive nor spread error, so colour never
+     * bleeds into the see-through holes.
+     */
+    private fun mapFloydSteinberg(
+        argb: IntArray,
+        width: Int,
+        height: Int,
+        nearest: NearestColorCache,
+        palette: IntArray,
+        hasTransparency: Boolean,
+        alphaThreshold: Int,
+        transparentIndex: Int,
+    ): ByteArray {
+        val indices = ByteArray(argb.size)
+        var curErr = IntArray(width * 3) // error landing on the row being written
+        var nextErr = IntArray(width * 3) // error pushed down to the row below
+        for (y in 0 until height) {
+            val rowBase = y * width
+            for (x in 0 until width) {
+                val p = rowBase + x
+                val pixel = argb[p]
+                if (hasTransparency && (pixel ushr 24 and 0xFF) < alphaThreshold) {
+                    indices[p] = transparentIndex.toByte()
+                    continue
+                }
+                val e = x * 3
+                val wr = ((pixel ushr 16 and 0xFF) + curErr[e]).coerceIn(0, 255)
+                val wg = ((pixel ushr 8 and 0xFF) + curErr[e + 1]).coerceIn(0, 255)
+                val wb = ((pixel and 0xFF) + curErr[e + 2]).coerceIn(0, 255)
+                val idx = nearest.indexOf((wr shl 16) or (wg shl 8) or wb)
+                indices[p] = idx.toByte()
+                val pal = palette[idx]
+                val er = wr - (pal ushr 16 and 0xFF)
+                val eg = wg - (pal ushr 8 and 0xFF)
+                val eb = wb - (pal and 0xFF)
+                if (x + 1 < width) { // 7/16 → right, same row
+                    val r = e + 3
+                    curErr[r] += er * 7 / 16; curErr[r + 1] += eg * 7 / 16; curErr[r + 2] += eb * 7 / 16
+                }
+                if (x - 1 >= 0) { // 3/16 → below-left
+                    val l = e - 3
+                    nextErr[l] += er * 3 / 16; nextErr[l + 1] += eg * 3 / 16; nextErr[l + 2] += eb * 3 / 16
+                }
+                nextErr[e] += er * 5 / 16; nextErr[e + 1] += eg * 5 / 16; nextErr[e + 2] += eb * 5 / 16 // 5/16 → below
+                if (x + 1 < width) { // 1/16 → below-right
+                    val r = e + 3
+                    nextErr[r] += er / 16; nextErr[r + 1] += eg / 16; nextErr[r + 2] += eb / 16
+                }
+            }
+            val tmp = curErr; curErr = nextErr; nextErr = tmp // next row's error becomes current
+            nextErr.fill(0)
+        }
+        return indices
     }
 
     // ---- palette (median cut) ----------------------------------------------------------------------

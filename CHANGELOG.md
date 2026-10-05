@@ -4,6 +4,36 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.26.0] — 2026-10-05
+
+> **Animated GIFs now dither — smooth gradients instead of hard colour bands.** The pure-Kotlin `OGGifEncoder` has always built a shared ≤256-colour median-cut palette and mapped each pixel to its nearest entry, which bands smooth gradients and photos (exactly the content KMPMedia clips into shapes). `exportGif()` / `OGGifEncoder.encode()` now apply **Floyd–Steinberg error diffusion by default**, so the same 256-colour budget renders band-free. The diffusion is pure integer math, so the **bytes stay identical on Android and iOS**, and transparent pixels remain a hard boundary (colour never bleeds into the see-through holes). Purely additive, no new dependency, no API break — the new `dither` parameter defaults to on.
+
+### Added
+- `OGGifDither { NONE, FLOYD_STEINBERG }` (`com.solidkey.painpoints.compositor`) — selects how `OGGifEncoder` maps pixels to the palette.
+- `dither: OGGifDither = OGGifDither.FLOYD_STEINBERG` parameter on `OGComposition.exportGif(...)` and `OGGifEncoder.encode(...)`. Pass `OGGifDither.NONE` for the old plain nearest-colour match (a touch faster, but gradients band).
+
+### Changed
+- **GIF export now dithers by default.** Output for gradient/photographic frames differs from 1.25.0 and earlier (it is smoother); flat-colour frames whose colours already fit the palette are byte-identical (zero quantization error → nothing to diffuse).
+
+### Notes
+- **Still deterministic + cross-platform.** Error diffusion uses two row-sized integer buffers in plain channel units; same input + same `dither` → identical bytes on both platforms, preserving the encoder's "exact same bytes on Android and iOS" guarantee.
+- **Export-only, no perf regression on the hot path.** Dithering runs in the one-shot offscreen `exportGif` pass, never in the 60fps `OGCompositionView` preview.
+- **Verification**: 3 new tests on **JVM and iOS** — determinism (same bytes twice), a block-averaged band-error metric proving the dithered result tracks the source far more closely than nearest-match, and transparent-boundary preservation — alongside the existing encode→decode roundtrips (22 tests green in `OGCompositionTest`).
+
+## [1.25.0] — 2026-10-04
+
+> **Image → vector: a vision model turns a photo into live, editable clip shapes.** Extends the provider-agnostic, network-free `OGAiVector` interop (1.11.0) from *describe → shape/patch* to *image → shape*. You build a prompt, hand it plus the image to any vision model you like, and decode the model's JSON into the library's live vector shapes — no AI SDK, no network code in the library. Purely additive; the library stays a **media** toolkit (no app-state/patch-bus machinery).
+
+### Added
+- `OGAiVector.imageToVectorPrompt(...)` — builds the prompt that asks a vision model to trace an image into either one silhouette polygon (`OGVectorTarget.POLYGON`) or up to N labelled, filled regions (`OGVectorTarget.SCENE`), with the image's pixel size + aspect baked in.
+- `OGSceneSpec` + `OGAiVector.decodeScene(...)` — decode a multi-region reply into a list of labelled, filled `OGPolygonShape` clip regions (drops into `OGImageView(clipShape = …)` / `OGMultiRegionShape`). Tolerant of code fences / prose via the existing `extractJson`.
+- `OGImageInfo` + `ImageBitmap.toBase64Png()` — a hand-rolled, dependency-free PNG + base64 helper so an app can attach the image to its own model request on either platform.
+
+### Notes
+- **Media-codec only.** The library only generates the prompt and decodes the reply; sending the request is the app's job, keeping the library network-free and provider-agnostic.
+- **Approximate by nature.** A general vision model returns *semantic* vectors (a sane outline, not a pixel-perfect matte); pair with a segmentation model for a precise cut-out.
+- **Verification**: 24 codec tests green on **JVM and iOS**; the demo's AI-vector screen dogfoods the image→vector path.
+
 ## [1.24.1] — 2026-10-04
 
 > **`Modifier.ogButton` now reliably registers taps inside a scrolling screen.** A real finger is never perfectly still, and `ogButton` was handing its gesture to any ancestor scroll (`verticalScroll` / `LazyColumn`) the instant the touch drifted past the touch-slop threshold — so a slightly-moving tap was cancelled and the button felt dead (a perfectly still tap still worked, which is why it slipped through earlier testing). It now **owns its tap** the same principled way its drag twin `ogInteractive` owns a drag: by consuming in-bounds pointer movement. Taps that drift still fire; taps outside the silhouette still fall through; sliding off the button still cancels; and the page still scrolls from non-button areas.
