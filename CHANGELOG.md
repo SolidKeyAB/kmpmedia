@@ -4,6 +4,25 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.30.0] — 2026-10-07
+
+> **Action-FX pack — stylised motion effects.** A new `com.solidkey.painpoints.fx` family for composing dramatic, anime-style action scenes: a breathing-slash ribbon, forked lightning, manga speed/impact lines, elemental particle presets, and glow / after-image modifiers. Each effect is plain serializable data (the same codec style as `OGStyleSpec` / `OGParticleSpec` / `OGAiVector`), so a designer or a language model authors one as JSON and the library brings it to life. Everything is pure `commonMain` maths, parse-once / cheap-per-frame, GPU-composited, and frame-identical on Android & iOS — no new dependency, no shaders, no network. (Bundled as one cohesive release rather than drip-fed per effect.)
+
+### Added
+- **`OGSlashView` — breathing-slash ribbons.** `OGSlashSpec` (path, tapered width, flowing edge, breathing pulse, draw-on reveal) → a glowing tapered arc that draws on along a path and stays alive; three signature forms by data — **water** (ripple), **flame** (licking), **thunder** (jagged, forked) — via `OGSlashes` (codec + `WATER` / `FLAME` / `THUNDER` presets). Pure cores: `slashCenterline`, `slashRibbonOutline`, `slashBranches`, `slashFrameAt`.
+- **`OGLightningView` — forked lightning.** `OGLightningSpec` → a recursive **midpoint-displacement** channel that strikes, flickers and decays, growing tapering sub-branches. `OGLightnings` codec + `BOLT` / `STORM` / `SPARK` presets. Pure cores: `lightningChannel`, `lightningBranches`, `lightningStrikeAt`.
+- **`OGSpeedLinesView` — manga speed / impact lines.** `OGSpeedLinesSpec` (radial focus burst or linear motion streaks, breathing) → `OGSpeedLines` codec + `IMPACT` / `FOCUS` / `MOTION` presets. Pure core: `speedLineParams`.
+- **Elemental particle presets** on `OGParticles` — `PETALS`, `EMBERS`, `DROPLETS`, `LEAVES` — plus two new particle shapes, **`petal`** (a lens) and **`teardrop`**, on `OGParticleShape`.
+- **`Modifier.ogGlow`** (an additive, blur-free bloom halo around any content) and **`Modifier.ogAfterImage`** (a fading motion-smear trail) — both capture the content once per frame into a `GraphicsLayer` and re-draw it, so they work on any composable with no per-content code.
+- **Perceptual colour + organic noise** backing the above: `OGFxColor` (OKLab gradient interpolation, so a ramp stays even) and `OGFxNoise` (2D simplex noise + fBm for the flowing water/flame edges). Both pure and deterministic.
+- **Docs:** `docs/SLASH.md` and a new **`docs/ACADEMIC_FOUNDATIONS.md`** mapping every research-grounded technique in the library (centripetal Catmull-Rom, OKLab, simplex/fBm, fractal lightning, median-cut + Floyd–Steinberg + LZW, Moore-neighbour trace + Douglas–Peucker, xorshift, superellipse) to the API that uses it, with citations.
+
+### Notes
+- **Purely additive, zero new dependencies.** The new `OGParticleShape` values and `OGParticles` presets are additive; no existing public API changed.
+- **60fps + cross-platform-deterministic.** Expensive geometry is generated once; per-frame work is a cheap sine / noise / lerp pass with no allocation on the hot path. Same results, and frame-identical motion, on Android and iOS.
+- **Glow.** The shipped glow is a layered additive bloom (crisp, zero-dep, identical on both platforms). A true gaussian bloom needs a platform shader (API-floored, not frame-identical) and remains an opt-in direction, not a default.
+- **Verification**: new tests on **JVM and iOS** for the slash geometry/lifecycle/codec, OKLab + simplex/fBm, lightning channel/branches/lifecycle/codec, speed-line params/codec, and the new particle shapes/presets.
+
 ## [1.29.0] — 2026-10-07
 
 > **Hand-drawn vector text, four new style ops, and a smoothing knob for AI shapes.** Extends the data-defined drawing-style layer (`OGStyleSpec`, 1.23.0) with four more procedural ops and brings the same ops to *text* — each glyph's outline is vectorized once and run through a style every frame, so a word is hand-inked and alive (exactly what a hand-drawn word-game tile or a title card wants). The `OGAiVector` interop also gains a `smoothing` pass and input sanitizing, so a model's faceted polygon / multi-region cut-out comes out clean and robust. Pure commonMain, no new dependency, additive — it sits on top of 1.28.0 (`1.27.0` was skipped so the published versions stay monotonic).

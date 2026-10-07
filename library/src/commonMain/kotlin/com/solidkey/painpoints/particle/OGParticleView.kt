@@ -97,4 +97,14 @@ private fun unitOutline(shape: OGParticleShape): List<Offset>? = when (shape) {
     OGParticleShape.SQUARE -> listOf(Offset(-1f, -1f), Offset(1f, -1f), Offset(1f, 1f), Offset(-1f, 1f))
     OGParticleShape.TRIANGLE -> OGParametric.regularPolygon(3).map { Offset((it.x - 0.5f) * 2f, (it.y - 0.5f) * 2f) }
     OGParticleShape.STAR -> OGParametric.star(5, innerRatio = 0.45f).map { Offset((it.x - 0.5f) * 2f, (it.y - 0.5f) * 2f) }
+    // A lens / almond — cherry-blossom petal or leaf (pointed at both ends, bulging sides).
+    OGParticleShape.PETAL -> listOf(
+        Offset(0f, -1f), Offset(0.4f, -0.4f), Offset(0.5f, 0f), Offset(0.4f, 0.4f),
+        Offset(0f, 1f), Offset(-0.4f, 0.4f), Offset(-0.5f, 0f), Offset(-0.4f, -0.4f),
+    )
+    // A teardrop — pointed at the top, round at the bottom (a water droplet / ember).
+    OGParticleShape.TEARDROP -> listOf(
+        Offset(0f, -1f), Offset(0.5f, -0.1f), Offset(0.65f, 0.4f), Offset(0.38f, 0.82f),
+        Offset(0f, 1f), Offset(-0.38f, 0.82f), Offset(-0.65f, 0.4f), Offset(-0.5f, -0.1f),
+    )
 }

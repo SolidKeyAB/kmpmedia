@@ -87,7 +87,7 @@ data class OGParticleSpec(
 }
 
 /** The particle silhouette, resolved once from [OGParticleSpec.shape]. */
-enum class OGParticleShape { CIRCLE, SQUARE, TRIANGLE, STAR }
+enum class OGParticleShape { CIRCLE, SQUARE, TRIANGLE, STAR, PETAL, TEARDROP }
 
 /**
  * A live, compiled [OGParticleSpec] — a fixed-capacity particle simulation. Build via
@@ -126,6 +126,8 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
         "square", "rect" -> OGParticleShape.SQUARE
         "triangle", "tri" -> OGParticleShape.TRIANGLE
         "star" -> OGParticleShape.STAR
+        "petal", "leaf" -> OGParticleShape.PETAL
+        "teardrop", "drop", "droplet" -> OGParticleShape.TEARDROP
         else -> OGParticleShape.CIRCLE
     }
 

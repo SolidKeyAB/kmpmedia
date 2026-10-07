@@ -115,8 +115,49 @@ object OGParticles {
         startColor = "#FFEB3B", endColor = "#F50057", endAlpha = 0f, spinDeg = 120f, seed = 13,
     )
 
+    // ── Elemental presets (pair these with the action-FX in com.solidkey.painpoints.fx) ──────────────
+
+    /** Cherry-blossom petals drifting and tumbling down from above. */
+    val PETALS = OGParticleSpec(
+        name = "petals", shape = "petal", maxParticles = 120, burst = 0, emissionRate = 24f,
+        lifetimeMs = 6000f, lifetimeJitter = 0.3f, x = 0.5f, y = -0.1f, spawnRadius = 0.6f,
+        angleDeg = 90f, spreadDeg = 40f, speed = 0.08f, speedJitter = 0.6f, gravityY = 0.01f,
+        drag = 0.05f, startSize = 0.02f, endSize = 0.02f, sizeJitter = 0.5f,
+        startColor = "#F8BBD0", endColor = "#F48FB1", startAlpha = 0.95f, endAlpha = 0f,
+        spinDeg = 120f, spinJitter = 1f, seed = 21,
+    )
+
+    /** Hot embers rising from a fire, cooling from yellow to deep orange. */
+    val EMBERS = OGParticleSpec(
+        name = "embers", shape = "circle", maxParticles = 200, burst = 0, emissionRate = 55f,
+        lifetimeMs = 1600f, lifetimeJitter = 0.4f, x = 0.5f, y = 0.72f, spawnRadius = 0.25f,
+        angleDeg = 270f, spreadDeg = 50f, speed = 0.22f, speedJitter = 0.7f, gravityY = -0.06f,
+        drag = 0.2f, startSize = 0.012f, endSize = 0.003f, sizeJitter = 0.5f,
+        startColor = "#FFE082", endColor = "#FF6D00", endAlpha = 0f, seed = 31,
+    )
+
+    /** Water droplets spraying and falling. */
+    val DROPLETS = OGParticleSpec(
+        name = "droplets", shape = "teardrop", maxParticles = 160, burst = 0, emissionRate = 40f,
+        lifetimeMs = 1400f, lifetimeJitter = 0.3f, x = 0.5f, y = 0.3f, spawnRadius = 0.25f,
+        angleDeg = 90f, spreadDeg = 60f, speed = 0.18f, speedJitter = 0.6f, gravityY = 0.5f,
+        drag = 0.1f, startSize = 0.01f, endSize = 0.006f, sizeJitter = 0.4f,
+        startColor = "#E1F5FE", endColor = "#4FC3F7", startAlpha = 0.9f, endAlpha = 0f, seed = 41,
+    )
+
+    /** Autumn leaves drifting down, turning from green to amber. */
+    val LEAVES = OGParticleSpec(
+        name = "leaves", shape = "petal", maxParticles = 90, burst = 0, emissionRate = 16f,
+        lifetimeMs = 7000f, lifetimeJitter = 0.3f, x = 0.5f, y = -0.1f, spawnRadius = 0.6f,
+        angleDeg = 90f, spreadDeg = 50f, speed = 0.09f, speedJitter = 0.7f, gravityY = 0.015f,
+        drag = 0.08f, startSize = 0.024f, endSize = 0.024f, sizeJitter = 0.6f,
+        startColor = "#AED581", endColor = "#FBC02D", startAlpha = 0.95f, endAlpha = 0f,
+        spinDeg = 150f, spinJitter = 1f, seed = 51,
+    )
+
     /** All built-in presets, keyed by lowercase name. */
     val presets: Map<String, OGParticleSpec> = listOf(
         CONFETTI, SPARKS, SNOW, BOKEH, RAIN, FIREWORKS,
+        PETALS, EMBERS, DROPLETS, LEAVES,
     ).associateBy { it.name!! }
 }
