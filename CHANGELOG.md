@@ -4,9 +4,26 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.29.0] — 2026-10-07
+
+> **Hand-drawn vector text, four new style ops, and a smoothing knob for AI shapes.** Extends the data-defined drawing-style layer (`OGStyleSpec`, 1.23.0) with four more procedural ops and brings the same ops to *text* — each glyph's outline is vectorized once and run through a style every frame, so a word is hand-inked and alive (exactly what a hand-drawn word-game tile or a title card wants). The `OGAiVector` interop also gains a `smoothing` pass and input sanitizing, so a model's faceted polygon / multi-region cut-out comes out clean and robust. Pure commonMain, no new dependency, additive — it sits on top of 1.28.0 (`1.27.0` was skipped so the published versions stay monotonic).
+
+### Added
+- **Styled vector text — `com.solidkey.painpoints.text`.** `ogVectorizeText(text, font, quality)` (an `expect` using the platform text engine — CoreText on iOS, `android.graphics` on Android) flattens a string into `OGTextOutline` glyph contours in em space; `@Composable OGStyledText(text, style, …)` vectorizes once (cached) and runs the outline through any `OGStyle` per frame, drawing living, hand-drawn letters. `OGTextOutline.styled(style, timeMs)` is the pure, unit-testable core.
+- **Four new style ops** (`com.solidkey.painpoints.style`, usable in an `OGStyleSpec` JSON pipeline and as standalone functions): `subdivide` / `resample` (`subdivideOutline` — insert points per edge so later ops have detail to work with), `smooth` / `round` (`smoothOutline` — resample through the centripetal spline, `strength` 0..1), `roughen` / `rough` / `sketch` (`roughenVertices` — a *static* hand-drawn sketch edge: subdivide + fixed seeded noise), and `wave` / `ripple` (`waveVertices` — a travelling sinusoidal ripple, params `amplitude` / `waves` / `speed`).
+- **`smoothing` on the AI decode path** — `OGAiVector.decodePolygon(text, smoothing = 0f)` / `decodePolygonOrNull`, `decodeSceneShapes(text, smoothing = 0f)`, and `OGPolygonSpec` / `OGPlacedShapeSpec` / `OGSceneSpec.toShape(s) / toShapes(s)` now take the 1.28.0 centripetal-Catmull-Rom `smoothing` (`0f` = unchanged), so a model's faceted points round into a clean outline.
+
+### Changed
+- **AI interop docs reframed** as a *stable JSON wire format* (a codec, not an AI SDK) in `docs/AI_HOOKS.md` + README — clarifying that no AI SDK or network is pulled into the library; you bring any model.
+
+### Notes
+- **Robustness.** `OGSceneSpec` / the polygon specs gained `sanitized()` (clamp coordinates to `0..1`, drop non-renderable / degenerate regions) so a sloppy model reply yields only usable cut-outs.
+- **Perf.** Style ops are the existing parse-once / apply-per-frame pipeline; `ogVectorizeText` is the one expensive step and is cached off the hot path (`OGStyledText` caches per text / font / quality), so animation stays on the 60fps path. Deterministic → same result on Android & iOS.
+- **Verification**: new tests on **JVM and iOS** for each style op and the text-outline styling core, alongside the existing style/AI suites.
+
 ## [1.28.0] — 2026-10-07
 
-> **Particles and parametric shapes — two data-defined generators.** A particle effect and a vector shape are each plain, serializable data, so a designer or a language model can author one as JSON and the library brings it to life — no code, no rebuild. This mirrors the existing `OGStyleSpec` (styles) and `OGAiVector` (describe → shape) data layers, reusing the same lenient JSON config and tolerant extraction. Everything is pure commonMain with no new dependency, and both generators clear the library's real-app 60fps perf gate. (Released on its own, separate from the in-progress styled-text / style-ops work; `1.27.0` is reserved for that.)
+> **Particles and parametric shapes — two data-defined generators.** A particle effect and a vector shape are each plain, serializable data, so a designer or a language model can author one as JSON and the library brings it to life — no code, no rebuild. This mirrors the existing `OGStyleSpec` (styles) and `OGAiVector` (describe → shape) data layers, reusing the same lenient JSON config and tolerant extraction. Everything is pure commonMain with no new dependency, and both generators clear the library's real-app 60fps perf gate. (Released on its own, ahead of the styled-text / style-ops work — which shipped right after as `1.29.0`; `1.27.0` was skipped to keep the published versions monotonic.)
 
 ### Added
 - **`com.solidkey.painpoints.particle`** — `OGParticleSpec`: a serializable emitter (emission rate, one-shot burst, lifetime + jitter, origin + spawn radius, velocity cone, gravity, drag, size / colour / alpha over life, spin, shape, seed), compiled once into a live `OGParticleSystem` — a fixed-capacity struct-of-arrays with a deterministic xorshift RNG and a hard `maxParticles` cap, so a frame is a tight numeric loop with **no per-frame allocation**. `OGParticleView(spec, playing)` draws and runs it on the frame clock (circles via `drawCircle`, polygonal shapes via a reused path). `OGParticles` is the codec + preset library: `decodeSpec` / `decode` / `encode` / `particlePrompt`, plus six presets — `CONFETTI`, `SPARKS`, `SNOW`, `BOKEH`, `RAIN`, `FIREWORKS`.

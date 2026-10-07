@@ -45,9 +45,9 @@ KMPMedia is built to be **generated correctly by AI coding assistants**, not jus
 - **It speaks SVG** — the one graphics format LLMs produce natively as text. An assistant can emit an `<svg>` (including the animated SMIL subset) or a URL, and KMPMedia renders *and animates* it live on both platforms.
 - **Declarative, consistent API** — every entry point is `OG…`, and you describe *what* (a shape, an animation set, a cue at a timestamp, a depth) as data. Generated code compiles more often and hallucinates less surface.
 - **Agent-ready docs in the repo** — a machine-readable [`llms.txt`](llms.txt) API index and an [AI coding guide](docs/AI_GUIDE.md) with prompt→snippet examples.
-- **Runtime prompt-driven editing** *(new in 1.11.0)* — [`OGAiVector`](docs/AI_HOOKS.md) hands a model a stable JSON contract and turns its reply into a live polygon lasso or SVG node patch (*"describe → shape / patch"*), so an app can let its *own users* reshape and restyle vectors with natural language — no AI SDK or networking pulled into the library, and it works with any model.
+- **Runtime prompt-driven editing** — [`OGAiVector`](docs/AI_HOOKS.md) is a **stable JSON wire format** (a codec, not an AI SDK) for the library's vector primitives. It hands a model that contract and turns the reply, or a *photo* via a vision model (*image → vector*, v1.25.0), into a live polygon lasso, a multi-region scene cut-out, or an SVG node patch (*"describe → shape / patch"*); an optional centripetal-spline `smoothing` knob rounds a model's faceted points into a clean outline. No AI SDK or networking is pulled into the library, and it works with any model (or a segmentation network that emits vertices).
 
-Today that makes KMPMedia **AI-generatable** *and* **AI-drivable at runtime**. A full serializable scene-spec + an MCP server (an LLM emits validated *data*, not Kotlin, and previews it before writing code) remain on the roadmap to make it fully **AI-ready**.
+Today that makes KMPMedia **AI-generatable** *and* **AI-drivable at runtime**, including a full serializable **scene-spec** (`OGSceneSpec`, shipped in v1.25.0). An **MCP server** (an LLM emits validated *data*, not Kotlin, and previews it before writing code) remains on the roadmap to make it fully **AI-ready**.
 
 ---
 

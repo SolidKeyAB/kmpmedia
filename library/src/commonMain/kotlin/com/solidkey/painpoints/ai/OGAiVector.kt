@@ -62,12 +62,12 @@ object OGAiVector {
      * `clipShape`. Tolerates surrounding prose / code fences. Throws if no valid JSON is present;
      * use [decodePolygonOrNull] to get `null` instead.
      */
-    fun decodePolygon(text: String): OGPolygonShape =
-        json.decodeFromString(OGPolygonSpec.serializer(), extractJson(text)).toShape()
+    fun decodePolygon(text: String, smoothing: Float = 0f): OGPolygonShape =
+        json.decodeFromString(OGPolygonSpec.serializer(), extractJson(text)).toShape(smoothing)
 
     /** [decodePolygon] but returns `null` instead of throwing on malformed input. */
-    fun decodePolygonOrNull(text: String): OGPolygonShape? =
-        runCatching { decodePolygon(text) }.getOrNull()
+    fun decodePolygonOrNull(text: String, smoothing: Float = 0f): OGPolygonShape? =
+        runCatching { decodePolygon(text, smoothing) }.getOrNull()
 
     /**
      * Parse a model reply describing an SVG patch into the `Map<id, OGSvgNodeOverride>` that
@@ -93,8 +93,14 @@ object OGAiVector {
     fun decodeSceneOrNull(text: String): OGSceneSpec? =
         runCatching { decodeScene(text) }.getOrNull()
 
-    /** [decodeScene] then straight to live clip shapes (one [OGPolygonShape] per region). */
-    fun decodeSceneShapes(text: String): List<OGPolygonShape> = decodeScene(text).toShapes()
+    /**
+     * [decodeScene] → **sanitized** live clip shapes (one [OGPolygonShape] per region): degenerate
+     * regions (fewer than 3 finite points) are dropped and vertices clamped to `0..1`, so a shaky
+     * model reply yields only usable cut-outs. [smoothing] `0..1` rounds each outline (`0` = straight).
+     * Use `decodeScene(text).toShapes()` instead if you want every region verbatim.
+     */
+    fun decodeSceneShapes(text: String, smoothing: Float = 0f): List<OGPolygonShape> =
+        decodeScene(text).sanitized().toShapes(smoothing)
 
     // --- Encode: live primitives → JSON --------------------------------------------------------
 

@@ -10,6 +10,13 @@ contract to fill in.
 > **"describe → shape / patch."** Ask a model for *"a five-pointed star"* or *"point the gauge needle to
 > 80% and make it red"*, and its reply drops straight into a `clipShape` or an `overrides` map — no glue.
 
+> **It's a wire format, not an AI SDK.** The **JSON schema** ([below](#json-schema)) is the stable,
+> versioned contract; `decode*` / `encode*` are built around it. The prompt-builder *text*
+> (`polygonPrompt`, `svgPatchPrompt`, `imageToVectorPrompt`) is a **convenience, not part of the
+> contract** — reword it, translate it, or write your own; only the JSON your model returns has to match
+> the schema. So this layer is really just a codec for the library's own vector primitives, with helpers
+> to hand a model the shape of the data.
+
 ## The library stays zero-dependency and provider-agnostic
 
 `OGAiVector` makes **no network calls** and bundles **no AI SDK**. It defines the contract and does the
@@ -35,13 +42,14 @@ object OGAiVector {
     val json: Json                                   // the lenient, unknown-key-tolerant codec used below
 
     // model reply -> live primitive (tolerant of ```json fences + surrounding prose)
-    fun decodePolygon(text: String): OGPolygonShape
-    fun decodePolygonOrNull(text: String): OGPolygonShape?
+    // `smoothing` (0..1, default 0 = straight edges) rounds the outline — see "Smoothing & robustness".
+    fun decodePolygon(text: String, smoothing: Float = 0f): OGPolygonShape
+    fun decodePolygonOrNull(text: String, smoothing: Float = 0f): OGPolygonShape?
     fun decodeSvgPatch(text: String): Map<String, OGSvgNodeOverride>
     fun decodeSvgPatchOrNull(text: String): Map<String, OGSvgNodeOverride>?
     fun decodeScene(text: String): OGSceneSpec                 // multi-region (image -> vector scene)
     fun decodeSceneOrNull(text: String): OGSceneSpec?
-    fun decodeSceneShapes(text: String): List<OGPolygonShape>  // straight to clip shapes
+    fun decodeSceneShapes(text: String, smoothing: Float = 0f): List<OGPolygonShape>  // sanitized -> clip shapes
 
     // live primitive -> JSON
     fun encodePolygon(shape: OGPolygonShape): String
@@ -73,7 +81,7 @@ model-friendly plain values (colors as strings, coordinates as floats):
 
 ```kotlin
 @Serializable data class OGPointSpec(val x: Float, val y: Float)
-@Serializable data class OGPolygonSpec(val points: List<OGPointSpec>)          // .toShape() -> OGPolygonShape
+@Serializable data class OGPolygonSpec(val points: List<OGPointSpec>)          // .toShape(smoothing=0f); .sanitized(); .isRenderable
 @Serializable data class OGNodeOverrideSpec(                                     // .toOverride() -> OGSvgNodeOverride
     val fill: String? = null, val stroke: String? = null, val strokeWidth: Float? = null,
     val translateX: Float? = null, val translateY: Float? = null,
@@ -82,9 +90,9 @@ model-friendly plain values (colors as strings, coordinates as floats):
     val pathData: String? = null, val pathDataTo: String? = null, val morphProgress: Float = 0f,
 )
 @Serializable data class OGSvgPatchSpec(val overrides: Map<String, OGNodeOverrideSpec> = emptyMap()) // .toOverrides()
-@Serializable data class OGPlacedShapeSpec(                                      // .toShape() -> OGPolygonShape
+@Serializable data class OGPlacedShapeSpec(                                      // .toShape(smoothing=0f); .sanitized(); .isRenderable
     val points: List<OGPointSpec>, val label: String? = null, val fill: String? = null)
-@Serializable data class OGSceneSpec(val shapes: List<OGPlacedShapeSpec> = emptyList()) // .toShapes() -> List<OGPolygonShape>
+@Serializable data class OGSceneSpec(val shapes: List<OGPlacedShapeSpec> = emptyList()) // .toShapes(smoothing=0f); .labels(); .sanitized()
 ```
 
 Colors are parsed with the **same** parser the SVG renderer uses, so the model may emit `#RGB`,
@@ -196,6 +204,34 @@ metadata).
 > regions), not pixel-accurate tracing. For a precise cut-out, pair it with a segmentation model (see
 > [auto-cutout](./AUTO_CUTOUT.md)) and feed those vertices through `OGPolygonSpec` / `OGSceneSpec` directly —
 > the division of labour is *LLM = understand + approximate as editable vectors; segmentation = precise mask.*
+
+## Smoothing & robustness
+
+A model emits a *faceted*, few-point outline, and often a slightly messy one. Two things turn that into a
+clean, safe clip with no change to the wire format (the JSON stays "just points"):
+
+**Smoothing.** Every decode that yields a shape takes an optional `smoothing: Float` (`0..1`, default `0`).
+`0` keeps straight edges; above `0` the outline is rounded with a closed, interpolating **centripetal
+Catmull-Rom** spline that still passes through every input vertex, so an 8–40-point silhouette reads as a
+smooth curve. Centripetal (not uniform) parameterization is used on purpose: a model's points are unevenly
+spaced, and that is exactly where uniform smoothing overshoots or forms self-intersecting loops; centripetal
+does not. It is computed once when the shape is built, never per frame, so it is free on the 60fps clip path.
+
+```kotlin
+val shape  = OGAiVector.decodePolygon(reply, smoothing = 0.6f)        // one rounded lasso
+val shapes = OGAiVector.decodeSceneShapes(reply, smoothing = 0.6f)    // rounded, sanitized regions
+// or straight from a spec: OGPolygonSpec(points).toShape(0.6f)
+```
+
+**Robustness.** Model output is rarely pristine, so the codec degrades gracefully instead of crashing:
+
+- `decodePolygonOrNull` / `decodeSceneOrNull` return `null` (not throw) on unparseable replies, for a clean fallback.
+- `OGPolygonSpec` / `OGPlacedShapeSpec` / `OGSceneSpec` expose `isRenderable` (≥ 3 finite vertices) and
+  `sanitized()` (clamps every vertex to a finite `0..1`; for a scene, also **drops** regions that can't render).
+- `decodeSceneShapes` applies `sanitized()` for you, so a shaky multi-region reply yields only usable cut-outs
+  with the `label ↔ shape` order preserved.
+- At raster time a non-finite coordinate (`NaN` / `±∞`) is treated as `0` and everything is clamped to the box,
+  so no reply can push the clip outside its bounds or poison the path.
 
 ## Where this sits on the roadmap
 

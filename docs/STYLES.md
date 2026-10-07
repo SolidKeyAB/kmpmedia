@@ -30,6 +30,10 @@ newer library degrades gracefully on an older one).
 |------|---------|--------------|-------------------|
 | `boil` | — | the living, hand-drawn "wiggly line": jitters every vertex to a fresh pseudo-random offset `boilFps` times a second | `amplitude` (`0.02`), `boilFps` (`8`), `smooth` (`true`), `seed` (`0`) |
 | `quantize` | `step`, `stepped` | snaps vertices to a `grid`×`grid` lattice — a stepped, stop-motion line | `grid` **or** `resolution` (`16`) |
+| `subdivide` | `resample` | inserts `detail` points along each edge so a low-vertex outline has enough to move — put it **before** a displacement op | `detail` (`4`) |
+| `smooth` | `round` | resamples the outline through a centripetal Catmull-Rom spline — a clean, rounded edge that still passes through every vertex | `strength` (`1`, `0..1`), `detail` (`6`) |
+| `roughen` | `rough`, `sketch` | a **static** hand-drawn / sketch edge: subdivides, then offsets each vertex by fixed hashed noise (pair with `boil` to also wobble) | `amplitude` (`0.03`), `detail` (`3`), `seed` (`0`) |
+| `wave` | `ripple` | a travelling sinusoidal ripple along the outline normal — smooth + directional (unlike boil's jitter) | `amplitude` (`0.02`), `waves` (`3`), `speed` (`1`) |
 | `pixelate` | `pixel` | **terminal** fill op: rasterizes the outline into a `resolution`×`resolution` grid and returns the filled cells — a low-res pixel / mosaic sprite | `resolution` **or** `grid` (`20`) |
 
 Notes:
@@ -92,6 +96,39 @@ OGImageView(
 
 ---
 
+## Styled vector text
+
+The style ops transform an *outline* — and **text can be an outline too**. `OGStyledText`
+(`com.solidkey.painpoints.text`) vectorizes a string into glyph contours and runs your `OGStyle`
+over each one, so the **letters themselves** are hand-inked and, for a time-varying style like `boil`
+or `wave`, alive. Ideal for a hand-drawn word-game tile or an animated title.
+
+```kotlin
+import com.solidkey.painpoints.text.OGStyledText
+import com.solidkey.painpoints.style.OGStyles
+
+val handDrawn = OGStyles.decode(
+    """{"ops":[{"op":"roughen","amplitude":0.02,"detail":4},{"op":"boil","amplitude":0.012,"boilFps":7}]}""",
+)
+
+OGStyledText(text = "WordStorm", style = handDrawn, fontSize = 40.sp, color = Color(0xFF7B2FF7))
+```
+
+How it stays fast and correct:
+
+- **Vectorized once, styled per frame.** The expensive glyph→outline step (`ogVectorizeText`, backed by
+  Android `Paint.getTextPath` + `PathMeasure` and iOS Skia `Font.getPath`) is cached per
+  `text` / `font` / `quality`; each frame only re-runs the cheap per-contour styling — it holds 60fps.
+- **Em units.** Contours come back in em space (`1.0` = one em), so a style `amplitude` of `0.02` means
+  the same "2% of an em" at any `fontSize`.
+- **Cross-platform caveat.** Android and iOS ship *different* default fonts, so the glyphs are
+  *look-equivalent*, not pixel-identical (as with any native text). Pass `OGTextFont(family = …)` for a
+  closer match, and `bold` / `italic` as needed.
+- `ogVectorizeText(text, font, quality)` is also public if you want the raw contours (an `OGTextOutline`)
+  to style or draw yourself; a terminal `pixelate` op is ignored by `OGStyledText` (it fills the outline).
+
+---
+
 ## How do I add a new style?
 
 There are two levels, depending on whether the ops you need already exist.
@@ -105,6 +142,15 @@ built-in ops in the order you want (put `pixelate` last if you use it):
 {"name":"nervous sketch",
  "ops":[{"op":"boil","amplitude":0.015,"boilFps":6,"smooth":false},
         {"op":"quantize","grid":28}]}
+```
+
+A **hand-drawn / handwriting** look is `roughen` (a fixed sketch edge) optionally kept alive with a
+gentle `boil` — great for a word-game tile edge or any outline you want to feel hand-inked:
+
+```json
+{"name":"hand-drawn",
+ "ops":[{"op":"roughen","amplitude":0.02,"detail":4},
+        {"op":"boil","amplitude":0.012,"boilFps":7}]}
 ```
 
 Feed it to `OGStyles.decode(json)` and apply it as above. That's it — a `.style` pack is just this
@@ -124,12 +170,13 @@ No AI SDK or networking is pulled into the library — you own the model and the
 
 ### 2. Add a brand-new op — a small **library** change
 
-The op *vocabulary* (`boil` / `quantize` / `pixelate`) lives in the library, so adding a genuinely new
-transform (say a `roughen` or a `dash`) is a code contribution, not a data one. It's deliberately
-small and local:
+The op *vocabulary* lives in the library, so adding a genuinely new transform (say a `dash` or a
+`halftone`) is a code contribution, not a data one. It's deliberately small and local:
 
-1. Write the pure transform as a function (model it on `quantizeVertices` / `pixelateFill` / `OGBoil`
-   in [`OGBoil.kt`](../library/src/commonMain/kotlin/com/solidkey/painpoints/style/OGBoil.kt)):
+1. Write the pure transform as a function (model it on the geometry ops in
+   [`OGStyleOps.kt`](../library/src/commonMain/kotlin/com/solidkey/painpoints/style/OGStyleOps.kt), or
+   `quantizeVertices` / `pixelateFill` / `OGBoil` in
+   [`OGBoil.kt`](../library/src/commonMain/kotlin/com/solidkey/painpoints/style/OGBoil.kt)):
    `List<OGPoint> -> List<OGPoint>` (or a terminal fill like `pixelate`).
 2. Add any new parameter field to `OGStyleOp` (keep it nullable with a default so old packs still
    decode).

@@ -31,6 +31,9 @@ import kotlin.math.roundToInt
 @Serializable
 data class OGPointSpec(val x: Float, val y: Float)
 
+/** Clamp to a finite `0..1` (`NaN`/`∞` → `0`) — used to sanitize model-supplied vertices before use. */
+internal fun clamp01(v: Float): Float = if (v.isFinite()) v.coerceIn(0f, 1f) else 0f
+
 /**
  * A closed polygon "lasso" clip region in normalized `0..1` space — the serializable twin of
  * [OGPolygonShape]. This is the "describe → clip region" payload: an LLM (or a segmentation
@@ -39,8 +42,17 @@ data class OGPointSpec(val x: Float, val y: Float)
  */
 @Serializable
 data class OGPolygonSpec(val points: List<OGPointSpec>) {
-    /** Build the live clip [OGPolygonShape]. Fewer than 3 points is degenerate (renders empty). */
-    fun toShape(): OGPolygonShape = OGPolygonShape(points.map { OGPoint(it.x, it.y) })
+    /** Build the live clip [OGPolygonShape]. [smoothing] `0..1` rounds the outline (`0` = straight
+     *  lines). Fewer than 3 points is degenerate (renders empty). */
+    fun toShape(smoothing: Float = 0f): OGPolygonShape =
+        OGPolygonShape(points.map { OGPoint(it.x, it.y) }, smoothing)
+
+    /** True when this describes a renderable polygon: at least 3 finite vertices. */
+    val isRenderable: Boolean
+        get() = points.count { it.x.isFinite() && it.y.isFinite() } >= 3
+
+    /** A copy with every vertex pulled to a finite `0..1` (drops `NaN`/`∞`, clamps strays into range). */
+    fun sanitized(): OGPolygonSpec = OGPolygonSpec(points.map { OGPointSpec(clamp01(it.x), clamp01(it.y)) })
 
     companion object {
         /** Capture an existing [OGPolygonShape] back into its serializable form. */

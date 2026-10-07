@@ -20,11 +20,20 @@ import kotlinx.serialization.Serializable
  *  "ops":[{"op":"boil","amplitude":0.03,"boilFps":10},{"op":"pixelate","resolution":20}]}
  * ```
  *
- * Built-in ops (all zero-dependency, all in [OGBoil.kt]):
+ * Built-in ops (all zero-dependency; boil/quantize/pixelate in [OGBoil.kt], the geometry ops in
+ * [OGStyleOps.kt]):
  * - **`boil`** — [OGBoil.displace]; the living/wiggly line. Params: `amplitude`, `boilFps`,
  *   `smooth`, `seed`.
  * - **`quantize`** (aliases `step`, `stepped`) — [quantizeVertices]; snap vertices to a grid.
  *   Params: `grid` (or `resolution`).
+ * - **`subdivide`** (alias `resample`) — [subdivideOutline]; insert points per edge so a
+ *   low-vertex outline has enough to move under a later op. Param: `detail`.
+ * - **`smooth`** (alias `round`) — [smoothOutline]; resample through the centripetal spline for a
+ *   rounded outline. Params: `strength` (`0..1`), `detail`.
+ * - **`roughen`** (aliases `rough`, `sketch`) — [roughenVertices]; a static hand-drawn / sketch
+ *   edge (subdivide + fixed noise). Params: `amplitude`, `detail`, `seed`.
+ * - **`wave`** (alias `ripple`) — [waveVertices]; a travelling sinusoidal ripple along the outline.
+ *   Params: `amplitude`, `waves`, `speed`.
  * - **`pixelate`** (alias `pixel`) — [pixelateFill]; a terminal *fill* op producing a pixel grid.
  *   Param: `resolution` (or `grid`). Terminal: any op placed after it is ignored.
  *
@@ -56,6 +65,14 @@ data class OGStyleOp(
     val resolution: Int? = null,
     /** `quantize`/`pixelate`: alias for [resolution]; lattice fineness. */
     val grid: Int? = null,
+    /** `smooth`: roundness `0..1` (`0` = original straight edges, `1` = full centripetal rounding). */
+    val strength: Float? = null,
+    /** `subdivide`/`roughen`/`smooth`: points (or samples) inserted per edge — denser = finer. */
+    val detail: Int? = null,
+    /** `wave`: number of full ripple cycles around the outline. */
+    val waves: Int? = null,
+    /** `wave`: ripple cycles per second (the travel speed). */
+    val speed: Float? = null,
 )
 
 /**
@@ -106,6 +123,10 @@ class OGStyle internal constructor(ops: List<OGStyleOp>) {
         class Boil(val boil: OGBoil) : Step
         class Quantize(val grid: Int) : Step
         class Pixelate(val resolution: Int) : Step
+        class Subdivide(val detail: Int) : Step
+        class Smooth(val strength: Float, val detail: Int) : Step
+        class Roughen(val amplitude: Float, val detail: Int, val seed: Int) : Step
+        class Wave(val amplitude: Float, val waves: Int, val speed: Float) : Step
     }
 
     // Compile the spec ONCE. Op names are resolved, OGBoil instances built; an op with an
@@ -126,6 +147,22 @@ class OGStyle internal constructor(ops: List<OGStyleOp>) {
                 (o.grid ?: o.resolution ?: 16).takeIf { it >= 1 }?.let { Step.Quantize(it) }
             "pixelate", "pixel" ->
                 (o.resolution ?: o.grid ?: 20).takeIf { it >= 1 }?.let { Step.Pixelate(it) }
+            "subdivide", "resample" ->
+                (o.detail ?: 4).takeIf { it >= 1 }?.let { Step.Subdivide(it) }
+            "smooth", "round" -> Step.Smooth(
+                strength = (o.strength ?: 1f).coerceIn(0f, 1f),
+                detail = (o.detail ?: 6).coerceAtLeast(1),
+            )
+            "roughen", "rough", "sketch" -> Step.Roughen(
+                amplitude = o.amplitude ?: 0.03f,
+                detail = (o.detail ?: 3).coerceAtLeast(1),
+                seed = o.seed ?: 0,
+            )
+            "wave", "ripple" -> Step.Wave(
+                amplitude = o.amplitude ?: 0.02f,
+                waves = (o.waves ?: 3).coerceAtLeast(1),
+                speed = o.speed ?: 1f,
+            )
             else -> null // unknown op: dropped (forward-compatible with newer packs)
         }
     }
@@ -140,6 +177,10 @@ class OGStyle internal constructor(ops: List<OGStyleOp>) {
         for (s in steps) when (s) {
             is Step.Boil -> outline = s.boil.displace(outline, timeMs)
             is Step.Quantize -> outline = quantizeVertices(outline, s.grid)
+            is Step.Subdivide -> outline = subdivideOutline(outline, s.detail)
+            is Step.Smooth -> outline = smoothOutline(outline, s.strength, s.detail)
+            is Step.Roughen -> outline = roughenVertices(outline, s.amplitude, s.detail, s.seed)
+            is Step.Wave -> outline = waveVertices(outline, s.amplitude, s.waves, s.speed, timeMs)
             is Step.Pixelate ->
                 return OGStyleFrame(outline, pixelateFill(outline, s.resolution), 1f / s.resolution)
         }
@@ -188,13 +229,18 @@ object OGStyles {
         - {"op":"boil","amplitude":<~0.01..0.06>,"boilFps":<~4..12>,"smooth":<true|false>} —
           the living/wiggly hand-drawn line (amplitude is a fraction of the box, 0..1 space).
         - {"op":"quantize","grid":<~8..32>} — snap vertices to a grid (stepped, stop-motion line).
+        - {"op":"subdivide","detail":<~2..8>} — add points per edge (use before boil/wave/roughen).
+        - {"op":"smooth","strength":<0..1>,"detail":<~4..8>} — round the outline (a clean curve).
+        - {"op":"roughen","amplitude":<~0.01..0.06>,"detail":<~2..6>} — a static hand-drawn / sketch edge.
+        - {"op":"wave","amplitude":<~0.01..0.06>,"waves":<~2..6>,"speed":<~0.5..2>} — a travelling ripple.
         - {"op":"pixelate","resolution":<~10..32>} — a low-res pixel/mosaic fill of the shape.
 
         Schema:
         {"name":"<short name>","ops":[{"op":"...", ...}, ...]}
 
-        Example (a shimmering pixel sprite):
+        Examples:
         {"name":"pixel sprite","ops":[{"op":"boil","amplitude":0.03,"boilFps":10},{"op":"pixelate","resolution":20}]}
+        {"name":"hand-drawn","ops":[{"op":"roughen","amplitude":0.02,"detail":4},{"op":"boil","amplitude":0.012,"boilFps":7}]}
 
         Output the JSON only, with no prose and no markdown fences.
 
