@@ -28,13 +28,17 @@ data class OGPoint(val x: Float, val y: Float)
 
 // A free-form polygon built from an ordered list of points joined by line segments (auto-closed).
 // Fewer than 3 points is degenerate → empty outline (nothing shown), never throws.
-class OGPolygonShape(val points: List<OGPoint>) : Shape {
+class OGPolygonShape(
+    val points: List<OGPoint>,
+    val smoothing: Float = 0f,   // 0 = straight edges (unchanged); 0..1 rounds the outline — see "Smoothing"
+) : Shape {
     companion object {
         fun of(vararg points: Pair<Float, Float>): OGPolygonShape   // convenience: raw (x, y) pairs
     }
 }
 
-// Pure, platform-independent helper the Shape wraps (unit-tested directly): maps + clamps points to a box.
+// Pure, platform-independent helper the Shape wraps (unit-tested directly): maps points to a box,
+// clamping to 0..1 and treating a non-finite (NaN/±∞) coordinate as 0 so raw model output is safe.
 fun scalePolygonPoints(points: List<OGPoint>, width: Float, height: Float): List<OGPoint>
 ```
 
@@ -87,6 +91,24 @@ OGImageView(
 This is exactly how the demo's **"🧍 Add Your Head to a Body"** screen
 ([`BodyRigScreen.kt`](https://github.com/SolidKeyAB/kmpmedia-demo)) cuts out just the head — the "Head
 lasso" chip feeds an AI-traced `OGPolygonShape` into the head `OGImageView`, no external tool.
+
+## Smoothing
+
+By default the vertices are joined by straight line segments. Pass `smoothing` above `0f` to round the
+outline with a closed, interpolating **centripetal Catmull-Rom** spline (drawn as cubic Béziers) that still
+passes through every vertex — so a faceted, few-point outline (e.g. an 8–40-point silhouette from a vision
+model) comes out smooth without changing the data:
+
+```kotlin
+OGPolygonShape(points, smoothing = 0.6f)   // 0f = straight (default), 1f = full roundness
+```
+
+Centripetal (√chord-length) knot spacing is used rather than uniform on purpose: a model's — or a finger's —
+points are unevenly spaced, which is exactly where uniform smoothing overshoots or forms self-intersecting
+loops; the centripetal spline does not. On an evenly spaced polygon it is identical to the classic uniform
+spline. It is computed once when the shape is built (not per frame), so it stays free on the 60fps clip path,
+and `smoothing` participates in value equality (a re-created lasso with the same points + smoothing is a cache
+hit, e.g. as an `OGMorphShape` endpoint).
 
 ## Notes
 

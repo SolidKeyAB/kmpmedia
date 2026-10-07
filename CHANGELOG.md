@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.28.0] — 2026-10-07
+
+> **Particles and parametric shapes — two data-defined generators.** A particle effect and a vector shape are each plain, serializable data, so a designer or a language model can author one as JSON and the library brings it to life — no code, no rebuild. This mirrors the existing `OGStyleSpec` (styles) and `OGAiVector` (describe → shape) data layers, reusing the same lenient JSON config and tolerant extraction. Everything is pure commonMain with no new dependency, and both generators clear the library's real-app 60fps perf gate. (Released on its own, separate from the in-progress styled-text / style-ops work; `1.27.0` is reserved for that.)
+
+### Added
+- **`com.solidkey.painpoints.particle`** — `OGParticleSpec`: a serializable emitter (emission rate, one-shot burst, lifetime + jitter, origin + spawn radius, velocity cone, gravity, drag, size / colour / alpha over life, spin, shape, seed), compiled once into a live `OGParticleSystem` — a fixed-capacity struct-of-arrays with a deterministic xorshift RNG and a hard `maxParticles` cap, so a frame is a tight numeric loop with **no per-frame allocation**. `OGParticleView(spec, playing)` draws and runs it on the frame clock (circles via `drawCircle`, polygonal shapes via a reused path). `OGParticles` is the codec + preset library: `decodeSpec` / `decode` / `encode` / `particlePrompt`, plus six presets — `CONFETTI`, `SPARKS`, `SNOW`, `BOKEH`, `RAIN`, `FIREWORKS`.
+- **`com.solidkey.painpoints.shape.OGParametric`** — pure, deterministic shape generators that turn a handful of numbers into a closed normalized outline: `regularPolygon`, `star`, `gear`, `flower`, `superellipse` (a squircle / Lamé curve), and an organic `blob` (seeded, so it is identical everywhere). `OGParametricSpec` is the serializable `{ kind, count, … }` form with `toPoints()` / `toShape(smoothing)`, and `OGParametrics` is its codec (`decodeSpec` / `decode` / `encode` / `shapePrompt`).
+- **`OGPolygonShape(points, smoothing = 0f)`** — an optional **centripetal Catmull-Rom** rounding of the outline (interpolating spline drawn as cubic Béziers); `0f` keeps the straight-edged behaviour (unchanged), `1f` is full roundness. The centripetal parametrization avoids the overshoot / self-intersection that uniform smoothing produces on unevenly spaced points (e.g. an AI- or hand-drawn lasso). `smoothing` participates in value equality. This is the prerequisite for `OGParametricSpec.toShape(smoothing)` and drops into any existing `clipShape` slot.
+
+### Notes
+- **Purely additive, zero new dependencies.** No existing public API changed — the new `OGPolygonShape` parameter defaults to `0f`.
+- **60fps and cross-platform-deterministic.** The particle simulation is allocation-free and seed-deterministic; parametric outlines are pure math generated once (never per frame). Same results, and frame-identical motion, on Android and iOS.
+- **Verification**: new tests on **JVM and iOS** covering particle determinism / cap / lifetime compaction, every parametric generator, and the smoothing spline — alongside the existing shape suite.
+
 ## [1.26.0] — 2026-10-05
 
 > **Animated GIFs now dither — smooth gradients instead of hard colour bands.** The pure-Kotlin `OGGifEncoder` has always built a shared ≤256-colour median-cut palette and mapped each pixel to its nearest entry, which bands smooth gradients and photos (exactly the content KMPMedia clips into shapes). `exportGif()` / `OGGifEncoder.encode()` now apply **Floyd–Steinberg error diffusion by default**, so the same 256-colour budget renders band-free. The diffusion is pure integer math, so the **bytes stay identical on Android and iOS**, and transparent pixels remain a hard boundary (colour never bleeds into the see-through holes). Purely additive, no new dependency, no API break — the new `dither` parameter defaults to on.
