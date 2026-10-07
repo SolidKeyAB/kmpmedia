@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.31.0] — 2026-10-07
+
+> **True-gaussian bloom — and a fix that makes the FX composite modifiers actually composite.** Adds `Modifier.ogBloom`, an opt-in gaussian-blur bloom (the soft, cinematic cousin of `ogGlow`), and repairs a rendering bug that silently no-op'd `ogGlow` and `ogAfterImage` in 1.30.0. Still pure `commonMain` wiring, no new dependency.
+
+### Added
+- **`Modifier.ogBloom(radius, intensity, color?)` — true-gaussian bloom.** Captures the content into a `GraphicsLayer` and redraws it through a real platform gaussian blur (`BlurEffect` → Android `RenderEffect` / iOS Skia), additively (`BlendMode.Plus`) as a wide soft halo under a tighter bright core, for a smooth luminous glow. **Opt-in by design:** it leans on a platform blur, so the soft look needs **Android 31+** (below that the blur no-ops and it degrades to a crisp draw — use `ogGlow` there), and Android/iOS blurs are **not pixel-identical**, so bloomed content is excluded from the byte-identical export/test guarantee. The pure `bloomPasses` falloff is unit-tested. `ogGlow` remains the zero-dependency, frame-identical additive halo.
+
+### Fixed
+- **`ogGlow` and `ogAfterImage` were silent no-ops in 1.30.0 — now fixed.** Both reused a single `GraphicsLayer` and mutated its per-composite properties between repeated `drawLayer` calls (`ogGlow`: scale + alpha per pass → the halo; `ogAfterImage`: alpha per ghost → the fade). Those are `RenderNode` properties read at **rasterization** time, not at `drawLayer()` time, so every composite collapsed to the final (reset) state: no halo, no fade (only `translate`-based positions survived, which is why after-images still appeared but didn't fade). Fixed by giving each composite its **own pooled layer** (`ogGlow` up to 6 passes, `ogAfterImage` up to 16 ghosts, `ogBloom` 2), so each rasterizes with its distinct transform / alpha / effect. Verified on-device (Android API 35) and on iOS.
+
+### Notes
+- **No public API change.** `ogGlow` / `ogAfterImage` signatures are unchanged — they simply render correctly now. The same root cause is fixed uniformly across the three `com.solidkey.painpoints.fx` composite modifiers.
+- **Perf.** Each modifier now records its content into a few pooled layers per frame (one per composite) instead of one; the composite count is unchanged and bounded, so it stays on the 60fps path.
+
 ## [1.30.0] — 2026-10-07
 
 > **Action-FX pack — stylised motion effects.** A new `com.solidkey.painpoints.fx` family for composing dramatic, anime-style action scenes: a breathing-slash ribbon, forked lightning, manga speed/impact lines, elemental particle presets, and glow / after-image modifiers. Each effect is plain serializable data (the same codec style as `OGStyleSpec` / `OGParticleSpec` / `OGAiVector`), so a designer or a language model authors one as JSON and the library brings it to life. Everything is pure `commonMain` maths, parse-once / cheap-per-frame, GPU-composited, and frame-identical on Android & iOS — no new dependency, no shaders, no network. (Bundled as one cohesive release rather than drip-fed per effect.)
