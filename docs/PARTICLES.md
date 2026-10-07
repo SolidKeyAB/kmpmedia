@@ -1,4 +1,4 @@
-# Particles — `com.solidkey.painpoints.particle` (KMPMedia 1.27.0)
+# Particles — `com.solidkey.painpoints.particle` (KMPMedia 1.28.0)
 
 A **data-defined particle system**: an emitter described as plain, serializable JSON that the
 library compiles once and simulates each frame. It is the generative-motion member of KMPMedia's

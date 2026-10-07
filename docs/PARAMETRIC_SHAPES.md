@@ -1,4 +1,4 @@
-# Parametric shapes — `com.solidkey.painpoints.shape.OGParametric` (KMPMedia 1.27.0)
+# Parametric shapes — `com.solidkey.painpoints.shape.OGParametric` (KMPMedia 1.28.0)
 
 **Parametric shapes** turn a handful of numbers into a closed outline: a 7-point star, a 12-tooth
 gear, a 6-petal flower, a squircle, an organic blob. They are the *generative* sibling of
