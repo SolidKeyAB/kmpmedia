@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.32.0] — 2026-10-08
+
+> **Live looks — a data-defined colour grade.** Adds `com.solidkey.painpoints.look`: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer colour grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS. No new dependency.
+
+### Added
+- **`OGLookSpec` + `Modifier.ogLook(spec, blend)` — grade any graphic.** A look is plain data: six perceptual knobs (`brightness`, `contrast`, `saturation`, `temperature`, `tint`, `hue`, each neutral by default) compiled **once** into a 4×5 `ColorMatrix` → `ColorFilter`, cached per spec. `Modifier.ogLook` captures a composable into a `GraphicsLayer` and redraws it through that filter, so it grades photos, GIFs, SVGs, lasso-cut cut-outs and `Canvas` drawings with no per-content code — one GPU colour op, no per-frame allocation, 60fps, byte-identical across platforms (pure maths, no blur/shader).
+- **`OGLooks` codec + presets.** Decode/encode a `.look` JSON pack (`decodeSpec` / `decode` / `encode`) with a `lookPrompt(instruction)` builder, mirroring `OGAiVector` / `OGStyles` (same lenient, fence-tolerant JSON) so a designer or a language model can author a look as data. Five ready-made presets: `warm`, `cool`, `noir`, `faded`, `vivid`.
+- **Compositor grade + blend.** `OGCompositionLayer` gains `look: OGLookSpec?` and `blend: OGBlendMode` (`NORMAL` / `MULTIPLY` / `SCREEN` / `OVERLAY` / `LIGHTEN` / `DARKEN` / `PLUS`), applied in the shared render path so a layer is graded and composited identically in the live preview and the GIF/MP4 export.
+
+### Notes
+- **No breaking change.** The new `look` / `blend` fields default to neutral, so existing compositions render identically. `NORMAL` blend preserves the compositor's byte-identical export guarantee; the other blend modes composite through the platform's own Skia (visually consistent, not part of the byte-identical guarantee).
+- **Scope.** Grades drawn graphics (photos / GIFs / shapes / `Canvas`); the live **video** surface is excluded (the same `ColorFilter`-over-surface limit as the soft-mask and blur modifiers). True per-pixel **vibrance** and **3-D LUTs** are intentionally out of this cut — neither is expressible as one linear colour matrix, so including them would break the single-op / frame-identical guarantee.
+
 ## [1.31.0] — 2026-10-07
 
 > **True-gaussian bloom — and a fix that makes the FX composite modifiers actually composite.** Adds `Modifier.ogBloom`, an opt-in gaussian-blur bloom (the soft, cinematic cousin of `ogGlow`), and repairs a rendering bug that silently no-op'd `ogGlow` and `ogAfterImage` in 1.30.0. Still pure `commonMain` wiring, no new dependency.

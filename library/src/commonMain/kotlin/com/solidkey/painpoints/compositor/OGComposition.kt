@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import com.solidkey.painpoints.look.OGBlendMode
+import com.solidkey.painpoints.look.OGLookSpec
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -47,6 +49,10 @@ data class OGCompositionLayer(
     val contentScale: ContentScale = ContentScale.Crop,
     val startMs: Long = 0L,
     val endMs: Long? = null,
+    /** An optional colour grade applied to this layer's content (a data-defined "live look"). */
+    val look: OGLookSpec? = null,
+    /** How this layer composites over the layers beneath it. [OGBlendMode.NORMAL] = source-over. */
+    val blend: OGBlendMode = OGBlendMode.NORMAL,
 )
 
 /** A layer flattened at one instant — every track evaluated to a plain value, ready to draw. */
@@ -61,6 +67,8 @@ data class OGResolvedLayer(
     val opacity: Float,
     val clip: Shape?,
     val contentScale: ContentScale,
+    val look: OGLookSpec? = null,
+    val blend: OGBlendMode = OGBlendMode.NORMAL,
 )
 
 /**
@@ -118,4 +126,6 @@ internal fun OGCompositionLayer.resolveAt(timeMs: Long): OGResolvedLayer = OGRes
     opacity = opacity.valueAt(timeMs).coerceIn(0f, 1f),
     clip = clip,
     contentScale = contentScale,
+    look = look,
+    blend = blend,
 )

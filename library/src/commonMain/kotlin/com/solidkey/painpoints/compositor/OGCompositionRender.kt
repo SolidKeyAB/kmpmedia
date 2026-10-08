@@ -2,8 +2,10 @@ package com.solidkey.painpoints.compositor
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
@@ -43,6 +45,12 @@ internal fun DrawScope.drawResolvedLayer(layer: OGResolvedLayer) {
     val lsize = Size(layer.width, layer.height)
     val pivot = Offset(layer.width / 2f, layer.height / 2f)
 
+    // Compile the layer's look to a ColorFilter (cached on the spec) and its serializable blend to a
+    // Compose BlendMode. Both are applied straight on the draw calls below — a single GPU colour op,
+    // no offscreen layer. An identity look is treated as "no filter" so it stays a plain draw.
+    val cf: ColorFilter? = layer.look?.takeIf { !it.isIdentity }?.colorFilter
+    val bm: BlendMode = layer.blend.toBlendMode()
+
     withTransform({
         translate(layer.x, layer.y)
         if (layer.rotationDeg != 0f) rotate(layer.rotationDeg, pivot)
@@ -51,9 +59,12 @@ internal fun DrawScope.drawResolvedLayer(layer: OGResolvedLayer) {
         val paint: DrawScope.() -> Unit = {
             when (val c = layer.content) {
                 is OGLayerContent.Solid ->
-                    drawRect(color = c.color, topLeft = Offset.Zero, size = lsize, alpha = layer.opacity)
+                    drawRect(
+                        color = c.color, topLeft = Offset.Zero, size = lsize, alpha = layer.opacity,
+                        colorFilter = cf, blendMode = bm,
+                    )
                 is OGLayerContent.Image ->
-                    drawImageIntoBox(c.bitmap, lsize, layer, layer.opacity)
+                    drawImageIntoBox(c.bitmap, lsize, layer, layer.opacity, cf, bm)
             }
         }
         val clip = layer.clip
@@ -72,6 +83,8 @@ private fun DrawScope.drawImageIntoBox(
     size: Size,
     layer: OGResolvedLayer,
     alpha: Float,
+    colorFilter: ColorFilter?,
+    blendMode: BlendMode,
 ) {
     val iw = bitmap.width.toFloat()
     val ih = bitmap.height.toFloat()
@@ -88,6 +101,8 @@ private fun DrawScope.drawImageIntoBox(
             dstOffset = IntOffset(dx.roundToInt(), dy.roundToInt()),
             dstSize = IntSize(dw.roundToInt().coerceAtLeast(1), dh.roundToInt().coerceAtLeast(1)),
             alpha = alpha,
+            colorFilter = colorFilter,
+            blendMode = blendMode,
         )
     }
 }
