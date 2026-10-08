@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1018"/>
+      <stop offset="1" stop-color="#05070c"/>
+    </linearGradient>
+    <radialGradient id="focal" cx="0.720" cy="0.357" r="0.75">
+      <stop offset="0" stop-color="#16324a" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#0b1a28" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#05070c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leftfade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#05070c" stop-opacity="0.92"/>
+      <stop offset="0.42" stop-color="#05070c" stop-opacity="0.35"/>
+      <stop offset="0.6" stop-color="#05070c" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="speed" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8BE9FD"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="slash" gradientUnits="userSpaceOnUse" x1="360" y1="330" x2="930" y2="95">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset="0.5" stop-color="#E8FBFF"/>
+      <stop offset="1" stop-color="#0277BD"/>
+    </linearGradient>
+    <linearGradient id="bolt" gradientUnits="userSpaceOnUse" x1="770" y1="20" x2="650" y2="250">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#FFF176"/>
+      <stop offset="1" stop-color="#FFC400"/>
+    </linearGradient>
+    <filter id="glowBig" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="glowMed" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="soft" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="1000" height="420" fill="url(#bg)"/>
+  <rect width="1000" height="420" fill="url(#focal)"/>
+
+  <!-- speed lines -->
+  <g>
+    <line x1="868.3" y1="172.4" x2="1807.6" y2="314.4" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="871.1" y1="206.8" x2="1749.7" y2="536.9" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="865.6" y1="243.1" x2="1646.8" y2="742.6" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="851.2" y1="279.4" x2="1503.3" y2="922.3" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="805.7" y1="280.0" x2="1325.6" y2="1068.3" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.078" stroke-linecap="round"/>
+    <line x1="781.0" y1="305.6" x2="1121.5" y2="1174.1" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="749.2" y1="326.2" x2="899.8" y2="1235.2" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="713.2" y1="299.8" x2="670.2" y2="1248.9" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="679.3" y1="306.2" x2="442.8" y2="1214.5" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="642.6" y1="304.6" x2="227.6" y2="1133.6" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.078" stroke-linecap="round"/>
+    <line x1="605.0" y1="294.0" x2="33.8" y2="1009.7" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="599.7" y1="248.8" x2="-129.9" y2="848.3" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="571.6" y1="226.9" x2="-256.5" y2="656.3" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="547.8" y1="197.4" x2="-340.5" y2="442.2" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="570.3" y1="158.9" x2="-378.1" y2="215.3" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.078" stroke-linecap="round"/>
+    <line x1="560.4" y1="125.9" x2="-367.6" y2="-14.4" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="558.2" y1="89.2" x2="-309.7" y2="-236.9" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="564.7" y1="50.7" x2="-206.8" y2="-442.6" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="609.1" y1="40.7" x2="-63.3" y2="-622.3" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="628.0" y1="10.5" x2="114.4" y2="-768.3" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.078" stroke-linecap="round"/>
+    <line x1="654.8" y1="-16.3" x2="318.5" y2="-874.1" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="695.5" y1="2.0" x2="540.2" y2="-935.2" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="727.3" y1="-11.3" x2="769.8" y2="-948.9" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="763.6" y1="-17.3" x2="997.2" y2="-914.5" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="802.5" y1="-14.8" x2="1212.4" y2="-833.6" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.078" stroke-linecap="round"/>
+    <line x1="817.1" y1="28.3" x2="1406.2" y2="-709.7" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.050" stroke-linecap="round"/>
+    <line x1="849.1" y1="43.9" x2="1569.9" y2="-548.3" stroke="url(#speed)" stroke-width="1.80" stroke-opacity="0.092" stroke-linecap="round"/>
+    <line x1="878.5" y1="67.8" x2="1696.5" y2="-356.3" stroke="url(#speed)" stroke-width="2.20" stroke-opacity="0.064" stroke-linecap="round"/>
+    <line x1="864.6" y1="110.2" x2="1780.5" y2="-142.2" stroke="url(#speed)" stroke-width="1.00" stroke-opacity="0.106" stroke-linecap="round"/>
+    <line x1="881.1" y1="140.4" x2="1818.1" y2="84.7" stroke="url(#speed)" stroke-width="1.40" stroke-opacity="0.078" stroke-linecap="round"/>
+  </g>
+
+  <!-- particles (behind the hero) -->
+  <g>
+    <circle cx="820" cy="300" r="6" fill="#FFCC66" fill-opacity="0.9"/>
+    <circle cx="880" cy="240" r="4" fill="#FFD27A" fill-opacity="0.8"/>
+    <circle cx="760" cy="330" r="8" fill="#FFB84D" fill-opacity="0.7" filter="url(#soft)"/>
+    <circle cx="930" cy="180" r="5" fill="#8BE9FD" fill-opacity="0.8"/>
+    <circle cx="690" cy="200" r="3" fill="#B3E5FC" fill-opacity="0.9"/>
+    <circle cx="610" cy="120" r="10" fill="#4FC3F7" fill-opacity="0.35" filter="url(#soft)"/>
+    <circle cx="860" cy="120" r="4" fill="#FFE082" fill-opacity="0.85"/>
+    <circle cx="960" cy="300" r="7" fill="#4FC3F7" fill-opacity="0.4" filter="url(#soft)"/>
+    <circle cx="800" cy="80" r="3" fill="#FFFFFF" fill-opacity="0.9"/>
+    <circle cx="640" cy="320" r="5" fill="#9BE7FF" fill-opacity="0.7"/>
+    <circle cx="910" cy="350" r="9" fill="#FF9E57" fill-opacity="0.3" filter="url(#soft)"/>
+    <circle cx="560" cy="230" r="4" fill="#8BE9FD" fill-opacity="0.6"/>
+    <circle cx="740" cy="60" r="5" fill="#FFF3C4" fill-opacity="0.8"/>
+    <circle cx="980" cy="120" r="4" fill="#B3E5FC" fill-opacity="0.6"/>
+    <circle cx="700" cy="370" r="6" fill="#4FC3F7" fill-opacity="0.5"/>
+  </g>
+
+  <!-- SLASH RIBBON: glow copy, body, bright core -->
+  <g>
+    <path d="M 360 330 C 540 250, 760 300, 930 95" fill="none" stroke="url(#slash)" stroke-width="54"
+          stroke-linecap="round" stroke-opacity="0.55" filter="url(#glowBig)"/>
+    <path d="M 360 330 C 540 250, 760 300, 930 95" fill="none" stroke="url(#slash)" stroke-width="26"
+          stroke-linecap="round"/>
+    <path d="M 360 330 C 540 250, 760 300, 930 95" fill="none" stroke="#FFFFFF" stroke-width="6"
+          stroke-linecap="round" stroke-opacity="0.95"/>
+  </g>
+
+  <!-- FORKED LIGHTNING: glow copy + crisp bolt + fork -->
+  <g>
+    <polyline points="770,18 742,70 772,104 740,150 760,196 726,250"
+              fill="none" stroke="url(#bolt)" stroke-width="12" stroke-linejoin="round"
+              stroke-opacity="0.6" filter="url(#glowMed)"/>
+    <polyline points="770,18 742,70 772,104 740,150 760,196 726,250"
+              fill="none" stroke="url(#bolt)" stroke-width="3.5" stroke-linejoin="round"/>
+    <polyline points="772,104 806,128 800,168" fill="none" stroke="url(#bolt)"
+              stroke-width="2.5" stroke-linejoin="round" stroke-opacity="0.9"/>
+    <polyline points="740,150 712,170" fill="none" stroke="url(#bolt)"
+              stroke-width="2" stroke-linejoin="round" stroke-opacity="0.8"/>
+  </g>
+
+  <!-- left fade so the title reads -->
+  <rect width="1000" height="420" fill="url(#leftfade)"/>
+
+  <!-- TITLE BLOCK -->
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <text x="60" y="150" font-size="62" font-weight="800" fill="#FFFFFF" letter-spacing="1">ANIME-STYLE</text>
+    <text x="60" y="214" font-size="62" font-weight="800" fill="#4FC3F7" letter-spacing="1">ACTION FX</text>
+    <text x="62" y="262" font-size="25" font-weight="600" fill="#DCE7F2">in Compose Multiplatform</text>
+    <text x="62" y="294" font-size="18" font-weight="500" fill="#8DA2B8">no shaders  ·  one codebase  ·  Android + iOS</text>
+    <g>
+      <rect x="60" y="330" width="330" height="40" rx="20" fill="#0f1a26" stroke="#243a46" stroke-width="1"/>
+      <text x="80" y="356" font-size="19" font-family="Menlo, Consolas, monospace" fill="#8BE9FD">se.solidkey:kmpmedia-lib</text>
+    </g>
+  </g>
+</svg>
