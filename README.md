@@ -8,7 +8,7 @@
   <a href="https://central.sonatype.com/artifact/se.solidkey/kmpmedia-lib"><img src="https://img.shields.io/maven-central/v/se.solidkey/kmpmedia-lib?label=Maven%20Central&color=blue" alt="KMPMedia on Maven Central — always the latest published version"></a>
 </p>
 
-**A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, **animated GIFs**, audio, and video, on **Android and iOS**.
+**A Kotlin Multiplatform media library for Compose** — with a focus on **animated, interactive, and runtime-editable vector SVG**, plus image processing, **animated GIFs**, audio, video, an **on-device compositor with GIF/MP4 export**, and a **motion & action-FX** set, on **Android and iOS**.
 
 Everything renders into native Compose primitives (`Canvas`/`drawScope`), so SVGs are live vectors you can animate, drag, layer, and edit at runtime — not rasterized bitmaps.
 
@@ -32,9 +32,14 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Data-defined drawing styles** — JSON `{op}` pipeline → live boil / quantize / pixelate (`OGStyleSpec`) | ✅ | ❌ | ❌ |
 | **Interactive / draggable / gesture** layers | ✅ | ❌ | ❌ |
 | **Any graphic → a tappable button** — shape-aware tap + press effects (`Modifier.ogButton`) | ✅ | ❌ | ❌ |
+| **On-device compositor + export** — layer timeline with keyframes → animated **GIF & H.264 MP4** (`OGComposition`) | ✅ | ❌ | ❌ |
+| **Motion & action FX** — slash ribbons, forked lightning, speed-lines, glow / bloom (`com.solidkey.painpoints.fx`) | ✅ | ❌ | ❌ |
+| **Data-defined particles & parametric shapes** (`OGParticleSpec` / `OGParametric`) | ✅ | ❌ | ❌ |
+| **Live colour looks + blend modes** — data-defined grade (`OGLookSpec` / `Modifier.ogLook`) | ✅ | ❌ | ❌ |
+| **Soft / gradient & multi-region masks** (`ogSoftClip` / `OGMultiRegionShape`) | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
-If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need the SVG to **move, respond, or change at runtime**.
+If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need media to **move, respond, compose, or change at runtime**.
 
 ---
 
@@ -219,7 +224,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.31.0")
+            implementation("se.solidkey:kmpmedia-lib:1.32.0")
         }
     }
 }
