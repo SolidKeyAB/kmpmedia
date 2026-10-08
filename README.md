@@ -125,6 +125,7 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 - **🎆 Data-defined particles & parametric shapes** *(v1.28.0)* — a particle effect and a vector shape are each plain serializable data: an `OGParticleSpec` (rate, gravity, colour-over-life, shape) compiled once into a `OGParticleView` (a struct-of-arrays sim, no per-frame allocation, deterministic from a seed), and parametric outlines (`star` / `gear` / `flower` / `superellipse` / `blob`) wrapped in an `OGPolygonShape` clipShape. Author-as-JSON, 60fps, same on Android & iOS. See [**docs/PARTICLES.md**](docs/PARTICLES.md) · [**docs/PARAMETRIC_SHAPES.md**](docs/PARAMETRIC_SHAPES.md).
 - **🖋️ Styled vector text** *(v1.29.0)* — `OGStyledText` vectorizes a string once and runs each glyph outline through a drawing style (`roughen` / `boil` / `wave` / …) every frame, so the letters are hand-inked and alive — a title card or a word-game tile. See [**docs/STYLES.md**](docs/STYLES.md).
 - **⚡ Action-FX pack** *(v1.30.0)* — a `com.solidkey.painpoints.fx` family for composing stylised action scenes: `OGSlashView` (a breathing-slash ribbon — water / flame / thunder by data), `OGLightningView` (forked, fractal lightning), `OGSpeedLinesView` (manga impact lines), elemental particle presets (petals / embers / droplets / leaves), and `Modifier.ogGlow` / `Modifier.ogAfterImage`. Each effect is serializable data; all pure maths, 60fps, frame-identical on Android & iOS — no shaders, no new dependency. See [**docs/SLASH.md**](docs/SLASH.md).
+- **🌟 True-gaussian bloom** *(v1.31.0)* — `Modifier.ogBloom(radius, intensity, color?)` redraws a composable through a real platform gaussian blur (Android `RenderEffect` / iOS Skia), blended additively, for a soft luminous halo — the cinematic cousin of the zero-dependency, frame-identical `ogGlow`. Opt-in: the blur needs **Android 31+** (it no-ops to a crisp draw below) and isn't pixel-identical across platforms. This release also repairs a 1.30.0 bug that silently no-op'd `ogGlow` and `ogAfterImage`, so the composite FX modifiers now render correctly. See [**docs/SLASH.md**](docs/SLASH.md).
 
 *(These join the GIF tour above once their captures land — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see them live now.)*
 
@@ -217,7 +218,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.26.0")
+            implementation("se.solidkey:kmpmedia-lib:1.31.0")
         }
     }
 }
