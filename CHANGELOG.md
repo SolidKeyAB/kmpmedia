@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.34.0] — 2026-10-10
+
+> **Motion design — draw-on, motion paths & stagger.** Adds `com.solidkey.painpoints.motion`: an arc-length `OGMotionPath` you reveal as a self-drawing stroke (`OGDrawOnStroke`), send an element gliding + turning along (`Modifier.ogMotionPath`), plus `OGStagger` for per-element offset timing. Pure-maths core, data-defined specs, zero new dependency, 60fps, same code on Android & iOS.
+
+### Added
+- **`OGMotionPath` — an arc-length path.** Build it once from normalized `0..1` vertices (`of` = polyline, `smoothOpen` = a cusp-free centripetal Catmull-Rom curve, `loop` = a closed/rounded loop) and read `pointAt(t)` / `tangentDegAt(t)` / `trimmed(start, end)` by a `progress` measured **by distance travelled**, not vertex index, so motion is constant-speed on unevenly-spaced points. Cumulative lengths are precomputed; every lookup is an O(log n) binary search with no per-frame allocation. Pure and platform-independent (unit-tested on JVM + iOS).
+- **Draw-on — `OGDrawOnStroke` + `DrawScope.drawOGStroke`.** Reveal a path as a stroke from `start` to `progress` (`0..1`) — a line, logo outline or signature animating into existence. The progress is read inside the `Canvas` draw, so it repaints without recomposing; `trimmed` scans only the revealed window.
+- **Motion path — `Modifier.ogMotionPath(path, progress, containerSize, orient, center)`.** Send any composable gliding along the path; `orient` turns it to face its travel direction (exact in non-square boxes). Progress is read inside a `graphicsLayer`, so it re-positions each frame without recomposition; it is a no-op until the container size is known.
+- **Stagger — `OGStagger.progressFor` + `OGEasing`.** Turn one shared timeline into a per-element `0..1` progress so a group animates with offset timing (cascade / wave / pop); `stagger` `0..1` spreads the starts, `reverse` flips the lead, and five easings (`LINEAR` / `EASE_IN` / `EASE_OUT` / `EASE_IN_OUT` / `OVERSHOOT`) shape each curve. Stateless pure maths.
+- **`OGMotionPathSpec` / `OGStaggerSpec` + `OGMotions` codec.** Both primitives are plain `@Serializable` data; decode/encode a pack and build a model prompt (`decodePath` / `decodeStaggerSpec` / `encode` / `motionPathPrompt` / `staggerPrompt`) with the same lenient, fence-tolerant JSON as `OGAiVector` / `OGLooks`, plus six stagger presets (`together` / `cascade` / `wave` / `sequential` / `pop` / `reverse`).
+
+### Notes
+- **All normalized `0..1`** over the target box (same convention as `OGPoint` / `OGPolygonShape`); smooth paths use the library's cusp-free centripetal Catmull-Rom. Non-finite inputs are treated as `0` (render-safe).
+
 ## [1.33.0] — 2026-10-09
 
 > **Audio-reactive vectors — make any vector react to sound.** Adds `com.solidkey.painpoints.audio.reactive`: a pure-Kotlin FFT folds PCM into bass / mid / treble / level plus a beat flag, smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable at 60fps. The capture stays app-side via a pluggable `OGAudioSource`, so no platform audio or permission enters the library. No new dependency.

@@ -38,6 +38,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Live colour looks + blend modes** — data-defined grade (`OGLookSpec` / `Modifier.ogLook`) | ✅ | ❌ | ❌ |
 | **Soft / gradient & multi-region masks** (`ogSoftClip` / `OGMultiRegionShape`) | ✅ | ❌ | ❌ |
 | **Audio-reactive vectors** — bind live sound (bass/mid/treble/level + beat) to any vector (`OGAudioAnalyzer` / `Modifier.ogAudioReactive`) | ✅ | ❌ | ❌ |
+| **Motion design** — draw-on strokes, motion paths (glide + orient along a curve), staggered timing (`OGMotionPath` / `Modifier.ogMotionPath` / `OGStagger`) | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
 If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need media to **move, respond, compose, or change at runtime**.
@@ -162,6 +163,7 @@ Here's the full rundown of this wave (📷 live camera is the one effect not sho
 - **🌟 True-gaussian bloom** *(v1.31.0)* — `Modifier.ogBloom(radius, intensity, color?)` redraws a composable through a real platform gaussian blur (Android `RenderEffect` / iOS Skia), blended additively, for a soft luminous halo — the cinematic cousin of the zero-dependency, frame-identical `ogGlow`. Opt-in: the blur needs **Android 31+** (it no-ops to a crisp draw below) and isn't pixel-identical across platforms. This release also repairs a 1.30.0 bug that silently no-op'd `ogGlow` and `ogAfterImage`, so the composite FX modifiers now render correctly. See [**docs/SLASH.md**](docs/SLASH.md).
 - **🌈 Live looks** *(v1.32.0)* — a colour grade is just data: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS; a look serializes to a `.look` JSON a model can author (like `OGAiVector` / `OGStyles`). See [**docs/LOOKS.md**](docs/LOOKS.md).
 - **🎵 Audio-reactive vectors** *(v1.33.0)* — make any vector react to sound: a pure-Kotlin FFT (`OGFft`) folds PCM into bass / mid / treble / level + a beat flag (`OGAudioAnalyzer`), smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable (or read it straight into a spec). The capture is a pluggable `OGAudioSource` — a built-in deterministic `OGSyntheticAudioSource` runs it with no mic, and you feed your own mic/music tap on device, so no platform audio or permission enters the library. Zero-dep, 60fps, same code on Android & iOS. See [**docs/AUDIO_REACTIVE.md**](docs/AUDIO_REACTIVE.md).
+- **✍️ Motion design** *(v1.34.0)* — three motion-graphics primitives in `com.solidkey.painpoints.motion`: **draw-on** (a stroke or logo that draws itself on by arc length, `OGDrawOnStroke`), **motion paths** (send any element gliding along a curve at constant speed and turning to face its travel, `Modifier.ogMotionPath`), and **stagger** (one timeline → per-element offset timing so a group cascades / waves / pops, `OGStagger`). The path + stagger are plain serializable data (`OGMotions`), the core is pure arc-length maths (O(log n) per lookup, centripetal smoothing, no recomposition), 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
 
 *(📷 Live camera is the one effect without a GIF here — it needs a real device's camera (there's nothing to film on a headless emulator), so run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) on a device to see it live.)*
 
@@ -254,7 +256,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.33.0")
+            implementation("se.solidkey:kmpmedia-lib:1.34.0")
         }
     }
 }
