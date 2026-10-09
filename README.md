@@ -138,7 +138,19 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>🎵 Audio-reactive vectors · 🌈 Live looks (colour grade) · 🖊️ Boiling-line style.</b> Each is plain serializable data a model can author; one GPU op per frame — Android shown, identical on iOS.</sub>
 
-Here's the full rundown of this wave (a few — auto-cutout, live camera, graphic → button, styled vector text and bloom — are live in the demo with their captures still landing):
+<p align="center">
+  <img src="demo-screenshots/button-demo.gif" width="30%" alt="Graphic-to-button on Android — a gold SVG star, a lasso-cut photo head and a diamond, each pressed in turn via Modifier.ogButton: the star scales down, the photo gets a pop-art 'Brutalist' hard-shadow push-in, the diamond dims, and a tap counter updates" />
+  <img src="demo-screenshots/styled-text-demo.gif" width="30%" alt="Styled vector text on Android — the word WordStorm vectorized once and run through a hand-drawn boil + roughen style every frame via OGStyledText, so each letter outline jitters and looks hand-inked" />
+  <img src="demo-screenshots/bloom-demo.gif" width="30%" alt="Gaussian bloom on Android — a gold star shown raw on the left and through Modifier.ogBloom on the right, a real platform gaussian blur adding a soft luminous halo that grows and shrinks as the radius cycles from 14dp to 40dp" />
+</p>
+<sub><b>🔘 Any graphic → a button · 🖋️ Styled vector text · 🌟 Gaussian bloom.</b> Shape-aware press effects (scale / brutalist push-in / dim), hand-inked animated letters, and a real platform gaussian halo — Android shown, identical on iOS (bloom needs Android 31+).</sub>
+
+<p align="center">
+  <img src="demo-screenshots/auto-cutout-demo.png" width="42%" alt="Auto-cutout on Android — a synthetic subject (orange body, purple head) on a white background beside the same subject with its background removed and placed on a gradient, traced to a 17-point polygon lasso by the zero-dependency chroma-key segmenter" />
+</p>
+<sub><b>🪄 Auto-cutout → live lasso.</b> The background is removed and the silhouette traced to a polygon lasso that drops into the same <code>clipShape</code> slot (shown on a synthetic subject so it reproduces without a photo). A still — the result itself doesn't animate.</sub>
+
+Here's the full rundown of this wave (📷 live camera is the one effect not shown here — it needs a real device's camera, so it stays described):
 
 - **🪄 Auto-cutout → live lasso** *(v1.19.0)* — drop a photo and the subject is clipped out: a pluggable `OGSegmenter` seam (plug in ML Kit / Vision / a cloud model) plus a cross-platform mask → lasso tracer (flood-fill → Moore-neighbour trace → Douglas–Peucker simplify) whose output drops straight into the same `clipShape` slot. No ML model is bundled. See [**docs/AUTO_CUTOUT.md**](docs/AUTO_CUTOUT.md).
 - **📷 Live camera in any shape** *(v1.22.0)* — `OGCameraPreview(shape, facing)` masks the live camera feed to any shape (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive, built on the platform camera APIs (Camera2 / AVFoundation) with no third-party dependency. See [**docs/CAMERA.md**](docs/CAMERA.md).
@@ -151,7 +163,7 @@ Here's the full rundown of this wave (a few — auto-cutout, live camera, graphi
 - **🌈 Live looks** *(v1.32.0)* — a colour grade is just data: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS; a look serializes to a `.look` JSON a model can author (like `OGAiVector` / `OGStyles`). See [**docs/LOOKS.md**](docs/LOOKS.md).
 - **🎵 Audio-reactive vectors** *(v1.33.0)* — make any vector react to sound: a pure-Kotlin FFT (`OGFft`) folds PCM into bass / mid / treble / level + a beat flag (`OGAudioAnalyzer`), smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable (or read it straight into a spec). The capture is a pluggable `OGAudioSource` — a built-in deterministic `OGSyntheticAudioSource` runs it with no mic, and you feed your own mic/music tap on device, so no platform audio or permission enters the library. Zero-dep, 60fps, same code on Android & iOS. See [**docs/AUDIO_REACTIVE.md**](docs/AUDIO_REACTIVE.md).
 
-*(🪄 Auto-cutout, 📷 live camera, 🔘 graphic → button, 🖋️ styled vector text and 🌟 gaussian bloom are the last few still being captured — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see those live now.)*
+*(📷 Live camera is the one effect without a GIF here — it needs a real device's camera (there's nothing to film on a headless emulator), so run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) on a device to see it live.)*
 
 And a whole mini-game built from those same primitives:
 
