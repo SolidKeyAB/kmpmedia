@@ -37,6 +37,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Data-defined particles & parametric shapes** (`OGParticleSpec` / `OGParametric`) | ✅ | ❌ | ❌ |
 | **Live colour looks + blend modes** — data-defined grade (`OGLookSpec` / `Modifier.ogLook`) | ✅ | ❌ | ❌ |
 | **Soft / gradient & multi-region masks** (`ogSoftClip` / `OGMultiRegionShape`) | ✅ | ❌ | ❌ |
+| **Audio-reactive vectors** — bind live sound (bass/mid/treble/level + beat) to any vector (`OGAudioAnalyzer` / `Modifier.ogAudioReactive`) | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
 If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need media to **move, respond, compose, or change at runtime**.
@@ -132,6 +133,7 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 - **⚡ Action-FX pack** *(v1.30.0)* — a `com.solidkey.painpoints.fx` family for composing stylised action scenes: `OGSlashView` (a breathing-slash ribbon — water / flame / thunder by data), `OGLightningView` (forked, fractal lightning), `OGSpeedLinesView` (manga impact lines), elemental particle presets (petals / embers / droplets / leaves), and `Modifier.ogGlow` / `Modifier.ogAfterImage`. Each effect is serializable data; all pure maths, 60fps, frame-identical on Android & iOS — no shaders, no new dependency. See [**docs/SLASH.md**](docs/SLASH.md).
 - **🌟 True-gaussian bloom** *(v1.31.0)* — `Modifier.ogBloom(radius, intensity, color?)` redraws a composable through a real platform gaussian blur (Android `RenderEffect` / iOS Skia), blended additively, for a soft luminous halo — the cinematic cousin of the zero-dependency, frame-identical `ogGlow`. Opt-in: the blur needs **Android 31+** (it no-ops to a crisp draw below) and isn't pixel-identical across platforms. This release also repairs a 1.30.0 bug that silently no-op'd `ogGlow` and `ogAfterImage`, so the composite FX modifiers now render correctly. See [**docs/SLASH.md**](docs/SLASH.md).
 - **🌈 Live looks** *(v1.32.0)* — a colour grade is just data: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS; a look serializes to a `.look` JSON a model can author (like `OGAiVector` / `OGStyles`). See [**docs/LOOKS.md**](docs/LOOKS.md).
+- **🎵 Audio-reactive vectors** *(v1.33.0)* — make any vector react to sound: a pure-Kotlin FFT (`OGFft`) folds PCM into bass / mid / treble / level + a beat flag (`OGAudioAnalyzer`), smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable (or read it straight into a spec). The capture is a pluggable `OGAudioSource` — a built-in deterministic `OGSyntheticAudioSource` runs it with no mic, and you feed your own mic/music tap on device, so no platform audio or permission enters the library. Zero-dep, 60fps, same code on Android & iOS. See [**docs/AUDIO_REACTIVE.md**](docs/AUDIO_REACTIVE.md).
 
 *(These join the GIF tour above once their captures land — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see them live now.)*
 
@@ -224,7 +226,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.32.0")
+            implementation("se.solidkey:kmpmedia-lib:1.33.0")
         }
     }
 }

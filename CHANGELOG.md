@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.33.0] — 2026-10-09
+
+> **Audio-reactive vectors — make any vector react to sound.** Adds `com.solidkey.painpoints.audio.reactive`: a pure-Kotlin FFT folds PCM into bass / mid / treble / level plus a beat flag, smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable at 60fps. The capture stays app-side via a pluggable `OGAudioSource`, so no platform audio or permission enters the library. No new dependency.
+
+### Added
+- **`OGAudioAnalyzer` + `OGAudioBands` — PCM → reactive bands.** A dependency-free radix-2 FFT (`OGFft`) + Hann window turns a buffer of samples into four normalized `0..1` signals (`level`, `bass`, `mid`, `treble`) plus a `beat` flag (spectral-flux onset), with an attack/release envelope so the output moves musically. Buffers are preallocated (no per-frame allocation) and the maths is deterministic, unit-tested on JVM + iOS.
+- **`Modifier.ogAudioReactive` + `rememberOGAudioReactive` — bind sound to any composable.** `rememberOGAudioReactive(source)` drives live `OGAudioBands` on the frame clock; `Modifier.ogAudioReactive({ bands.bass }, scale, alpha, rotationDeg)` maps a band through a `graphicsLayer` so the content re-renders without recomposing — cheap on an SVG, a particle view, a photo or text. Or read a band straight into a spec (`OGSlashes.WATER.copy(width = … * bands.treble)`), or fire on `bands.beat`.
+- **`OGAudioSource` seam + `OGSyntheticAudioSource`.** The library ships the analysis, not a recorder: implement `OGAudioSource.read` over your mic/music tap (Android `Visualizer` / `AudioRecord`, iOS `AVAudioEngine`), so no platform audio or microphone permission is forced on consumers. A built-in deterministic `OGSyntheticAudioSource` (a BPM-driven kick + tone + hi-hat) makes the whole path run with no mic — ideal for previews, the demo and reproducible captures.
+- **`OGAudioReactiveSpec` + `OGAudioReactives` codec.** The analyzer config is plain `@Serializable` data (`attack` / `release` / `gain` / `beatSensitivity` / band edges); decode/encode a `.reactive` pack with a `reactivePrompt(instruction)` builder (same lenient, fence-tolerant JSON as `OGAiVector` / `OGLooks`) and three ready-made response profiles: `snappy`, `smooth`, `beat`.
+
+### Notes
+- **You bring the audio capture.** The library has no bundled recorder and no microphone permission; it provides the analysis, the binding, a synthetic source, and the `OGAudioSource` seam.
+- **Scope.** Beat detection is a lightweight spectral-flux onset detector (great for "pulse / fire on hits"), not a tempo tracker. The FFT is deterministic per platform, but unlike the compositor's GIF/MP4 export there is no cross-platform byte guarantee (the feature reacts to live input; there is nothing to export).
+
 ## [1.32.0] — 2026-10-08
 
 > **Live looks — a data-defined colour grade.** Adds `com.solidkey.painpoints.look`: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer colour grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS. No new dependency.
