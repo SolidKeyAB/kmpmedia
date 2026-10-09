@@ -122,7 +122,23 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 </p>
 <sub><b>Interactive shapes, live — Android (left) &amp; iOS (right).</b> The <i>same</i> Compose Multiplatform code: a photo clipped to a shape, made draggable / pinch-zoomable / twist-rotatable by one <code>Modifier.ogInteractive</code>, with a momentum fling and a bouncy spring settle. <code>OGHitArea</code> makes the touch shape-aware (grab the silhouette, not its bounding box). The motion here is driven by a scripted loop so both platforms show the full pan / zoom / rotate / spring identically (the capture tooling can't inject multi-touch); in the app it's your fingers. The transform rides one GPU <code>graphicsLayer</code>, so it holds 60fps; the hit-test and clamp maths are unit-tested on JVM + iOS. <b>New in v1.15.0.</b> See <a href="docs/INTERACTIVE.md">docs/INTERACTIVE.md</a>.</sub>
 
-…and the newest additions — **auto-cutout**, **live camera in any shape**, **data-defined drawing styles** and **turning any graphic into a button** — are already live in the demo; their paired Android/iOS GIFs are still being captured, so here they're described rather than shown:
+…and the newest, most-animated additions now have GIFs — captured straight from the demo (Android shown; each is pure maths, so the iOS frame is identical, and you can run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see it live on either):
+
+<p align="center">
+  <img src="demo-screenshots/particles-demo.gif" width="30%" alt="Data-defined particles on Android — confetti bursts of coloured squares falling and fading, replayed from an OGParticleSpec, with a palette of presets (confetti / sparks / snow / fireworks / embers / petals / …)" />
+  <img src="demo-screenshots/slash-demo.gif" width="30%" alt="Breathing-slash ribbons on Android — a glowing tapered arc that draws on along a path and breathes, cycling through water, flame and thunder elements with matching droplet / ember / spark particles" />
+  <img src="demo-screenshots/action-fx-demo.gif" width="30%" alt="Action-FX pack on Android — forked fractal lightning re-striking with a different branch each time, above manga speed / impact lines" />
+</p>
+<sub><b>🎆 Particles &amp; parametric shapes · 🗡️ Breathing-slash ribbons · ⚡ Action-FX pack (forked lightning + speed lines).</b> All data-defined, pure maths, 60fps — Android shown, frame-identical on iOS.</sub>
+
+<p align="center">
+  <img src="demo-screenshots/audio-reactive-demo.gif" width="30%" alt="Audio-reactive vectors on Android — a four-band spectrum (bass / mid / treble / level), a bass-pulsing glowing orb and a treble ring, all reacting to a synthetic beat via Modifier.ogAudioReactive" />
+  <img src="demo-screenshots/looks-demo.gif" width="30%" alt="Live looks on Android — a gradient-and-disc graphic re-graded live as the preset cycles through warm, cool, noir (black & white), faded and vivid, the brightness / contrast / saturation / temperature sliders moving with it" />
+  <img src="demo-screenshots/styles-demo.gif" width="30%" alt="Boiling-line drawing style on Android — a hand-drawn star outline whose every vertex jitters a few times a second (OGBoil), the living-line stop-motion look" />
+</p>
+<sub><b>🎵 Audio-reactive vectors · 🌈 Live looks (colour grade) · 🖊️ Boiling-line style.</b> Each is plain serializable data a model can author; one GPU op per frame — Android shown, identical on iOS.</sub>
+
+Here's the full rundown of this wave (a few — auto-cutout, live camera, graphic → button, styled vector text and bloom — are live in the demo with their captures still landing):
 
 - **🪄 Auto-cutout → live lasso** *(v1.19.0)* — drop a photo and the subject is clipped out: a pluggable `OGSegmenter` seam (plug in ML Kit / Vision / a cloud model) plus a cross-platform mask → lasso tracer (flood-fill → Moore-neighbour trace → Douglas–Peucker simplify) whose output drops straight into the same `clipShape` slot. No ML model is bundled. See [**docs/AUTO_CUTOUT.md**](docs/AUTO_CUTOUT.md).
 - **📷 Live camera in any shape** *(v1.22.0)* — `OGCameraPreview(shape, facing)` masks the live camera feed to any shape (a built-in `OGShapeType`, an `OGPolygonShape` lasso, `CircleShape`, …): the AR-sticker primitive, built on the platform camera APIs (Camera2 / AVFoundation) with no third-party dependency. See [**docs/CAMERA.md**](docs/CAMERA.md).
@@ -135,7 +151,7 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 - **🌈 Live looks** *(v1.32.0)* — a colour grade is just data: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS; a look serializes to a `.look` JSON a model can author (like `OGAiVector` / `OGStyles`). See [**docs/LOOKS.md**](docs/LOOKS.md).
 - **🎵 Audio-reactive vectors** *(v1.33.0)* — make any vector react to sound: a pure-Kotlin FFT (`OGFft`) folds PCM into bass / mid / treble / level + a beat flag (`OGAudioAnalyzer`), smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable (or read it straight into a spec). The capture is a pluggable `OGAudioSource` — a built-in deterministic `OGSyntheticAudioSource` runs it with no mic, and you feed your own mic/music tap on device, so no platform audio or permission enters the library. Zero-dep, 60fps, same code on Android & iOS. See [**docs/AUDIO_REACTIVE.md**](docs/AUDIO_REACTIVE.md).
 
-*(These join the GIF tour above once their captures land — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see them live now.)*
+*(🪄 Auto-cutout, 📷 live camera, 🔘 graphic → button, 🖋️ styled vector text and 🌟 gaussian bloom are the last few still being captured — run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) to see those live now.)*
 
 And a whole mini-game built from those same primitives:
 
