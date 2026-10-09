@@ -147,6 +147,11 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 <sub><b>🔘 Any graphic → a button · 🖋️ Styled vector text · 🌟 Gaussian bloom.</b> Shape-aware press effects (scale / brutalist push-in / dim), hand-inked animated letters, and a real platform gaussian halo — Android shown. The button's press effects are pure shared maths, so they're pixel-identical on iOS. The two platform-backed effects differ slightly: styled text's hand-drawn boil is identical, but the base letterforms use each platform's default sans (Roboto on Android, the iOS system family), and <code>ogBloom</code>'s halo is a real platform gaussian blur (Android <code>RenderEffect</code> 31+ / iOS Skia), so it's visually equivalent rather than pixel-identical.</sub>
 
 <p align="center">
+  <img src="demo-screenshots/motion-demo.gif" width="30%" alt="Motion design on Android — a gold five-point star drawing itself on stroke by stroke (OGDrawOnStroke), while below it a purple arrow glides around an oval path and turns to face its travel direction (Modifier.ogMotionPath)" />
+</p>
+<sub><b>✍️ Motion design — draw-on, motion paths &amp; stagger.</b> A stroke that draws itself on by arc length, an element gliding + turning along a curve, and staggered group timing — all normalized 0..1, pure arc-length maths, 60fps, same code on Android &amp; iOS. See <a href="docs/MOTION.md">docs/MOTION.md</a>.</sub>
+
+<p align="center">
   <img src="demo-screenshots/auto-cutout-demo.png" width="42%" alt="Auto-cutout on Android — a synthetic subject (orange body, purple head) on a white background beside the same subject with its background removed and placed on a gradient, traced to a 17-point polygon lasso by the zero-dependency chroma-key segmenter" />
 </p>
 <sub><b>🪄 Auto-cutout → live lasso.</b> The background is removed and the silhouette traced to a polygon lasso that drops into the same <code>clipShape</code> slot (shown on a synthetic subject so it reproduces without a photo). A still — the result itself doesn't animate.</sub>
