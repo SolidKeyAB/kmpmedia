@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.35.0] — 2026-10-10
+
+> **Motion dynamics — the pure-maths "feel" layer.** Extends `com.solidkey.painpoints.motion` with the filters that make motion read as *alive* rather than robotic: an analytic second-order spring (lag / overshoot / settle), follow-through, squash & stretch, and idle sway. All closed-form and `t`-addressable, so the compositor can scrub + export them; data-defined (`OGDynamicsSpec`) so a model can author a feel. Zero new dependency, 60fps, frame-identical on Android & iOS.
+
+### Added
+- **`OGSpring` / `OGSpringValue` / `OGSpringSpec` — a second-order spring.** An exact, analytically-solved damped harmonic oscillator (not a Euler step), so it is unconditionally stable and deterministic, in two forms sharing one maths core: a **live** `OGSpringValue.update(target, dt, spec)` (mutates value + velocity in place, zero per-frame allocation — one per joint / particle / property at 60fps), and a **closed-form** `OGSpring.valueAt(spec, t, from, to)` / `velocityAt(…)` that is addressable by time `t`, so — unlike `androidx.compose.animation.core.spring()` — the compositor can **scrub** it (`positionMs`) and **sample it for GIF / MP4 export** deterministically. Feel is two numbers: `stiffness` and `dampingRatio` (`<1` bouncy / overshooting, `1` critically damped, `>1` sluggish). Unit-tested on JVM + iOS.
+- **`OGFollowChain` — follow-through / secondary motion.** `count` springs in series (each link trails the one before) driven by `update(leaderX, leaderY, dt)` — hair, a tail, a cape or a trailing limb that lags the body and settles after it. State lives in preallocated `FloatArray`s (allocation-free per frame); it inherits the spring's feel, so a bouncier spec gives whippier follow.
+- **`OGSquash` — squash & stretch.** `OGSquash.fromSpeed(speed, intensity)` turns a signed speed (e.g. a spring's `velocity`) into a **volume-preserving** `OGScale` (`scaleX * scaleY == 1`) to drop on a `graphicsLayer` — stretch along the motion when fast, squash when it stops, without changing the footprint.
+- **`OGSway` — organic idle motion.** Samples the library's fractal noise (`OGFxNoise`, simplex + fBm) against time for smooth, non-repeating, seedable drift so an idle element never sits like a statue — a single wandering `value(t)` or a 2D `offset(t)`.
+- **`OGDynamicsSpec` + `OGDynamics` codec.** The whole feel is plain `@Serializable` data (`spring` + `followLinks` + `squash` + `sway` + `easing`); decode/encode a pack and build a model prompt (`decodeSpec` / `encode` / `dynamicsPrompt`) with the same lenient, fence-tolerant JSON as `OGAiVector` / `OGLooks` / `OGMotions`, plus five ready-made feels: `bouncy` / `heavy` / `snappy` / `gentle` / `stiff`.
+
+### Notes
+- **Scope:** the library owns motion *feel* (closed-form, `t`-addressable dynamics filters); your app owns motion *intent* (poses / gait / choreography). Closed-form is the requirement that lets the compositor scrub and export deterministically. Non-finite inputs are guarded; `dt` is clamped so a stalled frame can't explode a spring.
+
 ## [1.34.0] — 2026-10-10
 
 > **Motion design — draw-on, motion paths & stagger.** Adds `com.solidkey.painpoints.motion`: an arc-length `OGMotionPath` you reveal as a self-drawing stroke (`OGDrawOnStroke`), send an element gliding + turning along (`Modifier.ogMotionPath`), plus `OGStagger` for per-element offset timing. Pure-maths core, data-defined specs, zero new dependency, 60fps, same code on Android & iOS.

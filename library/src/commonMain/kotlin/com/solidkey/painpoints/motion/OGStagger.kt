@@ -21,6 +21,12 @@ enum class OGEasing {
 
     /** Eases out but overshoots past the target and springs back — a lively pop (can exceed 1). */
     OVERSHOOT,
+
+    /** Winds up *backwards* first (dips below 0) before launching — the classic anticipation before a move. */
+    ANTICIPATE,
+
+    /** Anticipates at the start AND overshoots at the end (back-in-out) — a snappy, lively there-and-settle. */
+    ANTICIPATE_OVERSHOOT,
 }
 
 /** Apply this easing to [t] (clamped to `0..1` on input). */
@@ -37,6 +43,22 @@ fun OGEasing.ease(t: Float): Float {
             val p = x - 1f
             1f + c3 * p * p * p + c1 * p * p
         }
+        OGEasing.ANTICIPATE -> {
+            val c1 = 1.70158f
+            val c3 = c1 + 1f
+            c3 * x * x * x - c1 * x * x
+        }
+        OGEasing.ANTICIPATE_OVERSHOOT -> {
+            val c1 = 1.70158f
+            val c2 = c1 * 1.525f
+            if (x < 0.5f) {
+                val u = 2f * x
+                (u * u * ((c2 + 1f) * u - c2)) / 2f
+            } else {
+                val u = 2f * x - 2f
+                (u * u * ((c2 + 1f) * u + c2) + 2f) / 2f
+            }
+        }
     }
 }
 
@@ -47,7 +69,9 @@ fun ogEasingOf(name: String): OGEasing =
         "easein", "in" -> OGEasing.EASE_IN
         "easeout", "out" -> OGEasing.EASE_OUT
         "easeinout", "inout" -> OGEasing.EASE_IN_OUT
-        "overshoot", "back", "pop" -> OGEasing.OVERSHOOT
+        "overshoot", "backout", "pop" -> OGEasing.OVERSHOOT
+        "anticipate", "backin", "back" -> OGEasing.ANTICIPATE
+        "anticipateovershoot", "backinout" -> OGEasing.ANTICIPATE_OVERSHOOT
         else -> OGEasing.EASE_IN_OUT
     }
 

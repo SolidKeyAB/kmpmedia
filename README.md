@@ -39,6 +39,7 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Soft / gradient & multi-region masks** (`ogSoftClip` / `OGMultiRegionShape`) | ✅ | ❌ | ❌ |
 | **Audio-reactive vectors** — bind live sound (bass/mid/treble/level + beat) to any vector (`OGAudioAnalyzer` / `Modifier.ogAudioReactive`) | ✅ | ❌ | ❌ |
 | **Motion design** — draw-on strokes, motion paths (glide + orient along a curve), staggered timing (`OGMotionPath` / `Modifier.ogMotionPath` / `OGStagger`) | ✅ | ❌ | ❌ |
+| **Motion dynamics** — natural "feel" filters: spring (lag / overshoot / settle), follow-through, squash &amp; stretch, idle sway (`OGSpring` / `OGFollowChain` / `OGSquash` / `OGSway`) | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
 If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need media to **move, respond, compose, or change at runtime**.
@@ -152,6 +153,11 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 <sub><b>✍️ Motion design — draw-on, motion paths &amp; stagger.</b> A stroke that draws itself on by arc length, an element gliding + turning along a curve, and staggered group timing — all normalized 0..1, pure arc-length maths, 60fps, same code on Android &amp; iOS. See <a href="docs/MOTION.md">docs/MOTION.md</a>.</sub>
 
 <p align="center">
+  <img src="demo-screenshots/dynamics-demo.gif" width="30%" alt="Motion dynamics on Android — a grey square chases a moving blue target at constant speed and stops dead (robotic), while a gold ball fed through OGSpring lags, overshoots and settles, stretches into its travel direction (OGSquash), trails a comet tail of fading dots (OGFollowChain) and drifts gently when idle (OGSway)" />
+</p>
+<sub><b>🌀 Motion dynamics — robotic → alive.</b> The <i>same</i> moving target chased by a robotic twin (constant speed, stops dead) and one fed through the dynamics layer: spring lag / overshoot / settle, squash &amp; stretch, a follow-through comet tail and idle sway, switchable between five feel presets. Pure closed-form maths (so the compositor can scrub + export it), 60fps, same code on Android &amp; iOS. See <a href="docs/MOTION.md">docs/MOTION.md</a>.</sub>
+
+<p align="center">
   <img src="demo-screenshots/auto-cutout-demo.png" width="42%" alt="Auto-cutout on Android — a synthetic subject (orange body, purple head) on a white background beside the same subject with its background removed and placed on a gradient, traced to a 17-point polygon lasso by the zero-dependency chroma-key segmenter" />
 </p>
 <sub><b>🪄 Auto-cutout → live lasso.</b> The background is removed and the silhouette traced to a polygon lasso that drops into the same <code>clipShape</code> slot (shown on a synthetic subject so it reproduces without a photo). A still — the result itself doesn't animate.</sub>
@@ -169,6 +175,7 @@ Here's the full rundown of this wave (📷 live camera is the one effect not sho
 - **🌈 Live looks** *(v1.32.0)* — a colour grade is just data: an `OGLookSpec` (brightness / contrast / saturation / temperature / tint / hue) compiles once into a single `ColorFilter` you drop on any graphic with `Modifier.ogLook`, plus a per-layer grade + blend modes on the compositor. One GPU colour op, zero per-frame allocation, 60fps, pixel-identical on Android & iOS; a look serializes to a `.look` JSON a model can author (like `OGAiVector` / `OGStyles`). See [**docs/LOOKS.md**](docs/LOOKS.md).
 - **🎵 Audio-reactive vectors** *(v1.33.0)* — make any vector react to sound: a pure-Kotlin FFT (`OGFft`) folds PCM into bass / mid / treble / level + a beat flag (`OGAudioAnalyzer`), smoothed with attack/release, and `Modifier.ogAudioReactive` binds a band to any composable (or read it straight into a spec). The capture is a pluggable `OGAudioSource` — a built-in deterministic `OGSyntheticAudioSource` runs it with no mic, and you feed your own mic/music tap on device, so no platform audio or permission enters the library. Zero-dep, 60fps, same code on Android & iOS. See [**docs/AUDIO_REACTIVE.md**](docs/AUDIO_REACTIVE.md).
 - **✍️ Motion design** *(v1.34.0)* — three motion-graphics primitives in `com.solidkey.painpoints.motion`: **draw-on** (a stroke or logo that draws itself on by arc length, `OGDrawOnStroke`), **motion paths** (send any element gliding along a curve at constant speed and turning to face its travel, `Modifier.ogMotionPath`), and **stagger** (one timeline → per-element offset timing so a group cascades / waves / pops, `OGStagger`). The path + stagger are plain serializable data (`OGMotions`), the core is pure arc-length maths (O(log n) per lookup, centripetal smoothing, no recomposition), 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
+- **🌀 Motion dynamics** *(v1.35.0)* — the pure-maths "feel" layer of `com.solidkey.painpoints.motion`: an analytic second-order **spring** (`OGSpring` — lag, overshoot, settle; closed-form so the compositor can scrub + export it, which `androidx…spring()` can't), **follow-through** (`OGFollowChain`, a trailing chain for hair / cape / limbs), volume-preserving **squash & stretch** (`OGSquash`) and organic **idle sway** (`OGSway`). The whole feel is data — an `OGDynamicsSpec` with five presets (`bouncy` / `heavy` / `snappy` / `gentle` / `stiff`) a model can author from a sentence (`OGDynamics.dynamicsPrompt`), the same pattern as `OGLooks` / `OGMotions` / `OGStyles`. Pure maths, zero dependency, 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
 
 *(📷 Live camera is the one effect without a GIF here — it needs a real device's camera (there's nothing to film on a headless emulator), so run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) on a device to see it live.)*
 
@@ -261,7 +268,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.34.0")
+            implementation("se.solidkey:kmpmedia-lib:1.35.0")
         }
     }
 }

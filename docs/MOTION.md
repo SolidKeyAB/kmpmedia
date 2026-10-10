@@ -118,15 +118,64 @@ val prompt = OGMotions.motionPathPrompt("an S-curve from left to right") // hand
 Decoding is tolerant of code fences and stray prose (shared [`OGAiVector`](./AI_HOOKS.md) JSON config),
 and `decode*OrNull` returns `null` instead of throwing on malformed input.
 
+## Dynamics — making motion feel real (1.35.0)
+
+Paths and stagger say *where* and *when*; **dynamics** say *how it feels*. These are the pure-maths
+"principles of animation" that turn a robotic keyframe into motion with weight: lag, overshoot,
+settle, follow-through. The library owns the *feel* (reusable filters); your app owns the *intent*
+(poses, choreography). A full physics / IK / gait engine is deliberately out of scope.
+
+**Spring — the core.** An exact, analytically-solved damped oscillator (stiffness + damping ratio),
+in two forms sharing one maths core: a live mutable stepper, and a **closed-form** `value at t` that
+the compositor can scrub and the GIF/MP4 exporter can sample deterministically (the one thing
+Compose's own `spring()` can't do).
+
+```kotlin
+import com.solidkey.painpoints.motion.*
+
+// Live: one per joint / property, updated each frame (no allocation).
+val y = remember { OGSpringValue(0f) }
+y.update(target = targetY, dt = dtSeconds, spec = OGSpringSpec(stiffness = 220f, dampingRatio = 0.4f))
+Box(Modifier.graphicsLayer { translationY = y.value })
+
+// Closed-form: scrub / export a from→to with a bouncy feel.
+val v = OGSpring.valueAt(OGSpringSpec(dampingRatio = 0.3f), t = positionSec, from = 0f, to = 1f)
+```
+
+**Follow-through.** `OGFollowChain(n, spec)` is `n` springs in series, each trailing the one before —
+hair, a cape, a tail, a lagging forearm. `update(leaderX, leaderY, dt)`; read lagged links with
+`point(i)`.
+
+**Squash & stretch.** `OGSquash.fromSpeed(speed, intensity)` → a volume-preserving `OGScale`
+(`scaleX * scaleY == 1`) to drop on a `graphicsLayer` — stretch when fast, squash on impact.
+
+**Idle sway.** `OGSway(amplitude, frequency)` wraps the library's fractal noise so an idle element
+breathes instead of freezing between animations. **Anticipation easing.** `OGEasing.ANTICIPATE` /
+`ANTICIPATE_OVERSHOOT` wind back before launching / overshoot on arrival.
+
+**AI-authorable feel.** The whole feel is data: `OGDynamicsSpec` (spring + followLinks + squash + sway
++ easing) with an `OGDynamics` codec + presets (`bouncy` / `heavy` / `snappy` / `gentle` / `stiff`)
+and a `dynamicsPrompt(...)`. A developer describes it in words ("a heavy, bouncy walk that overshoots
+and settles slowly") and a model returns the JSON — same codec-not-SDK pattern as the rest of the lib.
+
+```kotlin
+val feel = OGDynamics.preset("bouncy")!!            // or OGDynamics.decodeSpec(modelReply)
+val spec = feel.spring                              // feed into OGSpringValue / OGSpring
+```
+
 ## API summary
 
 | Piece | What it is |
 |-------|------------|
 | [`OGMotionPath`] | Arc-length path: `of` / `smoothOpen` / `loop`; `pointAt` / `tangentDegAt` / `trimmed`. |
-| [`OGStagger`] / `OGEasing` | Per-element offset timing + easing curves. Pure. |
+| [`OGStagger`] / `OGEasing` | Per-element offset timing + easing curves (incl. anticipation). Pure. |
 | [`OGMotionPathSpec`] / [`OGStaggerSpec`] | Serializable data form of each. |
-| [`OGMotions`] | Codec + presets + model prompts. |
+| [`OGMotions`] | Codec + presets + model prompts (path / stagger). |
 | [`Modifier.ogMotionPath`] | Move/orient a composable along a path (`graphicsLayer`, no recompose). |
 | [`OGDrawOnStroke`] / `drawOGStroke` | Progressive stroke reveal (draw-on). |
+| `OGSpringSpec` / `OGSpringValue` / `OGSpring` | Second-order spring: live stepper + closed-form (scrub/export). |
+| `OGFollowChain` | Trailing chain for follow-through (hair / cape / limbs). |
+| `OGSquash` / `OGSway` | Volume-preserving squash & stretch; noise-driven idle sway. |
+| `OGDynamicsSpec` / `OGDynamics` | Serializable "feel" + codec + presets + `dynamicsPrompt` (AI-authorable). |
 
 All in `commonMain`, zero new dependencies.

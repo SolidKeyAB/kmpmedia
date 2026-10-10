@@ -72,7 +72,17 @@ class OGStaggerTest {
         assertTrue(ogEasingOf("easeOut") == OGEasing.EASE_OUT)
         assertTrue(ogEasingOf("ease_in_out") == OGEasing.EASE_IN_OUT)
         assertTrue(ogEasingOf("OVERSHOOT") == OGEasing.OVERSHOOT)
+        assertTrue(ogEasingOf("anticipate") == OGEasing.ANTICIPATE)
+        assertTrue(ogEasingOf("anticipateOvershoot") == OGEasing.ANTICIPATE_OVERSHOOT)
         assertTrue(ogEasingOf("nonsense") == OGEasing.EASE_IN_OUT, "unknown falls back")
+    }
+
+    @Test
+    fun anticipate_windsBackwardsBeforeLaunching() {
+        // Its defining trait: it dips below 0 early (the wind-up) before heading to 1.
+        assertTrue(OGEasing.ANTICIPATE.ease(0.15f) < 0f, "anticipate should dip below 0 early")
+        assertTrue(OGEasing.ANTICIPATE_OVERSHOOT.ease(0.1f) < 0f, "anticipate-overshoot winds back at the start")
+        assertTrue(OGEasing.ANTICIPATE_OVERSHOOT.ease(0.9f) > 1f, "and overshoots at the end")
     }
 
     @Test
