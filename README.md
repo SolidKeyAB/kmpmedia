@@ -158,6 +158,11 @@ And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any
 <sub><b>🌀 Motion dynamics — robotic → alive.</b> The <i>same</i> moving target chased by a robotic twin (constant speed, stops dead) and one fed through the dynamics layer: spring lag / overshoot / settle, squash &amp; stretch, a follow-through comet tail and idle sway, switchable between five feel presets. Pure closed-form maths (so the compositor can scrub + export it), 60fps, same code on Android &amp; iOS. See <a href="docs/MOTION.md">docs/MOTION.md</a>.</sub>
 
 <p align="center">
+  <img src="demo-screenshots/scene-walk.gif" width="30%" alt="A composed scene on Android — a side-on walk cycle wearing a photo head clipped to a lasso, striding with spring-lagged knees and elbows (follow-through) and a footfall squash, a cyan follow-chain scarf streaming behind, manga speed lines, drifting petals and a warm colour grade over a scrolling dusk backdrop" />
+</p>
+<sub><b>🎬 Composing it all — a walk cycle, dressed.</b> Not one primitive but many at once: the 1.35.0 dynamics driving a gait (<code>OGSpring</code> follow-through on the knees/elbows + <code>OGSquash</code> footfall), a <code>OGFollowChain</code> scarf, <code>OGSway</code> head drift, <code>OGSpeedLines</code>, <code>OGParticles</code> petals and an <code>ogLook</code> colour grade — a photo head clipped to a lasso riding along. Everything here is a shipped library primitive; the rig is ~demo code. See the demo's 🎬 <i>Scene in motion</i> screen.</sub>
+
+<p align="center">
   <img src="demo-screenshots/auto-cutout-demo.png" width="42%" alt="Auto-cutout on Android — a synthetic subject (orange body, purple head) on a white background beside the same subject with its background removed and placed on a gradient, traced to a 17-point polygon lasso by the zero-dependency chroma-key segmenter" />
 </p>
 <sub><b>🪄 Auto-cutout → live lasso.</b> The background is removed and the silhouette traced to a polygon lasso that drops into the same <code>clipShape</code> slot (shown on a synthetic subject so it reproduces without a photo). A still — the result itself doesn't animate.</sub>
