@@ -163,6 +163,28 @@ val feel = OGDynamics.preset("bouncy")!!            // or OGDynamics.decodeSpec(
 val spec = feel.spring                              // feed into OGSpringValue / OGSpring
 ```
 
+**Cloth — real fabric (1.36.0).** `OGClothStrip(spec)` is a lightweight 1-D Verlet cloth strip: a
+scarf, cape edge, flag, banner or hair strand. Unlike `OGFollowChain` (springs in series, which
+*stretch* and trail like a comet tail), the strip is **inextensible** — distance constraints hold the
+rest length — and it has **gravity** and ambient **wind**, so it *hangs* at rest and *flutters* in
+motion. **Which one:** stretches & trails → `OGFollowChain`; hangs at a fixed length & flutters →
+`OGClothStrip`.
+
+```kotlin
+val scarf = remember { OGClothStrip(OGCloths.preset("scarf")!!) }
+scarf.step(dt, anchorX = neckX, anchorY = neckY)      // pin the head at the neck each frame
+// then draw a tapered ribbon through scarf.point(0 .. count-1)
+```
+
+It advances on a **fixed internal substep** (position Verlet is only stable + deterministic at a
+constant `dt`), so it is frame-identical on Android & iOS and **exact for fixed-step GIF/MP4 export**.
+Unlike `OGSpring` it is a **live stepper, not closed-form** — there is no `valueAt(t)`; to *scrub* it,
+re-simulate from `0` deterministically via `OGCloths.sampleAt(spec, t, anchorAt)`. The wind is seeded
+fractal noise (no caller randomness), so runs reproduce exactly. Data form `OGClothSpec` + `OGCloths`
+codec + presets (`scarf` / `flag` / `banner` / `hair`) + `clothPrompt(...)`, same codec-not-SDK pattern.
+**Scope is deliberately a 1-D strip only** — a 2-D cloth mesh, collisions and a public solver API are
+rejected-by-default (that would make it a physics engine, which this is not).
+
 ## API summary
 
 | Piece | What it is |
@@ -176,6 +198,8 @@ val spec = feel.spring                              // feed into OGSpringValue /
 | `OGSpringSpec` / `OGSpringValue` / `OGSpring` | Second-order spring: live stepper + closed-form (scrub/export). |
 | `OGFollowChain` | Trailing chain for follow-through (hair / cape / limbs). |
 | `OGSquash` / `OGSway` | Volume-preserving squash & stretch; noise-driven idle sway. |
+| `OGClothStrip` | 1-D Verlet cloth strip (inextensible, gravity + seeded wind): scarf / flag / banner / hair. Live stepper (fixed substep, deterministic). |
+| `OGClothSpec` / `OGCloths` | Serializable cloth feel + codec + presets + `clothPrompt`; `sampleAt` for deterministic scrub. |
 | `OGDynamicsSpec` / `OGDynamics` | Serializable "feel" + codec + presets + `dynamicsPrompt` (AI-authorable). |
 
 All in `commonMain`, zero new dependencies.

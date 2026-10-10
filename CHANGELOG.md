@@ -4,6 +4,17 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.36.0] — 2026-10-10
+
+> **Cloth — a fabric primitive.** Extends `com.solidkey.painpoints.motion` with `OGClothStrip`: a one-dimensional Verlet cloth strip that hangs under gravity, holds its length (inextensible), and flutters in a prevailing wind plus seeded gusts — a scarf, a flag, a banner, a lock of hair. Deterministic and frame-identical on Android & iOS (fixed internal substep), data-defined (`OGClothSpec`) so a model can author one, and re-samplable by time for compositor scrub / export. Zero new dependency, 60fps.
+
+### Added
+- **`OGClothStrip` — a 1-D Verlet cloth strip.** A chain of nodes pinned at the head (optionally also the tail) that integrates under gravity and wind with a **fixed internal substep** (`1/120s`, accumulated) so the simulation is stable and byte-for-byte deterministic regardless of frame rate, then relaxes four position-based distance constraints per substep to keep the strip **inextensible** (it stretches and swings but never grows). `dt` is clamped so a stalled frame can't explode it. Drive it with `step(dt, anchorX, anchorY)` and read `x(i)` / `y(i)` / `point(i)` / `count`; `reset(ax, ay)` seeds it hanging straight down. Wind is a signed prevailing `wind` plus deterministic `OGFxNoise` (simplex + fBm) gusts — no caller randomness. Pure maths, unit-tested on JVM + iOS.
+- **`OGClothSpec` + `OGCloths` codec.** The whole strip is plain `@Serializable` data (`nodes` / `length` / `gravity` / `damping` / `wind` / `windAmplitude` / `windFrequency` / `windSeed` / `pinTail`); decode/encode a pack and build a model prompt (`decodeSpec` / `decodeSpecOrNull` / `encode` / `clothPrompt`) with the same lenient, fence-tolerant JSON as `OGAiVector` / `OGDynamics` / `OGMotions`, plus four ready-made fabrics: `scarf` / `flag` / `banner` / `hair`. `OGCloths.sampleAt(spec, t, anchorAt)` deterministically re-simulates to time `t` so the compositor can scrub + export a cloth that has no closed form.
+
+### Notes
+- **Scope:** this is a **1-D strip**, not a 2-D mesh — no self-collision, tearing, collisions or a public solver API (a mesh would be a separate primitive). **Which one:** reach for `OGClothStrip` when something should *hang and flutter* (scarf, flag, hair); reach for `OGFollowChain` when something should *stretch and trail* a leader (a comet tail, whippy follow-through) — `OGFollowChain` has no length constraint or gravity, so it is not fabric. Unlike the closed-form `OGSpring`, a Verlet strip has no analytic form, so scrub/export go through `sampleAt` (a deterministic re-sim to `t`).
+
 ## [1.35.0] — 2026-10-10
 
 > **Motion dynamics — the pure-maths "feel" layer.** Extends `com.solidkey.painpoints.motion` with the filters that make motion read as *alive* rather than robotic: an analytic second-order spring (lag / overshoot / settle), follow-through, squash & stretch, and idle sway. All closed-form and `t`-addressable, so the compositor can scrub + export them; data-defined (`OGDynamicsSpec`) so a model can author a feel. Zero new dependency, 60fps, frame-identical on Android & iOS.
