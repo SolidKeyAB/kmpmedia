@@ -216,6 +216,12 @@ data class OGPlacedShapeSpec(
     val feather: Float? = null,
     /** Blend mode name: `normal` | `multiply` | `screen` | `overlay` | `lighten` | `darken` | `plus` (alias `add`). */
     val blend: String? = null,
+    /** (v3) A procedural noise texture (fur / grass / grain) drawn over the fill; see [OGTextureSpec]. */
+    val texture: OGTextureSpec? = null,
+    /** (v3) An additive glow halo behind the region (sun bloom, backlit rim); see [OGGlowSpec]. */
+    val glow: OGGlowSpec? = null,
+    /** (v3) Stamp this region as a whole seeded field (trees / tufts); resolve with [OGSceneSpec.expanded]. */
+    val scatter: OGScatterSpec? = null,
 ) {
     /** The lasso as a plain [OGPolygonSpec] (drops the metadata). */
     fun toPolygonSpec(): OGPolygonSpec = OGPolygonSpec(points)
@@ -237,6 +243,9 @@ data class OGPlacedShapeSpec(
         opacity = opacity?.coerceIn(0f, 1f),
         smoothing = smoothing?.coerceIn(0f, 1f),
         feather = feather?.coerceIn(0f, 0.25f),
+        texture = texture?.sanitized(),
+        glow = glow?.sanitized(),
+        scatter = scatter?.sanitized(),
     )
 
     companion object {

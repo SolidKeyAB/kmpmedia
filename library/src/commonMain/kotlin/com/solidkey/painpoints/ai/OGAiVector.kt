@@ -244,16 +244,27 @@ object OGAiVector {
                 are 0..1 of the region's OWN box; linear defaults top→bottom, radial centred. At scene
                 level you may add "background":"#RRGGBB".
 
+                For richer stills a region may also carry: "texture" for fur/grass/grain
+                ({"kind":"strokes","density":<2..120>,"angle":<deg>,"length":<0..0.5>,"amount":<0..1>,
+                "color":"#RRGGBB"}); "glow" for a sun bloom or backlit rim
+                ({"color":"#RRGGBB","radius":<>1>,"intensity":<0..1>}); and "scatter" to stamp ONE
+                region as a whole field of trees/tufts
+                ({"count":<n>,"x0":<>,"y0":<>,"x1":<>,"y1":<>,"scaleMin":<>,"scaleMax":<>}).
+
                 Make it resemble the photo, not a flat cartoon: the sky is ONE region with a single
                 vertical gradient (never stacked stripes); a light source is a bright radial disc plus a
-                larger halo whose last stop is transparent with blend "plus"; give organic subjects
-                smoothing ~0.7 and stack a base + a "multiply" shadow + a "screen"/"plus" rim; ground and
-                foliage use vertical gradients, not flat slabs.
+                larger halo whose last stop is transparent with blend "plus" (or a "glow"); give organic
+                subjects smoothing ~0.7, a "texture" (grass angle 90, fur along the body), and stack a
+                base + a "multiply" shadow + a "screen"/"plus" rim; ground and foliage use vertical
+                gradients, not flat slabs; small repeated foliage is one region with "scatter".
 
                 Schema:
                 {"background":"#RRGGBB","shapes":[{"label":"<name>","fill":"#RRGGBB",
                   "gradient":{"type":"linear","stops":[[0,"#RRGGBB"],[1,"#RRGGBB"]]},
                   "smoothing":<0..1>,"opacity":<0..1>,"blend":"normal",
+                  "texture":{"kind":"strokes","density":32,"angle":90,"amount":0.5},
+                  "glow":{"color":"#FFDFA0","radius":1.6,"intensity":0.7},
+                  "scatter":{"count":20,"x0":0,"y0":0.6,"x1":1,"y1":0.8},
                   "points":[[<0..1>,<0..1>], ...]}, ...]}$aspectLine$hintLine
 
                 Output the JSON only, with no prose and no markdown fences.

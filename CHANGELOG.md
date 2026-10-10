@@ -4,6 +4,21 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.39.0] — 2026-10-11
+
+> **Richer stills: fur, bloom and fields.** Phase 2 of the AI scene format (`OGSceneSpec`) adds three optional, data-defined ways to paint a region beyond a flat/gradient fill — a procedural **texture**, an additive **glow** halo, and a seeded **scatter** — the biggest "flat cartoon → painterly" jump. Every generator is pure and deterministic (byte-for-byte identical on Android & iOS), computed once at decode/author time, never on the 60fps path. All three are optional fields, so a 1.38 scene decodes unchanged and an older library ignores the new keys.
+
+### Added
+- **`OGTextureSpec` — procedural fur / grass / grain.** A jittered `density × density` grid of short strokes laid over a region, each stroke's opacity modulated by `OGFxNoise` (simplex + fBm) so it reads organic. Knobs: `kind`, `density`, `length`, `angle` (90° = vertical blades), `jitter`, `weight`, `amount`, `octaves`, `seed`, `color`. `marks()` returns the pure stroke field (`List<OGTextureMark>`) in the region's own `0..1` box; `DrawScope.drawOGTexture(spec, left, top, w, h)` paints it (clip to the region first).
+- **`OGGlowSpec` — a blur-free additive glow.** A sun's bloom or a backlit rim, done exactly like `Modifier.ogGlow`: a few outward-scaled, additive (`BlendMode.Plus`) copies of the region's own path. Knobs: `color`, `radius`, `intensity`, `passes`. `glowPasses()` is the pure `(scale, alpha)` fall-off plan; `DrawScope.drawOGGlow(path, spec)` draws it behind the fill. No platform blur, so it stays cross-platform-identical (unlike `ogBloom`).
+- **`OGScatterSpec` — stamp one region as a whole field.** A tree-line, a bank of bushes, a meadow of tufts from a single template shape: `expand(template)` returns real `OGPlacedShapeSpec` copies (position + scale varied by a deterministic seed, sorted back-to-front), so they render through the exact same path as any other region — no new draw code. Capped at 400 copies. `OGSceneSpec.expanded()` resolves every scatter region in one call (plain regions pass through untouched, order preserved).
+- **Per-shape `texture` / `glow` / `scatter` on `OGPlacedShapeSpec`**, and the `imageToVectorPrompt(SCENE)` prompt now teaches all three (grass angle 90, fur along the body, disc+halo light, `scatter` for repeated foliage).
+
+### Notes
+- A new deterministic `OGFxRandom` (xorshift32, pure integer maths) backs texture + scatter so their fields are identical on every platform (`kotlin.random` is not). 515 JVM tests + iOS green.
+- Still only polygons + fills under the hood — these enrich *how* a region is painted/stamped, not what it is. Backward compatible both directions (optional fields + `ignoreUnknownKeys` + `encodeDefaults = false`); `sanitized()` clamps every new knob into range.
+- The "make it live" layer (auto-animate a decoded scene) and the offline photo→mesh vectorizer tool remain later work.
+
 ## [1.38.0] — 2026-10-11
 
 > **Painted vector: the AI scene format grows up.** The image→vector scene (`OGSceneSpec`) was one flat colour per polygon — which turns a photo into a banded, blocky cartoon. v2 lets each region carry a real **gradient** (linear/radial, OKLab-sampled so sunset ramps stop banding), plus per-shape **opacity / smoothing / feather / blend**, and the scene a **background** + a **look** grade. It also records **how** a scene was traced (`trace`). Still a pure, zero-dependency, network-free codec decoded once (never on the 60fps path); every field is optional, so a v1 scene decodes unchanged here and a v2 scene degrades to its solid `fill` on an older library.
