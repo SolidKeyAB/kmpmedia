@@ -4,6 +4,21 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.38.0] — 2026-10-11
+
+> **Painted vector: the AI scene format grows up.** The image→vector scene (`OGSceneSpec`) was one flat colour per polygon — which turns a photo into a banded, blocky cartoon. v2 lets each region carry a real **gradient** (linear/radial, OKLab-sampled so sunset ramps stop banding), plus per-shape **opacity / smoothing / feather / blend**, and the scene a **background** + a **look** grade. It also records **how** a scene was traced (`trace`). Still a pure, zero-dependency, network-free codec decoded once (never on the 60fps path); every field is optional, so a v1 scene decodes unchanged here and a v2 scene degrades to its solid `fill` on an older library.
+
+### Added
+- **`OGFillSpec` — gradient fills for a scene region.** A `linear` or `radial` gradient with colour `stops`, in the shape's own normalized `0..1` box (linear defaults top→bottom, radial centred). `toBrush(left, top, w, h)` builds the live Compose `Brush` once; `oklab = true` (default) resamples adjacent stops through OKLab (`OGFxColor`) so blue→orange ramps stay bright instead of dipping through grey. When present it wins over the flat `fill`, which stays as the fallback swatch.
+- **Per-shape paint on `OGPlacedShapeSpec`:** optional `gradient`, `opacity` (`0..1`), `smoothing` (`0..1`, per-shape now — `toShape(default)` honours it), `feather` (`0..0.25` soft edge), and `blend` (`normal|multiply|screen|overlay|lighten|darken|plus`).
+- **Scene-level on `OGSceneSpec`:** `version`, `background` (a base coat), and `look` (an embedded `OGLookSpec` grade for the whole scene).
+- **`OGTraceSpec` + `OGTraceMethod` — a provenance record.** How the scene was traced (`semantic | lowpoly | voronoi | posterized | stipple` + `targetShapes` / `realism` / `seed` / `roi` / `source` / size). Pure metadata — the decoder never renders from it (shapes stay the single source of pixels); the method is a tolerant string (unknown → `null`, never fails a decode), and generation of dense meshes stays an offline tool, not in the codec.
+- **Compact wire forms.** A vertex accepts the lean `[x, y]` pair (what a model emits — far fewer tokens) as well as the legacy `{x, y}`; gradient stops accept `[offset, "#colour"]`. Output still writes `{x, y}` so older readers keep working. The `imageToVectorPrompt(SCENE)` prompt now teaches the v2 schema + authoring rules (one-gradient sky, disc+halo light, smoothed tonal-stacked subjects).
+
+### Notes
+- Backward compatible both directions (optional fields + `ignoreUnknownKeys` + `encodeDefaults = false`). `OGSceneSpec.sanitized()` now preserves the new scene-level metadata and drops a gradient that has fewer than two usable stops.
+- Shapes are still only polygons + fills — v2 enriches *how a region is painted*, not what a region is.
+
 ## [1.37.0] — 2026-10-10
 
 > **Cloth, in two dimensions.** Extends `com.solidkey.painpoints.motion` with `OGCloth`: a 2-D (planar) Verlet cloth *sheet* — a tarp, curtain, banner or flag — that drapes over and **collides** with capsule "poles", the thing the 1-D `OGClothStrip` cannot do. Same fixed-substep determinism (byte-for-byte identical on Android & iOS), data-defined (`OGClothMeshSpec`) so a model can author one, and re-samplable by time for compositor scrub / export. Zero new dependency, 60fps.

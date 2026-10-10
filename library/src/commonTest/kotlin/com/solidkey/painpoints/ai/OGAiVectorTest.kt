@@ -6,6 +6,7 @@ import com.solidkey.painpoints.shape.OGPoint
 import com.solidkey.painpoints.shape.OGPolygonShape
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -159,5 +160,126 @@ class OGAiVectorTest {
     fun svgPatchPromptOmitsIdLineWhenNoneGiven() {
         val p = OGAiVector.svgPatchPrompt("recolor everything")
         assertTrue(!p.contains("Addressable node ids"), "no id list should appear when none provided")
+    }
+
+    // --- v2 "painted vector" format -------------------------------------------------------------
+
+    @Test
+    fun v1SceneStillDecodes() {
+        val json = """{"shapes":[{"label":"sky","fill":"#8C90C2","points":[{"x":0,"y":0},{"x":1,"y":0},{"x":1,"y":0.5}]}]}"""
+        val scene = OGAiVector.decodeScene(json)
+        assertEquals(1, scene.shapes.size)
+        assertEquals("sky", scene.shapes[0].label)
+        assertEquals("#8C90C2", scene.shapes[0].fill)
+        assertEquals(1, scene.version)
+        assertNull(scene.trace)
+    }
+
+    @Test
+    fun leanArrayPointsDecode() {
+        val scene = OGAiVector.decodeScene("""{"shapes":[{"fill":"#fff","points":[[0.0,0.0],[1.0,0.0],[0.5,1.0]]}]}""")
+        val pts = scene.shapes[0].points
+        assertEquals(3, pts.size)
+        assertEquals(0.5f, pts[2].x)
+        assertEquals(1.0f, pts[2].y)
+    }
+
+    @Test
+    fun gradientFillDecodesLeanAndObjectStops() {
+        val json = """{"shapes":[{"points":[[0,0],[1,0],[1,1]],"fill":"#808080",
+          "gradient":{"type":"linear","stops":[[0,"#3B3F7A"],{"at":1,"color":"#FFC97A"}]}}]}"""
+        val g = OGAiVector.decodeScene(json).shapes[0].gradient
+        assertNotNull(g)
+        assertEquals(2, g.stops.size)
+        assertEquals(0f, g.stops[0].at)
+        assertEquals("#3B3F7A", g.stops[0].color)
+        assertEquals("#FFC97A", g.stops[1].color)
+        assertTrue(g.isRenderable)
+    }
+
+    @Test
+    fun perShapePaintFieldsDecodeAndSmoothingWins() {
+        val json = """{"shapes":[{"points":[[0,0],[1,0],[1,1]],"opacity":0.5,"smoothing":0.8,"feather":0.02,"blend":"plus"}]}"""
+        val s = OGAiVector.decodeScene(json).shapes[0]
+        assertEquals(0.5f, s.opacity)
+        assertEquals(0.8f, s.smoothing)
+        assertEquals(0.02f, s.feather)
+        assertEquals("plus", s.blend)
+        assertEquals(0.8f, s.toShape(default = 0f).smoothing)  // per-shape smoothing overrides the default
+        val plain = OGPlacedShapeSpec(points = listOf(OGPointSpec(0f, 0f), OGPointSpec(1f, 0f), OGPointSpec(1f, 1f)))
+        assertEquals(0.3f, plain.toShape(default = 0.3f).smoothing) // no per-shape value → default applies
+    }
+
+    @Test
+    fun sceneLevelBackgroundLookTraceDecode() {
+        val json = """{"background":"#1A1230","look":{"saturation":1.2,"temperature":0.2},
+          "trace":{"method":"lowpoly","targetShapes":6000,"seed":42,"realism":0.85},
+          "shapes":[{"points":[[0,0],[1,0],[1,1]]}]}"""
+        val scene = OGAiVector.decodeScene(json)
+        assertEquals("#1A1230", scene.background)
+        assertNotNull(scene.look)
+        assertEquals(1.2f, scene.look!!.saturation)
+        val tr = scene.trace
+        assertNotNull(tr)
+        assertEquals(OGTraceMethod.LOWPOLY, tr.methodOrNull)
+        assertEquals(6000, tr.targetShapes)
+        assertEquals(42, tr.seed)
+    }
+
+    @Test
+    fun traceMethodAliasesAndUnknownNeverFailsDecode() {
+        assertEquals(OGTraceMethod.LOWPOLY, OGTraceMethod.from("edge-aware"))
+        assertEquals(OGTraceMethod.VORONOI, OGTraceMethod.from("Stained-Glass"))
+        assertNull(OGTraceMethod.from("spaghetti"))
+        val scene = OGAiVector.decodeScene("""{"trace":{"method":"spaghetti"},"shapes":[]}""")
+        assertEquals("spaghetti", scene.trace!!.method)
+        assertNull(scene.trace!!.methodOrNull)
+    }
+
+    @Test
+    fun sanitizedPreservesSceneMetadataClampsAndDropsBadGradient() {
+        val json = """{"version":2,"background":"#111","trace":{"method":"lowpoly"},
+          "shapes":[
+            {"points":[[0,0],[1,0],[1,1]],"opacity":2.0,"smoothing":5.0,"feather":1.0,"gradient":{"stops":[[0,"#fff"]]}},
+            {"points":[[0,0]]}
+          ]}"""
+        val scene = OGAiVector.decodeScene(json).sanitized()
+        assertEquals(1, scene.shapes.size)           // degenerate 1-point region dropped
+        assertEquals("#111", scene.background)       // scene metadata preserved through sanitize
+        assertNotNull(scene.trace)
+        val s = scene.shapes[0]
+        assertEquals(1f, s.opacity)                  // 2.0 clamped → 1
+        assertEquals(1f, s.smoothing)                // 5.0 clamped → 1
+        assertEquals(0.25f, s.feather)               // 1.0 clamped → 0.25
+        assertNull(s.gradient)                       // single-stop gradient dropped
+    }
+
+    @Test
+    fun sceneRoundTripWritesCompatibleForms() {
+        val original = OGSceneSpec(
+            shapes = listOf(
+                OGPlacedShapeSpec(
+                    points = listOf(OGPointSpec(0f, 0f), OGPointSpec(1f, 0f), OGPointSpec(0.5f, 1f)),
+                    fill = "#aabbcc",
+                    gradient = OGFillSpec(stops = listOf(OGStopSpec(0f, "#000000"), OGStopSpec(1f, "#ffffff"))),
+                    opacity = 0.7f,
+                ),
+            ),
+            version = 2,
+            background = "#101010",
+        )
+        val encoded = OGAiVector.encodeScene(original)
+        assertTrue(encoded.contains("\"x\""), "points should serialize as {x,y} for back-compat")
+        val back = OGAiVector.decodeScene(encoded)
+        assertEquals(original.shapes[0].points, back.shapes[0].points)
+        assertEquals(original.shapes[0].gradient!!.stops, back.shapes[0].gradient!!.stops)
+        assertEquals(0.7f, back.shapes[0].opacity)
+        assertEquals("#101010", back.background)
+    }
+
+    @Test
+    fun gradientBuildsABrush() {
+        val g = OGFillSpec(stops = listOf(OGStopSpec(0f, "#3B3F7A"), OGStopSpec(1f, "#FFC97A")))
+        assertNotNull(g.toBrush(0f, 0f, 100f, 100f)) // builds (oklab resample + linear gradient) without throwing
     }
 }

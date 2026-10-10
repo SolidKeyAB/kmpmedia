@@ -6,7 +6,22 @@ import com.solidkey.painpoints.image.svg.OGSvgNodeOverride
 import com.solidkey.painpoints.image.svg.parseColor
 import com.solidkey.painpoints.shape.OGPoint
 import com.solidkey.painpoints.shape.OGPolygonShape
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.descriptors.element
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import kotlin.math.roundToInt
 
 /**
@@ -27,9 +42,36 @@ import kotlin.math.roundToInt
  * [OGAiVector.decodePolygon] / [OGAiVector.decodeSvgPatch] (turn its reply back into primitives).
  */
 
-/** A single normalized (`0..1`) vertex — the serializable twin of [OGPoint]. */
-@Serializable
+/** A single normalized (`0..1`) vertex — the serializable twin of [OGPoint]. On the wire it accepts
+ *  either a compact `[x, y]` pair (fewer tokens, what a model emits) or the legacy `{"x":..,"y":..}`
+ *  object; it always *writes* `{x, y}` so output stays readable by older consumers. */
+@Serializable(with = OGPointSpecSerializer::class)
 data class OGPointSpec(val x: Float, val y: Float)
+
+/** Reads a vertex as a lean `[x,y]` pair OR a `{x,y}` object; writes `{x,y}`. */
+object OGPointSpecSerializer : KSerializer<OGPointSpec> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("OGPointSpec") {
+        element<Float>("x"); element<Float>("y")
+    }
+    override fun deserialize(decoder: Decoder): OGPointSpec {
+        val jd = decoder as? JsonDecoder ?: throw SerializationException("OGPointSpec requires a JSON decoder")
+        return when (val el = jd.decodeJsonElement()) {
+            is JsonArray -> OGPointSpec(
+                el.getOrNull(0)?.jsonPrimitive?.floatOrNull ?: 0f,
+                el.getOrNull(1)?.jsonPrimitive?.floatOrNull ?: 0f,
+            )
+            is JsonObject -> OGPointSpec(
+                el["x"]?.jsonPrimitive?.floatOrNull ?: 0f,
+                el["y"]?.jsonPrimitive?.floatOrNull ?: 0f,
+            )
+            else -> OGPointSpec(0f, 0f)
+        }
+    }
+    override fun serialize(encoder: Encoder, value: OGPointSpec) {
+        val je = encoder as? JsonEncoder ?: throw SerializationException("OGPointSpec requires a JSON encoder")
+        je.encodeJsonElement(buildJsonObject { put("x", value.x); put("y", value.y) })
+    }
+}
 
 /** Clamp to a finite `0..1` (`NaN`/`∞` → `0`) — used to sanitize model-supplied vertices before use. */
 internal fun clamp01(v: Float): Float = if (v.isFinite()) v.coerceIn(0f, 1f) else 0f

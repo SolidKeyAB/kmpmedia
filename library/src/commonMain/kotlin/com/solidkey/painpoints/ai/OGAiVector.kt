@@ -229,16 +229,32 @@ object OGAiVector {
             """.trimIndent()
 
             OGVectorTarget.SCENE -> """
-                Look at the image provided and output ONLY a JSON object describing up to $maxShapes
-                region(s) of it as closed polygons, for the KMPMedia library.
+                Look at the image provided and reconstruct it as up to $maxShapes layered vector
+                region(s) (closed polygons), ordered back-to-front — output ONLY a JSON object, for
+                the KMPMedia library.
 
-                Coordinate space is NORMALIZED to the image: (0,0) is the top-left and (1,1) the
-                bottom-right. Keep every value within 0..1. For each region give the ordered outline
-                vertices (it closes automatically), an optional short "label", and an optional
-                representative "fill" color as an SVG string ("#RRGGBB" or a name like "red").
+                Coordinates are NORMALIZED to the image: (0,0) top-left, (1,1) bottom-right, values in
+                0..1. Give each region's outline vertices in order (it closes automatically). A point
+                may be the compact form [x,y] or {"x":..,"y":..}.
+
+                Each region takes an optional short "label", a solid "fill" ("#RRGGBB", "#AARRGGBB" or a
+                name), and OPTIONALLY: a richer "gradient", "opacity" (0..1), "smoothing" (0..1, rounds
+                organic edges), "feather" (0..0.25 soft edge) and "blend" (normal|multiply|screen|plus).
+                A gradient is {"type":"linear"|"radial","stops":[[<0..1>,"#RRGGBB"], ...]} — its coords
+                are 0..1 of the region's OWN box; linear defaults top→bottom, radial centred. At scene
+                level you may add "background":"#RRGGBB".
+
+                Make it resemble the photo, not a flat cartoon: the sky is ONE region with a single
+                vertical gradient (never stacked stripes); a light source is a bright radial disc plus a
+                larger halo whose last stop is transparent with blend "plus"; give organic subjects
+                smoothing ~0.7 and stack a base + a "multiply" shadow + a "screen"/"plus" rim; ground and
+                foliage use vertical gradients, not flat slabs.
 
                 Schema:
-                {"shapes":[{"label":"<name>","fill":"#RRGGBB","points":[{"x":<0..1>,"y":<0..1>}, ...]}, ...]}$aspectLine$hintLine
+                {"background":"#RRGGBB","shapes":[{"label":"<name>","fill":"#RRGGBB",
+                  "gradient":{"type":"linear","stops":[[0,"#RRGGBB"],[1,"#RRGGBB"]]},
+                  "smoothing":<0..1>,"opacity":<0..1>,"blend":"normal",
+                  "points":[[<0..1>,<0..1>], ...]}, ...]}$aspectLine$hintLine
 
                 Output the JSON only, with no prose and no markdown fences.
             """.trimIndent()
