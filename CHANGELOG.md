@@ -4,6 +4,18 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.37.0] — 2026-10-10
+
+> **Cloth, in two dimensions.** Extends `com.solidkey.painpoints.motion` with `OGCloth`: a 2-D (planar) Verlet cloth *sheet* — a tarp, curtain, banner or flag — that drapes over and **collides** with capsule "poles", the thing the 1-D `OGClothStrip` cannot do. Same fixed-substep determinism (byte-for-byte identical on Android & iOS), data-defined (`OGClothMeshSpec`) so a model can author one, and re-samplable by time for compositor scrub / export. Zero new dependency, 60fps.
+
+### Added
+- **`OGCloth` — a 2-D planar Verlet cloth sheet.** A `cols × rows` grid of point-masses held by **structural** (grid-edge) + **shear** (diagonal) springs — shear is what stops a flat grid collapsing to a line — kept inextensible by position-based distance constraints, under gravity and the same seeded wind as the strip (now varying across the sheet so it ripples rather than slides). It advances on the same **fixed `1/120s` internal substep** (stable, frame-rate-independent, deterministic). Drive it with `step(dt, x0, y0, x1, y1)` (the anchor segment) and read `x(col, row)` / `y(col, row)` / `point(col, row)`; the library exposes node positions and you draw them. Four pin modes (`OGClothPinMode`): `NONE` (thrown / draped), `TOP_EDGE` (curtain on a rod), `TOP_CORNERS` (banner between two poles), `LEFT_EDGE` (flag on a pole). Grid is capped at `24×24`.
+- **`OGClothCollider` — capsule "poles" the sheet drapes over.** The one collider shape: a line segment inflated by a radius (a circle is a zero-length capsule, a floor a long flat one), resolved by positional projection + friction. Up to 8 per sheet, mutable so the app can move a pole between frames. This is the new capability over the strip: throw a sheet over a bar and it hangs down both sides.
+- **`OGClothMeshSpec` + `OGCloths` mesh codec.** The sheet is plain `@Serializable` JSON (`cols` / `rows` / `width` / `height` / `gravity` / `damping` / `wind…` / `friction` / `pinMode`) with four ready fabrics (`tarp` / `curtain` / `banner-wall` / `sail`), AI-authorable via `clothMeshPrompt` — the same lenient pattern as the rest of the family (`decodeMeshSpec` / `decodeMeshSpecOrNull` / `encode` / `meshPreset`). `OGCloths.sampleAt(spec, t, colliders, anchorAt)` deterministically re-simulates to a time for compositor scrub + export (a Verlet sheet has no closed form).
+
+### Notes
+- **It is a *planar* (2-D, side-view) sheet** — 2-D node positions only, no normals, lighting, tessellation or 3-D cloth sim. **Still out of scope** (would make it a physics engine): 3-D cloth, self-collision, tearing, a public constraint/solver API, IK. **Which one:** `OGCloth` for a sheet that *drapes & wraps* over poles; `OGClothStrip` for a 1-D line that *hangs & flutters*; `OGFollowChain` for a 1-D chain that *stretches & trails* a leader.
+
 ## [1.36.0] — 2026-10-10
 
 > **Cloth — a fabric primitive.** Extends `com.solidkey.painpoints.motion` with `OGClothStrip`: a one-dimensional Verlet cloth strip that hangs under gravity, holds its length (inextensible), and flutters in a prevailing wind plus seeded gusts — a scarf, a flag, a banner, a lock of hair. Deterministic and frame-identical on Android & iOS (fixed internal substep), data-defined (`OGClothSpec`) so a model can author one, and re-samplable by time for compositor scrub / export. Zero new dependency, 60fps.

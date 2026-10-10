@@ -52,8 +52,9 @@ data class OGClothSpec(
  * is also what makes it **frame-identical on Android & iOS** and **exact for fixed-step GIF/MP4 export**.
  * Note it is a **live stepper, not closed-form** — unlike [OGSpring] it has no `valueAt(t)`; to *scrub* it,
  * re-simulate from `0` (deterministic, see [OGCloths.sampleAt]). Pure maths, zero dependency, no per-frame
- * allocation (state lives in preallocated `FloatArray`s). Scope is deliberately a 1-D strip only — no 2-D
- * mesh, no collisions, no public constraint API (that would make it a physics engine, which this is not).
+ * allocation (state lives in preallocated `FloatArray`s). This strip is deliberately **1-D** — for a 2-D sheet
+ * that drapes over and collides with poles, reach for [OGCloth]; a public constraint/solver API, self-collision
+ * and tearing remain out of scope for both (that would make them a physics engine, which this is not).
  */
 class OGClothStrip(spec: OGClothSpec) {
     /** The live feel. Node count is fixed at construction; other fields take effect on the next [step]. */
@@ -175,8 +176,8 @@ class OGClothStrip(spec: OGClothSpec) {
  * `OGDynamics` / `OGMotions` / `OGLooks`: tolerant of code fences and stray prose, reusing the same
  * [OGAiVector.json] / [OGAiVector.extractJson]. No network, no AI SDK.
  *
- * (Named `OGCloths`, not `OGCloth`, to leave the `OGCloth` name free should a 2-D cloth mesh ever be added —
- * which is a deliberately *rejected-by-default* follow-up, along with collisions and a public solver API.)
+ * (Named `OGCloths`, the plural: `OGCloth` is the 2-D cloth-mesh *sheet* and [OGClothStrip] the 1-D *strip*;
+ * this one codec serves both — see the mesh-suffixed members [decodeMeshSpec] / [meshPresets] / [clothMeshPrompt].)
  */
 object OGCloths {
     /** The shared lenient JSON config (reused from `OGAiVector` so all data layers agree). */
@@ -250,6 +251,97 @@ object OGCloths {
         Examples:
         {"name":"silk scarf","nodes":16,"length":0.5,"gravity":0.7,"damping":0.7,"windAmplitude":0.8}
         {"name":"heavy flag","nodes":16,"length":0.5,"gravity":0.4,"wind":1.1,"pinTail":true}
+
+        Output the JSON only, with no prose and no markdown fences.
+
+        Task: $instruction
+    """.trimIndent()
+
+    // ---- 2-D cloth mesh (OGCloth) — same codec family, mesh-suffixed members ----
+
+    /** Decode a JSON cloth-mesh pack into its [OGClothMeshSpec]. Throws on malformed input. */
+    fun decodeMeshSpec(text: String): OGClothMeshSpec =
+        json.decodeFromString(OGClothMeshSpec.serializer(), OGAiVector.extractJson(text))
+
+    /** [decodeMeshSpec] but returns `null` instead of throwing on malformed input. */
+    fun decodeMeshSpecOrNull(text: String): OGClothMeshSpec? = runCatching { decodeMeshSpec(text) }.getOrNull()
+
+    /** Serialize a cloth-mesh pack to JSON (compact; defaults omitted). */
+    fun encode(spec: OGClothMeshSpec): String = json.encodeToString(OGClothMeshSpec.serializer(), spec)
+
+    /** Ready-made 2-D sheets, keyed by name. Each is a plain [OGClothMeshSpec] you can `copy()`. */
+    val meshPresets: Map<String, OGClothMeshSpec> = linkedMapOf(
+        "tarp" to OGClothMeshSpec(name = "tarp", cols = 14, rows = 10, width = 0.55f, height = 0.42f, gravity = 1.1f, damping = 0.85f, wind = 0.2f, windAmplitude = 0.3f, windFrequency = 0.6f, windSeed = 5, friction = 0.6f, pinMode = OGClothPinMode.NONE),
+        "curtain" to OGClothMeshSpec(name = "curtain", cols = 14, rows = 11, width = 0.5f, height = 0.55f, gravity = 0.8f, damping = 0.9f, wind = 0.1f, windAmplitude = 0.25f, windFrequency = 0.5f, windSeed = 7, friction = 0.4f, pinMode = OGClothPinMode.TOP_EDGE),
+        "banner-wall" to OGClothMeshSpec(name = "banner-wall", cols = 16, rows = 10, width = 0.7f, height = 0.4f, gravity = 0.6f, damping = 0.75f, wind = 0.8f, windAmplitude = 0.6f, windFrequency = 0.8f, windSeed = 13, friction = 0.3f, pinMode = OGClothPinMode.TOP_CORNERS),
+        "sail" to OGClothMeshSpec(name = "sail", cols = 12, rows = 12, width = 0.45f, height = 0.5f, gravity = 0.35f, damping = 0.6f, wind = 1.1f, windAmplitude = 0.7f, windFrequency = 0.9f, windSeed = 11, friction = 0.2f, pinMode = OGClothPinMode.LEFT_EDGE),
+    )
+
+    /** Look up a [meshPresets] entry by name (case-insensitive), or `null` if there is none. */
+    fun meshPreset(name: String): OGClothMeshSpec? = meshPresets[name.lowercase()]
+
+    /**
+     * Deterministically **re-simulate a fresh sheet to time [timeSec]** at the fixed internal substep, over the
+     * (static) [colliders], with the anchor segment given by [anchorAt] / [anchor2At] (seconds → point). This is
+     * the compositor's way to *scrub* a sheet (it has no closed form): same inputs → same output, exactly. Cost
+     * is O(timeSec × nodes), so prefer off-main for a long export scrub. If [anchor2At] is omitted the second
+     * endpoint defaults to [anchorAt] offset by the spec width (a sensible default top edge).
+     */
+    fun sampleAt(
+        spec: OGClothMeshSpec,
+        timeSec: Float,
+        colliders: List<OGClothCollider> = emptyList(),
+        anchorAt: (Float) -> OGPoint,
+        anchor2At: ((Float) -> OGPoint)? = null,
+    ): OGCloth {
+        val cloth = OGCloth(spec)
+        cloth.colliders.addAll(colliders)
+        val h = 1f / 120f
+        val second: (Float) -> OGPoint = anchor2At ?: { t -> val p = anchorAt(t); OGPoint(p.x + spec.width, p.y) }
+        val a0 = anchorAt(0f); val b0 = second(0f)
+        cloth.reset(a0.x, a0.y, b0.x, b0.y)
+        var t = 0f
+        while (t < timeSec) {
+            val a = anchorAt(t + h); val b = second(t + h)
+            cloth.step(h, a.x, a.y, b.x, b.y)
+            t += h
+        }
+        return cloth
+    }
+
+    /**
+     * Build a ready-to-send instruction constraining a model to output exactly the cloth-mesh JSON
+     * [decodeMeshSpec] expects. The developer describes the SHEET ("a heavy tarp thrown over a bar", "a light
+     * sail in a stiff breeze") and the model returns the numbers.
+     */
+    fun clothMeshPrompt(instruction: String): String = """
+        You output ONLY a JSON object describing a 2-D piece of fabric (a planar cloth sheet) for the KMPMedia
+        library — a tarp, curtain, banner wall or sail. Every field is optional; omit a field to keep its
+        default. All positions are normalized 0..1 of the box.
+
+        Schema (default in parentheses):
+        {
+          "name":          "<short name>",
+          "cols":          <int 2..24 (12): nodes across; more = smoother + heavier>,
+          "rows":          <int 2..24 (9): nodes down>,
+          "width":         <0..1 (0.5): rest width of the sheet>,
+          "height":        <0..1 (0.4): rest height of the sheet>,
+          "gravity":       <>=0 (0.9): downward pull; higher drapes harder>,
+          "damping":       <>=0 (0.9): how fast it settles; higher is calmer, lower ripples longer>,
+          "wind":          <signed (0): prevailing horizontal wind; + blows right, − left; gusts ride on top>,
+          "windAmplitude": <>=0 (0.5): peak turbulent gust force on top of wind; 0 = steady wind only>,
+          "windFrequency": <>=0 (0.7): how fast the gusts wander>,
+          "windSeed":      <int (7): pick a different gust pattern>,
+          "friction":      <0..1 (0.3): grip on a pole; 0 slides freely, 1 grips like canvas>,
+          "pinMode":       <"NONE"|"TOP_EDGE"|"TOP_CORNERS"|"LEFT_EDGE" (TOP_EDGE): how it is held>
+        }
+
+        pinMode: NONE = thrown/draped over poles, TOP_EDGE = curtain on a rod, TOP_CORNERS = banner between two
+        poles, LEFT_EDGE = flag on a vertical pole.
+
+        Examples:
+        {"name":"tarp","cols":14,"rows":10,"gravity":1.1,"friction":0.6,"pinMode":"NONE"}
+        {"name":"sail","cols":12,"rows":12,"gravity":0.35,"wind":1.1,"pinMode":"LEFT_EDGE"}
 
         Output the JSON only, with no prose and no markdown fences.
 

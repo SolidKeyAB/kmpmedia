@@ -168,7 +168,7 @@ scarf, cape edge, flag, banner or hair strand. Unlike `OGFollowChain` (springs i
 *stretch* and trail like a comet tail), the strip is **inextensible** — distance constraints hold the
 rest length — and it has **gravity** and ambient **wind**, so it *hangs* at rest and *flutters* in
 motion. **Which one:** stretches & trails → `OGFollowChain`; hangs at a fixed length & flutters →
-`OGClothStrip`.
+`OGClothStrip`; a 2-D sheet that drapes & wraps over poles → `OGCloth` (below).
 
 ```kotlin
 val scarf = remember { OGClothStrip(OGCloths.preset("scarf")!!) }
@@ -182,8 +182,31 @@ Unlike `OGSpring` it is a **live stepper, not closed-form** — there is no `val
 re-simulate from `0` deterministically via `OGCloths.sampleAt(spec, t, anchorAt)`. The wind is seeded
 fractal noise (no caller randomness), so runs reproduce exactly. Data form `OGClothSpec` + `OGCloths`
 codec + presets (`scarf` / `flag` / `banner` / `hair`) + `clothPrompt(...)`, same codec-not-SDK pattern.
-**Scope is deliberately a 1-D strip only** — a 2-D cloth mesh, collisions and a public solver API are
-rejected-by-default (that would make it a physics engine, which this is not).
+The strip is deliberately **1-D**; for a 2-D sheet that drapes over poles, see `OGCloth` below.
+
+**Cloth sheet — drape & wrap (1.37.0).** `OGCloth(spec)` is a **2-D (planar) Verlet sheet**: a tarp,
+curtain, banner wall or sail. It is a `cols × rows` grid held by **structural** (grid-edge) + **shear**
+(diagonal) springs — shear is what stops a flat grid collapsing to a line — inextensible, under gravity
+and the same seeded wind (now varying across the sheet so it ripples, not slides). What the strip can't
+do: it genuinely **collides** with `OGCloth.colliders`, a list of **capsule** "poles" (a line + radius;
+a circle is a zero-length capsule, a floor a long flat one, up to 8). Throw it over a scaffold bar and it
+hangs down both sides. Four pin modes: `NONE` (thrown / draped), `TOP_EDGE` (curtain on a rod),
+`TOP_CORNERS` (banner between two poles), `LEFT_EDGE` (flag on a pole).
+
+```kotlin
+val tarp = remember { OGCloth(OGCloths.meshPreset("tarp")!!) }        // pinMode = NONE
+tarp.colliders.add(OGClothCollider(ax = barLeftX, ay = barY, bx = barRightX, by = barY, radius = 0.03f))
+tarp.step(dt, x0, y0, x1, y1)        // the anchor segment (top/seed edge); NONE ignores it after seeding
+// then draw a quad grid through tarp.point(col, row)
+```
+
+It is **planar** — 2-D node positions only, no normals / lighting / tessellation (you draw the nodes).
+Like the strip it is a live stepper on a fixed `1/120s` substep (frame-identical, export-exact) with no
+closed form; scrub it with `OGCloths.sampleAt(spec, t, colliders, anchorAt)` (static colliders; cost is
+`O(t × nodes)`). Grid is capped at `24×24`. Data form `OGClothMeshSpec` + the same `OGCloths` codec
+(mesh-suffixed: `decodeMeshSpec` / `meshPresets` = tarp · curtain · banner-wall · sail / `clothMeshPrompt`).
+**Still rejected-by-default:** 3-D cloth, self-collision, tearing, a public constraint/solver API, IK —
+that line is what keeps this a media primitive, not a physics engine.
 
 ## API summary
 
@@ -200,6 +223,7 @@ rejected-by-default (that would make it a physics engine, which this is not).
 | `OGSquash` / `OGSway` | Volume-preserving squash & stretch; noise-driven idle sway. |
 | `OGClothStrip` | 1-D Verlet cloth strip (inextensible, gravity + seeded wind): scarf / flag / banner / hair. Live stepper (fixed substep, deterministic). |
 | `OGClothSpec` / `OGCloths` | Serializable cloth feel + codec + presets + `clothPrompt`; `sampleAt` for deterministic scrub. |
+| `OGCloth` / `OGClothMeshSpec` / `OGClothCollider` | 2-D planar Verlet **sheet** (structural + shear, inextensible) that drapes over capsule "poles": tarp / curtain / banner-wall / sail. Live stepper, deterministic. |
 | `OGDynamicsSpec` / `OGDynamics` | Serializable "feel" + codec + presets + `dynamicsPrompt` (AI-authorable). |
 
 All in `commonMain`, zero new dependencies.
