@@ -4,6 +4,18 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.41.0] — 2026-10-11
+
+> **Clickable joints: bend a dense mesh, live.** A deform *rig* for an `OGSceneSpec` mesh — the one case the rasterise-once/cache path can't cover. Bind a handful of joints to the mesh once, then drag any joint and the whole mesh warps around it, re-skinned every frame. Linear-blend skinning with pure-translation bones: robust, collapse-free, pure maths, zero dependency, frame-identical on Android & iOS.
+
+### Added
+- **`OGRig` — a linear-blend-skinning deform rig.** `OGRig.bind(scene, joints, nearest, falloff)` weights every mesh vertex to its `nearest` closest joints by a `1 / distance^falloff` falloff, normalised to a partition of unity (so a uniform joint shift translates the mesh rigidly — no shear, no collapse). `deformInto(joints, outX, outY)` is the zero-allocation 60fps path; `deform` / `deformScene` return the posed vertices / a posed `OGSceneSpec` (paint, labels, motion and ordering preserved). `nearestJoint(joints, at, grabRadius)` is the touch hit-test; `OGRig.gridJoints(cols, rows, margin)` lays out a generic pin board.
+- **`OGJoint`** — one control pin: a `rest` position and a live `offset` (`pose = rest + offset`), with `draggedTo(target)` / `relaxed()`.
+
+### Notes
+- Pure data + math, no Compose, no clock, no per-frame allocation in `deformInto` — so it unit-tests headless and runs frame-identically on Android & iOS, like the rest of the scene codec. ~1.3 ms to skin 20k vertices; the real per-frame cost is the mesh **redraw**, which is exactly why a rig is the case caching can't cover (a region's scale/rotate moves it rigidly; a rig moves thousands of vertices independently). 10 new tests (`OGSceneRigTest`): identity, partition-of-unity rigid translation, on-joint follow, locality, hit-test, structure/paint-preserving `deformScene`, and a 20k-vertex deform-cost sanity. 541 JVM + iOS green.
+- Bind once (heavy, O(vertices × joints)); a deform is O(vertices × k). For a live preview keep the rig and call `deformInto` each frame, then spring a released joint home with `OGSpring`.
+
 ## [1.40.0] — 2026-10-11
 
 > **Make it live: a scene animates itself from its JSON.** Phase 3 of the AI scene format (`OGSceneSpec`) lets a still *move* — a region can declare an `OGRegionMotion` (translate / scale / rotate / fade over a looping timeline) and the scene an `OGSceneMotion` (a colour grade + base coat that swing over time — day→dusk→night). The evaluator is **pure and t-addressable**: `scene.liveAt(t)` / `shape.animatedAt(t)` give the exact state at any time with no clock and no per-frame allocation beyond the moved points, so a compositor can scrub/export it and a live preview holds 60fps by re-evaluating only the handful of regions that move. Every field is optional, so a 1.39 scene decodes and renders unchanged, and an older library ignores the new keys.
