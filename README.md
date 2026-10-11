@@ -77,6 +77,13 @@ KMPMedia ships with a full **Compose Multiplatform demo app** (Android + iOS) bu
 </p>
 <sub><b>The core moves, live.</b> Crop a photo into any shape · re-frame a <i>running</i> video into any shape · bring a 100%-static SVG to life with Scale / Rotate / Fade / Slide. Each is one <code>OGImageView</code> / <code>OGAVPlayer</code> / animation-primitive call — the same Compose Multiplatform code on Android &amp; iOS.</sub>
 
+The capstone — **one JSON → a whole movie, then exported.** A single `OGStage` document stacks a day→night **scene**, drifting **petals** and a forked **lightning** bolt on one timeline; one player plays it at 60fps and scrubs it, and it renders off-screen to a shareable **GIF/MP4** on device — every layer kind baked in:
+
+<p align="center">
+  <img src="demo-screenshots/stage-demo.gif" width="42%" alt="OGStage on Android — one JSON document playing as a movie: a day→night landscape whose sun arcs and sets while the frame grades day→dusk→night, cherry-blossom petals drifting down, and a forked lightning bolt striking the hill, all on one timeline and exported off-screen to this very GIF" />
+</p>
+<sub><b>OGStage — one data-authored movie (v1.42.0).</b> A single serializable document = a timeline of layers (a day→night <code>OGSceneSpec</code> + <code>OGParticles</code> petals + an <code>OGLightning</code> bolt), authored as JSON, round-tripped through the <code>OGStages</code> codec, played by <code>OGStageView</code> at 60fps (scrubbable), then rendered off-screen and encoded to <i>this very GIF</i> — <b>every</b> layer kind baked in (scene, shaped particles, the FX bolt), the file matching the preview. The generate → play → export loop no Lottie/Rive runtime does. Same code on Android &amp; iOS.</sub>
+
 And the flagship **runtime-editable SVG** — one `.svg` parsed *once*, then any node changed by its `id` at runtime, bound to Compose state:
 
 <p align="center">
