@@ -127,6 +127,32 @@ values at any instant (closed-form for the scene + transform channels), so it is
 and identical on both platforms. A particle layer runs its own seeded simulation (live), and the
 exporter re-simulates it deterministically.
 
+## Interactivity — tap a layer, it reacts *(v1.44.0)*
+
+A movie you watch becomes one you touch. Any `OGStageLayer` can carry an optional **`onTap`** trigger (`OGStageTrigger`) — plain serializable data, so it round-trips through the codec and a model can author it. `null` (the default) = an inert, watch-only layer, so every existing stage is unchanged.
+
+```kotlin
+OGStages.text(
+    id = "title", text = "TAP ME", bold = true,
+    onTap = OGStages.tap(OGTapAction.BOUNCE),   // or .seekTo(2000L) / .playPause()
+)
+// any layer kind: OGStages.tappable(someLayer, OGStages.tap(OGTapAction.SPIN))
+```
+
+`OGTapAction`:
+
+| action | what a tap does |
+|---|---|
+| `BOUNCE` | a spring scale-pop that overshoots and settles |
+| `SHAKE` | a damped horizontal wobble |
+| `SPIN` | one eased 360° turn back to rest |
+| `SEEK` | jump the stage clock to `seekMs` (a chapter jump) |
+| `PLAY_PAUSE` | toggle playback |
+
+The visual reactions (`BOUNCE` / `SHAKE` / `SPIN`) are **closed-form and pure** — `reactionTransformAt(action, strength, durationMs, elapsedMs)` returns the transient transform applied *on top of* the layer's resolved transform, evaluated with the shipped dynamics spring (`OGSpring.valueAt`), so a tap reacts with the same deterministic, platform-identical second-order feel the dynamics pack ships. They work even while the stage is paused or scrubbed (they're independent of the clock); `SEEK` / `PLAY_PAUSE` drive the player's own clock and so apply only when `OGStageView` owns it (not when it is controlled by an external `positionMs`).
+
+**Cost & semantics.** `OGStageView` drives reactions off the frame clock but **only while one is settling** — a still, tappable stage adds no frame loop and reports `isLive = false` (it renders one frame and waits for a finger). Hit-testing is the layer **box**, so taps fall through a non-interactive layer to an interactive one behind it; to make distinct things tappable, give each its own on-screen zone with a sub-1 `scale` and an `x`/`y` offset. The off-screen exporter is untouched — an exported GIF / MP4 bakes the base timeline (taps are a live-player concern).
+
 ## See also
 
 - [COMPOSITOR.md](COMPOSITOR.md) — the keyframe tracks + GIF/MP4 encoders OGStage reuses
