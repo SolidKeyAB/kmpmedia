@@ -64,8 +64,10 @@ object OGStages {
         startMs: Long = 0L,
         endMs: Long? = null,
         opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        onTap: OGStageTrigger? = null,
     ): OGStageLayer = OGStageLayer(
         id = id, content = OGStageContent.Solid(color), startMs = startMs, endMs = endMs, opacity = opacity,
+        onTap = onTap,
     )
 
     /** A vector-scene layer (its own `motion` animates on the layer's local clock). */
@@ -81,9 +83,11 @@ object OGStages {
         opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
         look: OGLookSpec? = null,
         blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
     ): OGStageLayer = OGStageLayer(
         id = id, content = OGStageContent.Scene(scene), startMs = startMs, endMs = endMs,
         x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
+        onTap = onTap,
     )
 
     /** A particle-emitter layer. */
@@ -94,9 +98,10 @@ object OGStages {
         endMs: Long? = null,
         opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
         blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
     ): OGStageLayer = OGStageLayer(
         id = id, content = OGStageContent.Particles(spec), startMs = startMs, endMs = endMs,
-        opacity = opacity, blend = blend,
+        opacity = opacity, blend = blend, onTap = onTap,
     )
 
     /** A breathing-slash ribbon layer (water / flame / thunder sweep); additive by default. */
@@ -149,12 +154,30 @@ object OGStages {
         opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
         look: OGLookSpec? = null,
         blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
     ): OGStageLayer = OGStageLayer(
         id = id,
         content = OGStageContent.Text(text, size, color, bold, italic, family, style),
         startMs = startMs, endMs = endMs,
         x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
+        onTap = onTap,
     )
+
+    // --- Interactivity shorthands --------------------------------------------------------------
+
+    /** Attach a tap [trigger] to any [layer] (returns a copy) — the generic path for layer kinds whose
+     *  builder has no `onTap` parameter (slash / lightning / speed-lines), or to add one after the fact. */
+    fun tappable(layer: OGStageLayer, trigger: OGStageTrigger): OGStageLayer = layer.copy(onTap = trigger)
+
+    /** A tap that plays a visual reaction ([OGTapAction.BOUNCE] / [OGTapAction.SHAKE] / [OGTapAction.SPIN]). */
+    fun tap(action: OGTapAction, strength: Float = 1f, durationMs: Long = 600L): OGStageTrigger =
+        OGStageTrigger(action = action, strength = strength, durationMs = durationMs)
+
+    /** A tap that jumps the stage clock to absolute [seekMs] (a chapter jump). */
+    fun seekTo(seekMs: Long): OGStageTrigger = OGStageTrigger(action = OGTapAction.SEEK, seekMs = seekMs)
+
+    /** A tap that toggles the player between playing and paused. */
+    fun playPause(): OGStageTrigger = OGStageTrigger(action = OGTapAction.PLAY_PAUSE)
 
     // --- Prompt: hand a model the contract -----------------------------------------------------
 
@@ -190,7 +213,9 @@ object OGStages {
           "rotationDeg": <track>,               // degrees about the centre
           "opacity": <track>,                   // 0..1
           "look": { "brightness":0,"contrast":1,"saturation":1,"temperature":0,"tint":0,"hue":0 },
-          "blend": "normal"|"multiply"|"screen"|"overlay"|"lighten"|"darken"|"plus"
+          "blend": "normal"|"multiply"|"screen"|"overlay"|"lighten"|"darken"|"plus",
+          "onTap": { "action":"bounce"|"shake"|"spin"|"seek"|"playpause",
+                     "strength":1.0, "durationMs":600, "seekMs":<ms> }   // optional — makes it tappable
         }
 
         A transform <track> is a keyframed float on ABSOLUTE movie time:
@@ -228,6 +253,14 @@ object OGStages {
         "burst", "lifetimeMs", "x","y" (0..1 origin), "angleDeg" (270 = up), "spreadDeg", "speed",
         "gravityY", "startSize","endSize", "startColor","endColor", "shape"
         ("circle"|"square"|"triangle"|"star"|"petal"|"teardrop"), and "seed".
+
+        Add "onTap" to a layer to make it INTERACTIVE — a finger on that layer fires a reaction while
+        the movie plays. "bounce" / "shake" / "spin" are spring-driven visual reactions on the layer
+        itself ("strength" ~1 scales how big, "durationMs" how long it settles); "seek" jumps the movie
+        clock to "seekMs" (a chapter jump); "playpause" toggles playback. Omit "onTap" for a normal,
+        watch-only layer. Taps fall through non-interactive layers to an interactive one behind, and the
+        hit area is the layer's box — so to make distinct things tappable, give each its own on-screen
+        zone with a sub-1 "scale" and an "x"/"y" offset.
 
         Compose the movie from these: e.g. a scene layer for the backdrop (with its own day->night
         motion), a particle layer of drifting petals on top with blend "plus", a gentle "scale" track on

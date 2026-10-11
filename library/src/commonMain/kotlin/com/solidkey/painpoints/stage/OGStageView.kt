@@ -2,6 +2,7 @@ package com.solidkey.painpoints.stage
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import com.solidkey.painpoints.ai.OGPlacedShapeSpec
 import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.ai.animatedAt
@@ -64,10 +67,16 @@ fun OGStageView(
     onProgress: ((timeMs: Long) -> Unit)? = null,
 ) {
     var clockMs by remember(stage) { mutableStateOf(0L) }
+    // A tap on a PLAY_PAUSE layer toggles this; it ANDs with isPlaying so the host's flag still wins.
+    var userPaused by remember(stage) { mutableStateOf(false) }
+    // Active tap reactions, keyed by layer id (re-tapping a layer restarts its reaction). Each carries
+    // how long it has been settling; the ticker below advances them and drops them when they reach rest.
+    val reactions = remember(stage) { mutableStateMapOf<String, Reaction>() }
+    var reactionsLive by remember(stage) { mutableStateOf(false) }
     val controlled = positionMs != null
 
-    LaunchedEffect(stage, isPlaying, loop, controlled) {
-        if (controlled || !isPlaying) return@LaunchedEffect
+    LaunchedEffect(stage, isPlaying, loop, controlled, userPaused) {
+        if (controlled || !isPlaying || userPaused) return@LaunchedEffect
         val duration = stage.durationMs.coerceAtLeast(1L)
         var last = withFrameMillis { it }
         while (isActive) {
@@ -82,8 +91,53 @@ fun OGStageView(
         }
     }
 
+    // Reaction ticker — runs ONLY while a tap reaction is settling (gated on [reactionsLive]), so an idle
+    // or paused stage adds no frame loop of its own. It advances each live reaction on the frame clock
+    // and removes it once it reaches rest; when the last one finishes it flips [reactionsLive] off and
+    // suspends. This is independent of the play clock, so a reaction animates even while paused / scrubbed.
+    LaunchedEffect(stage, reactionsLive) {
+        if (!reactionsLive) return@LaunchedEffect
+        var last = withFrameMillis { it }
+        while (isActive) {
+            var anyLeft = false
+            withFrameMillis { now ->
+                val dt = (now - last).coerceAtLeast(0L)
+                last = now
+                for ((id, r) in reactions.entries.toList()) {
+                    val e = r.elapsedMs + dt
+                    if (e >= r.durationMs) reactions.remove(id)
+                    else {
+                        reactions[id] = r.copy(elapsedMs = e)
+                        anyLeft = true
+                    }
+                }
+            }
+            if (!anyLeft) {
+                reactionsLive = false
+                break
+            }
+        }
+    }
+
+    // Dispatch a layer's tap: a visual reaction starts/restarts its spring; a navigation action drives
+    // the player's own clock (only when this view owns it — a controlled/scrubbed view leaves the clock
+    // to its host, so seek / play-pause are no-ops there).
+    val onLayerTap: (String, OGStageTrigger) -> Unit = tap@{ layerId, trig ->
+        when (trig.action) {
+            OGTapAction.SEEK -> if (!controlled) {
+                clockMs = (trig.seekMs ?: 0L).coerceIn(0L, stage.durationMs.coerceAtLeast(0L))
+                onProgress?.invoke(clockMs)
+            }
+            OGTapAction.PLAY_PAUSE -> if (!controlled) userPaused = !userPaused
+            else -> {
+                reactions[layerId] = Reaction(trig.action, trig.strength, trig.durationMs.coerceAtLeast(1L), 0L)
+                reactionsLive = true
+            }
+        }
+    }
+
     val timeMs = positionMs ?: clockMs
-    val livePlay = isPlaying && !controlled
+    val livePlay = isPlaying && !controlled && !userPaused
     val bg = stage.background?.toSpecColor()
 
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -95,17 +149,46 @@ fun OGStageView(
         Box(stageBox) {
             for (layer in stage.layers) {
                 if (!layer.isVisibleAt(timeMs, stage.durationMs)) continue
+                val trigger = layer.onTap
                 key(layer.id) {
-                    StageLayerBox(layer.resolveAt(timeMs), livePlay)
+                    StageLayerBox(
+                        r = layer.resolveAt(timeMs),
+                        reaction = reactions[layer.id],
+                        tappable = trigger != null,
+                        onTap = { if (trigger != null) onLayerTap(layer.id, trigger) },
+                        livePlay = livePlay,
+                    )
                 }
             }
         }
     }
 }
 
-/** One resolved layer: transform via a [graphicsLayer], grade/blend via [ogLook], then its content. */
+/** A tap reaction in flight: which [action] it is, its [strength] / [durationMs], and how long it has
+ *  been settling ([elapsedMs]). The ticker in [OGStageView] advances [elapsedMs] each frame. */
+private data class Reaction(
+    val action: OGTapAction,
+    val strength: Float,
+    val durationMs: Long,
+    val elapsedMs: Long,
+)
+
+/**
+ * One resolved layer: transform via a [graphicsLayer] (the keyframed transform PLUS any in-flight tap
+ * [reaction]), grade/blend via [ogLook], then its content. When [tappable], a tap gesture on the
+ * layer's (transformed) box fires [onTap] — the hit area is the layer box, and because the
+ * [pointerInput] sits after the [graphicsLayer] it tracks the layer wherever its transform/reaction
+ * moves it. A non-tappable layer adds no pointer handler, so taps fall through it to any interactive
+ * layer behind.
+ */
 @Composable
-private fun StageLayerBox(r: OGResolvedStageLayer, livePlay: Boolean) {
+private fun StageLayerBox(
+    r: OGResolvedStageLayer,
+    reaction: Reaction?,
+    tappable: Boolean,
+    onTap: () -> Unit,
+    livePlay: Boolean,
+) {
     // A scene's OWN live grade (its day->night) wins over the layer's static look; it changes with
     // time, so recompute per frame — ogLook caches the filter per spec instance, a cheap rebuild.
     val effLook: OGLookSpec? = when (r.content) {
@@ -113,17 +196,24 @@ private fun StageLayerBox(r: OGResolvedStageLayer, livePlay: Boolean) {
         else -> r.look
     }
 
+    // The transient tap reaction (a spring bounce/shake/spin), applied on top of the resolved transform.
+    val rt = reaction?.let { reactionTransformAt(it.action, it.strength, it.durationMs, it.elapsedMs) }
+        ?: OGReactionTransform.IDENTITY
+
     var m = Modifier
         .fillMaxSize()
         .graphicsLayer {
-            translationX = r.x * size.width
-            translationY = r.y * size.height
-            scaleX = r.scale
-            scaleY = r.scale
-            rotationZ = r.rotationDeg
+            translationX = (r.x + rt.txAdd) * size.width
+            translationY = (r.y + rt.tyAdd) * size.height
+            scaleX = r.scale * rt.scaleMul
+            scaleY = r.scale * rt.scaleMul
+            rotationZ = r.rotationDeg + rt.rotationAdd
             alpha = r.opacity
             transformOrigin = TransformOrigin.Center
         }
+    if (tappable) {
+        m = m.pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
+    }
     if (effLook != null || r.blend != OGBlendMode.NORMAL) {
         m = m.ogLook(effLook ?: OGLookSpec.Identity, r.blend.toBlendMode())
     }

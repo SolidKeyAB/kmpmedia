@@ -140,6 +140,13 @@ data class OGStageLayer(
     val look: OGLookSpec? = null,
     /** How this layer composites over the layers beneath it. [OGBlendMode.NORMAL] = source-over. */
     val blend: OGBlendMode = OGBlendMode.NORMAL,
+    /**
+     * An optional **tap handler** that makes this layer interactive: a finger on the layer fires a
+     * reaction (a spring bounce/shake/spin, or a seek / play-pause). Pure data, so it round-trips
+     * through [OGStages] and a model can author it; `null` = an inert, watch-only layer. The player
+     * ([OGStageView]) drives the reaction; the off-screen exporter ignores it (it bakes the timeline).
+     */
+    val onTap: OGStageTrigger? = null,
 )
 
 /**

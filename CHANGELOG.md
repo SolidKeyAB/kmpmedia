@@ -4,6 +4,19 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.44.0] — 2026-10-12
+
+> **Poke the movie.** `OGStage` layers can now carry an `onTap` trigger, turning a movie you watch into one you touch — the one capability the Compose-Multiplatform animation players (Lottie / Rive-CMP) led on and KMPMedia didn't. A tap springs the layer to life: `BOUNCE` / `SHAKE` / `SPIN` are transient, closed-form reactions that reuse the shipped dynamics spring (`OGSpring`) verbatim, and `SEEK` / `PLAY_PAUSE` drive the player's own clock. The trigger is plain serializable data on the layer, so it round-trips through the `OGStages` codec and a language model can author it alongside everything else — and it costs nothing until a finger lands.
+
+### Added
+- **`OGStageLayer.onTap` — data-authored interactivity.** An optional `OGStageTrigger` makes a layer tappable. `OGTapAction`: `BOUNCE` (a spring scale-pop that overshoots and settles), `SHAKE` (a damped horizontal wobble), `SPIN` (one eased 360° turn), `SEEK` (jump the stage clock to `seekMs`, a chapter jump), `PLAY_PAUSE` (toggle playback). `null` = an inert, watch-only layer (the default), so every existing stage is unchanged.
+- **`reactionTransformAt(…)` — the pure reaction curve.** A closed-form, t-addressable function returning the transient transform (scale / rotation / translate) a reaction applies ON TOP of the layer's resolved transform. The bounce / shake feel is evaluated with the analytic `OGSpring.valueAt`, so a tap reacts with the same deterministic, platform-identical second-order motion the dynamics pack ships — no new physics. It returns identity once settled, so the player drops it cleanly.
+- **Codec + prompt + builders.** The trigger serializes with the layer (lenient, case-insensitive enum decode — a model may write `"bounce"` or `"BOUNCE"`), `stagePrompt` teaches the `"onTap"` object, and `OGStages` gains `tap(action, …)` / `seekTo(ms)` / `playPause()` shorthands plus a generic `tappable(layer, trigger)`; `onTap` is also a parameter on the `solid` / `scene` / `particles` / `text` builders.
+
+### Notes
+- **Live-player only, zero idle cost.** `OGStageView` drives reactions off the frame clock, but ONLY while one is settling — a still, tappable stage adds no frame loop and reports `isLive = false` (it renders one frame and waits for a finger). The off-screen exporter is untouched: an exported GIF / MP4 bakes the base timeline (taps are a live-player concern). Hit-testing is the layer box, so taps fall through a non-interactive layer to an interactive one behind it.
+- 573 JVM tests green (incl. 11 new `OGStageInteractionTest`) + iOS compile; all three visual reactions were verified on an Android emulator (bounce scales the word, spin rotates it, shake shifts it sideways).
+
 ## [1.43.0] — 2026-10-12
 
 > **Titles on the movie, and a model that writes the whole thing.** `OGStage` grows a styled **text** layer — vector-glyph titles / captions / lower-thirds that bake into the exported GIF/MP4 like every other layer — and the describe → playable-movie path is hardened against real model output: a transform track may now be written as a bare number, and the AI codec decodes enums case-insensitively, so the lowercase `blend` / `easing` the prompt asks for actually decode. Three movies authored by a language model from a one-line prompt (nothing but `OGStages.stagePrompt`) are pinned as regression tests, and the capstone clip now has its **iOS** pair (rendered headless on the simulator through the same `exportGif()`).
