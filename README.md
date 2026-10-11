@@ -16,7 +16,7 @@ Everything renders into native Compose primitives (`Canvas`/`drawScope`), so SVG
 
 ## Why KMPMedia?
 
-Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Compose Multiplatform resources). KMPMedia targets what those still don't do:
+Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Landscapist, Compose Multiplatform resources). KMPMedia targets what those still don't do — full breakdown with versions + sources in [**docs/COMPARISON.md**](docs/COMPARISON.md):
 
 | Capability | KMPMedia | Coil 3 (`coil-svg`) | Compose MP resources |
 |---|:---:|:---:|:---:|
@@ -42,9 +42,13 @@ Basic "show an SVG on both platforms" is now a solved problem (Coil 3, Kamel, Co
 | **Motion dynamics** — natural "feel" filters: spring (lag / overshoot / settle), follow-through, squash &amp; stretch, idle sway (`OGSpring` / `OGFollowChain` / `OGSquash` / `OGSway`) | ✅ | ❌ | ❌ |
 | **Cloth** — a 1-D Verlet fabric strip that hangs, holds its length &amp; flutters in the wind: scarf / flag / banner / hair (`OGClothStrip` / `OGClothSpec`) | ✅ | ❌ | ❌ |
 | **Cloth sheet** — a 2-D Verlet sheet that drapes over &amp; collides with capsule "poles": tarp / curtain / banner / flag (`OGCloth` / `OGClothCollider`) | ✅ | ❌ | ❌ |
+| **Photo → an editable vector SCENE** — gradients, texture, glow, scatter + make-it-live motion day→night (`OGSceneSpec`) | ✅ | ❌ | ❌ |
+| **Clickable-joints mesh rig** — bind joints &amp; bend a dense mesh live (`OGRig`) | ✅ | ❌ | ❌ |
 | Bundled image + audio + video suite | ✅ | ❌ | ❌ |
 
 If all you need is a static SVG loaded from the network, a general image loader is the simpler choice. Reach for KMPMedia when you need media to **move, respond, compose, or change at runtime**.
+
+<sub>Compared above against the two most-cited general options; the other KMP libraries are complementary and narrower — **Kamel** / **Landscapist** are image loaders (load + cache, static SVG, animated GIF), **Compottie** plays pre-authored Lottie / After-Effects animations (not runtime-authored media), **Telephoto** is a zoom/pan viewer. None provide the compositor + export, media-in-shape, runtime-editable vectors, FX or rig above. Verified 2026-10-11: Coil 3.6.3, Kamel 1.0.9, Landscapist 2.13.2, Compottie 2.3.3, Telephoto 0.19.0, Compose Multiplatform 1.12.1 — note Coil's animated GIF <b>and</b> video are Android-only. Full matrix + sources: <a href="docs/COMPARISON.md">docs/COMPARISON.md</a>.</sub>
 
 ---
 
@@ -58,7 +62,7 @@ KMPMedia is built to be **generated correctly by AI coding assistants**, not jus
 - **Grounded in published research** — it's small and dependency-free, but not ad-hoc: every procedural feature maps to a named algorithm/paper (centripetal Catmull-Rom, OKLab, simplex/fBm, fractal lightning, median-cut + Floyd–Steinberg + LZW, Douglas–Peucker, xorshift, …). See [**docs/ACADEMIC_FOUNDATIONS.md**](docs/ACADEMIC_FOUNDATIONS.md).
 - **Runtime prompt-driven editing** — [`OGAiVector`](docs/AI_HOOKS.md) is a **stable JSON wire format** (a codec, not an AI SDK) for the library's vector primitives. It hands a model that contract and turns the reply, or a *photo* via a vision model (*image → vector*, v1.25.0), into a live polygon lasso, a multi-region scene cut-out, or an SVG node patch (*"describe → shape / patch"*); an optional centripetal-spline `smoothing` knob rounds a model's faceted points into a clean outline. No AI SDK or networking is pulled into the library, and it works with any model (or a segmentation network that emits vertices).
 
-Today that makes KMPMedia **AI-generatable** *and* **AI-drivable at runtime**, including a full serializable **scene-spec** (`OGSceneSpec`, shipped in v1.25.0). An **MCP server** (an LLM emits validated *data*, not Kotlin, and previews it before writing code) remains on the roadmap to make it fully **AI-ready**.
+Today that makes KMPMedia **AI-generatable** *and* **AI-drivable at runtime**, including a full serializable **scene-spec** (`OGSceneSpec`, shipped in v1.25.0) that now also carries gradient fills, texture, glow and scatter and its own **motion** (a day→night scene timeline, v1.38–v1.40). An **MCP server** (an LLM emits validated *data*, not Kotlin, and previews it before writing code) remains on the roadmap to make it fully **AI-ready**.
 
 ---
 
@@ -185,6 +189,8 @@ Here's the full rundown of this wave (📷 live camera is the one effect not sho
 - **🌀 Motion dynamics** *(v1.35.0)* — the pure-maths "feel" layer of `com.solidkey.painpoints.motion`: an analytic second-order **spring** (`OGSpring` — lag, overshoot, settle; closed-form so the compositor can scrub + export it, which `androidx…spring()` can't), **follow-through** (`OGFollowChain`, a trailing chain for hair / cape / limbs), volume-preserving **squash & stretch** (`OGSquash`) and organic **idle sway** (`OGSway`). The whole feel is data — an `OGDynamicsSpec` with five presets (`bouncy` / `heavy` / `snappy` / `gentle` / `stiff`) a model can author from a sentence (`OGDynamics.dynamicsPrompt`), the same pattern as `OGLooks` / `OGMotions` / `OGStyles`. Pure maths, zero dependency, 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
 - **🧣 Cloth** *(v1.36.0)* — a fabric primitive in `com.solidkey.painpoints.motion`: `OGClothStrip`, a one-dimensional **Verlet** cloth strip pinned at the head that hangs under gravity, stays **inextensible** (four position-based distance-constraint passes, so it swings but never stretches) and flutters in a prevailing wind plus seeded `OGFxNoise` gusts — a scarf, flag, banner or lock of hair. A **fixed internal substep** makes it stable and byte-for-byte deterministic at any frame rate, and `OGCloths.sampleAt(spec, t)` re-simulates to a time so the compositor can scrub + export it. The strip is plain serializable data (`OGClothSpec`) with four ready fabrics (`scarf` / `flag` / `banner` / `hair`) a model can author (`OGCloths.clothPrompt`). Reach for it when something should *hang and flutter*; reach for `OGFollowChain` when something should *stretch and trail*. Zero dependency, 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
 - **🪟 Cloth sheet** *(v1.37.0)* — cloth in two dimensions: `OGCloth`, a 2-D **planar** Verlet sheet (a `cols × rows` grid of masses held by **structural + shear** springs, inextensible) that does the thing the 1-D strip can't — it **drapes over and collides with** `OGClothCollider` capsule "poles" (a line + radius; a circle is a zero-length capsule), so you can throw a tarp over a scaffold bar or fly a flag off a pole. Same fixed-substep determinism (byte-for-byte identical on Android & iOS), four pin modes (`NONE` / `TOP_EDGE` / `TOP_CORNERS` / `LEFT_EDGE`), and the same data-defined, AI-authorable codec (`OGClothMeshSpec` + `OGCloths.meshPreset` / `clothMeshPrompt`, presets `tarp` / `curtain` / `banner-wall` / `sail`) with `OGCloths.sampleAt` for deterministic scrub + export. Deliberately a *planar* media primitive — no 3-D cloth, self-collision, tearing or solver API. Zero dependency, 60fps, same code on Android & iOS. See [**docs/MOTION.md**](docs/MOTION.md).
+- **🖼️ Living AI scenes** *(v1.38.0 – v1.40.0)* — the `OGSceneSpec` "photo → vector scene" format grew up. **v1.38.0** adds per-shape **gradient fills** (OKLab-resampled, no banding) plus a scene background + colour grade; **v1.39.0** adds richer stills — a procedural **texture** (fur / grass / grain), an additive **glow** halo, and a seeded **scatter** that stamps one shape into a whole field (trees / tufts); **v1.40.0** makes it **live** — a region declares its own looping motion (translate / scale / rotate / fade) and the scene swings a colour grade + sky over time (day → dusk → night), all pure and `t`-addressable so the compositor can scrub + export it. Backward-compatible, pure codec, 60fps, same code on Android & iOS.
+- **🦁 Clickable-joints rig** *(v1.41.0)* — a deform **rig** for a dense scene mesh: `OGRig` binds a handful of joints to the mesh once (linear-blend skinning, partition-of-unity weights), then a drag warps the whole mesh around the joint, re-skinned every frame — the one case the rasterise-once / cache path can't cover. ~1.3 ms to skin 20k vertices; `deformInto` is zero-allocation, `nearestJoint` is the touch hit-test, and a released joint springs home with `OGSpring`. Pure maths, zero dependency, 60fps, frame-identical on Android & iOS.
 
 *(📷 Live camera is the one effect without a GIF here — it needs a real device's camera (there's nothing to film on a headless emulator), so run the [demo](https://github.com/SolidKeyAB/kmpmedia-demo/releases) on a device to see it live.)*
 
@@ -277,7 +283,7 @@ Then add the dependency to your shared module's **`commonMain`**:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("se.solidkey:kmpmedia-lib:1.37.0")
+            implementation("se.solidkey:kmpmedia-lib:1.41.0")
         }
     }
 }
