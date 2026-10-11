@@ -13,6 +13,8 @@ import com.solidkey.painpoints.fx.OGSpeedLinesSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
+import com.solidkey.painpoints.style.OGStyleOp
+import com.solidkey.painpoints.style.OGStyleSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -144,6 +146,7 @@ class OGStageTest {
         assertTrue(p.contains("\"type\":\"scene\""))
         assertTrue(p.contains("\"type\":\"particles\""))
         assertTrue(p.contains("\"type\":\"slash\""))
+        assertTrue(p.contains("\"type\":\"text\""))
         assertTrue(p.contains("durationMs"))
         assertTrue(p.contains("a sunrise over hills"))
     }
@@ -186,8 +189,35 @@ class OGStageTest {
     }
 
     @Test
+    fun textLayerRoundTripsAndStyleDrivesLiveness() {
+        val roughen = OGStyleSpec(ops = listOf(OGStyleOp(op = "roughen", amplitude = 0.02f, detail = 4)))
+        val boil = OGStyleSpec(ops = listOf(OGStyleOp(op = "boil", amplitude = 0.012f, boilFps = 7f)))
+
+        val stage = OGStage.of(
+            OGStages.text("title", "HELLO", size = 0.2f, color = "#FFCC00", bold = true, style = roughen),
+        )
+        val back = OGStages.decode(OGStages.encode(stage))
+        assertEquals(stage, back, "a styled text layer survives JSON")
+        val c = back.layers.first().content
+        assertTrue(c is OGStageContent.Text)
+        assertEquals("HELLO", c.text)
+        assertEquals("#FFCC00", c.color)
+        assertTrue(c.bold)
+        assertEquals(roughen, c.style)
+
+        // A static style (roughen) does not animate; a time-varying one (boil) makes the stage live.
+        assertTrue(!OGStage.of(OGStages.text("t", "HI", style = roughen)).isLive, "roughen is static")
+        assertTrue(OGStage.of(OGStages.text("t", "HI", style = boil)).isLive, "boil keeps the letters alive")
+        assertTrue(!OGStage.of(OGStages.text("t", "HI")).isLive, "plain text is not live on its own")
+        assertTrue(
+            OGStage.of(OGStages.text("t", "HI", opacity = OGStages.track(0L to 0f, 500L to 1f))).isLive,
+            "...but a fade-in transform track still makes it live",
+        )
+    }
+
+    @Test
     fun everyContentKindResolvesAndRoundTrips() {
-        // The exporter now walks all six content kinds; lock the data path they share end to end.
+        // The exporter now walks all seven content kinds; lock the data path they share end to end.
         val stage = OGStage.of(
             OGStages.solid("bg", "#101010"),
             OGStages.scene("scn", liveScene()),
@@ -195,10 +225,11 @@ class OGStageTest {
             OGStages.slash("sl", OGSlashSpec()),
             OGStages.lightning("lt", OGLightningSpec()),
             OGStages.speedLines("sp", OGSpeedLinesSpec()),
+            OGStages.text("title", "GO", style = OGStyleSpec(ops = listOf(OGStyleOp(op = "boil")))),
             durationMs = 1000L,
         )
-        assertEquals(stage, OGStages.decode(OGStages.encode(stage)), "all six kinds survive JSON")
-        assertEquals(6, stage.resolveAt(100L).size, "all six are visible mid-timeline and flatten")
+        assertEquals(stage, OGStages.decode(OGStages.encode(stage)), "all seven kinds survive JSON")
+        assertEquals(7, stage.resolveAt(100L).size, "all seven are visible mid-timeline and flatten")
         assertTrue(stage.isLive, "a mix with fx + particles + scene motion is live")
     }
 

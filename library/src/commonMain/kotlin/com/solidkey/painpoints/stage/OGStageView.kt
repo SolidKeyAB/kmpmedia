@@ -149,7 +149,25 @@ private fun StageLayerBox(r: OGResolvedStageLayer, livePlay: Boolean) {
 
             is OGStageContent.Scene ->
                 SceneLayerCanvas(c.scene, r.localTimeMs, Modifier.fillMaxSize())
+
+            is OGStageContent.Text ->
+                TextLayerCanvas(c, r.localTimeMs, Modifier.fillMaxSize())
         }
+    }
+}
+
+/**
+ * Draw a styled-text layer centred in the box at its layer-local [timeMs]. The glyph vectorization +
+ * style compile are cached ([OGStageTextResources]); only the cheap per-frame styling + fill runs each
+ * frame, so a `boil` / `wave` style stays alive at 60fps. The layer's grade / blend / opacity are
+ * applied by the caller ([StageLayerBox]'s `graphicsLayer` + `ogLook`), so this draws with identity —
+ * the same split as [SceneLayerCanvas] (and matched by the exporter's shared draw path).
+ */
+@Composable
+private fun TextLayerCanvas(c: OGStageContent.Text, timeMs: Long, modifier: Modifier) {
+    val res = remember(c) { OGStageTextResources.of(c) }
+    Canvas(modifier) {
+        drawOGStageTextFrame(res, c.size, size.width, size.height, timeMs)
     }
 }
 

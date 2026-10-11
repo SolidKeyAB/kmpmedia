@@ -47,9 +47,10 @@ import com.solidkey.painpoints.particle.unitOutline
 // [OGMp4Encoder] verbatim, and rasterises each stage frame with the same CanvasDrawScope path the
 // compositor uses — so a frame looks the same on Android and iOS.
 //
-// Coverage: EVERY layer kind exports. Solid, scene (fills/gradients/motion/grade) and particle
-// layers (now with their real silhouette — circle/square/triangle/star/petal/teardrop, spun) draw
-// directly; the action-FX layers (slash/lightning/speedlines) draw through the SAME pure per-frame
+// Coverage: EVERY layer kind exports. Solid, scene (fills/gradients/motion/grade), styled text
+// (vectorized glyphs, styled per frame) and particle layers (now with their real silhouette —
+// circle/square/triangle/star/petal/teardrop, spun) draw directly through the same code path the
+// live views use; the action-FX layers (slash/lightning/speedlines) draw through the SAME pure per-frame
 // functions the live views use ([drawOGSlashFrame]/[drawOGLightningFrame]/[drawOGSpeedLinesFrame]),
 // so the exported frame matches the preview. An FX layer composites through an offscreen group
 // ([fxGroup]) so its internal additive (Plus) bloom accumulates inside the layer first, then the
@@ -63,7 +64,7 @@ import com.solidkey.painpoints.particle.unitOutline
 /**
  * Draw [stage] at absolute [timeMs] into the current [DrawScope], in the stage's pixel space
  * (top-left origin, `width` × `height`). The off-screen twin of [OGStageView]; pure Compose drawing,
- * no platform types. FX layers are skipped (see file header).
+ * no platform types. Every layer kind bakes in (see file header).
  */
 fun DrawScope.drawStage(stage: OGStage, timeMs: Long) {
     stage.background?.toSpecColor()?.let { drawRect(it) }
@@ -91,6 +92,8 @@ private fun DrawScope.drawStageLayerExport(r: OGResolvedStageLayer, fps: Int) {
             }
 
             is OGStageContent.Scene -> drawExportScene(c.scene, r, w, h)
+
+            is OGStageContent.Text -> drawExportText(c, r)
 
             is OGStageContent.Particles -> drawExportParticles(c.particles, r, fps, w, h)
 
@@ -142,6 +145,23 @@ private fun DrawScope.drawExportLightning(spec: OGLightningSpec, localTimeMs: Lo
 private fun DrawScope.drawExportSpeedLines(spec: OGSpeedLinesSpec, localTimeMs: Long) {
     val color = spec.color.toSpecColor() ?: Color.Black
     drawOGSpeedLinesFrame(spec, localTimeMs.toFloat(), color, speedLineParams(spec))
+}
+
+/** Bake a styled-text layer at its local time through the SAME [drawOGStageTextFrame] the player uses,
+ *  applying the layer's opacity / look / blend so the exported glyphs composite like the preview. The
+ *  glyphs are re-vectorized per rendered frame (cheaper than the particle re-sim this file already
+ *  does, and the export is a one-shot anyway). */
+private fun DrawScope.drawExportText(c: OGStageContent.Text, r: OGResolvedStageLayer) {
+    drawOGStageTextFrame(
+        res = OGStageTextResources.of(c),
+        emHeightFraction = c.size,
+        boxW = size.width,
+        boxH = size.height,
+        timeMs = r.localTimeMs,
+        alpha = r.opacity,
+        cf = r.look.cf(),
+        blend = r.blend.toBlendMode(),
+    )
 }
 
 /** Draw a scene layer's live frame at its local time: base coat + each region, graded by the scene's

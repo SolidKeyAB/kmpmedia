@@ -1,6 +1,13 @@
 package com.solidkey.painpoints.compositor
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.floatOrNull
 
 /**
  * Easing curve applied to the segment that **ends** at a keyframe — i.e. the interpolation from the
@@ -40,8 +47,14 @@ data class OGKeyframe(
  * The whole thing is pure data + pure math (no Compose, no platform types), so a track is evaluated
  * **once per frame** with a couple of multiplies — the parse-once / lerp-per-frame budget that keeps
  * a composition preview at 60fps.
+ *
+ * **Decode tolerance (model-authorability).** A track serializes as the object `{ "default":…,
+ * "keyframes":[…] }`, but [decode][OGKeyframedFloatSerializer] *also* accepts a **bare JSON number** as
+ * a constant track — so a language model that writes `"opacity": 0.8` (instead of the verbose object)
+ * still produces a valid track. This mirrors the rest of the library's lenient, model-friendly codecs;
+ * encoding always emits the explicit object form, so the wire output is unchanged and round-trips.
  */
-@Serializable
+@Serializable(with = OGKeyframedFloatSerializer::class)
 data class OGKeyframedFloat(
     val default: Float,
     val keyframes: List<OGKeyframe> = emptyList(),
@@ -82,5 +95,40 @@ data class OGKeyframedFloat(
             default = stops.firstOrNull()?.second ?: 0f,
             keyframes = stops.map { OGKeyframe(it.first, it.second) },
         )
+    }
+}
+
+/** The structural form of an [OGKeyframedFloat]; [default] is optional so a model may give only
+ *  [keyframes]. Used by [OGKeyframedFloatSerializer] for the object branch (and for encoding). */
+@Serializable
+private data class OGKeyframedFloatSurrogate(
+    val default: Float = 0f,
+    val keyframes: List<OGKeyframe> = emptyList(),
+)
+
+/**
+ * Serializer for [OGKeyframedFloat] that **encodes the object form** but **decodes either** a bare JSON
+ * number (→ a constant track) **or** the `{ "default", "keyframes" }` object. Lets a model author a
+ * constant track as just `0.8`, matching the library's lenient model-friendly codecs, with no change to
+ * the emitted wire format (so existing data and round-trips are unaffected).
+ */
+object OGKeyframedFloatSerializer : KSerializer<OGKeyframedFloat> {
+    private val surrogate = OGKeyframedFloatSurrogate.serializer()
+    override val descriptor: SerialDescriptor = surrogate.descriptor
+
+    override fun serialize(encoder: Encoder, value: OGKeyframedFloat) {
+        surrogate.serialize(encoder, OGKeyframedFloatSurrogate(value.default, value.keyframes))
+    }
+
+    override fun deserialize(decoder: Decoder): OGKeyframedFloat {
+        val json = decoder as? JsonDecoder
+            ?: return surrogate.deserialize(decoder).let { OGKeyframedFloat(it.default, it.keyframes) }
+        val element = json.decodeJsonElement()
+        if (element is JsonPrimitive) {
+            val n = element.floatOrNull ?: element.content.toFloatOrNull()
+            if (n != null) return OGKeyframedFloat.const(n)
+        }
+        val s = json.json.decodeFromJsonElement(surrogate, element)
+        return OGKeyframedFloat(s.default, s.keyframes)
     }
 }

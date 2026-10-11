@@ -11,6 +11,7 @@ import com.solidkey.painpoints.fx.OGSpeedLinesSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
+import com.solidkey.painpoints.style.OGStyleSpec
 import kotlinx.serialization.json.Json
 
 /**
@@ -125,6 +126,36 @@ object OGStages {
         blend: OGBlendMode = OGBlendMode.NORMAL,
     ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.SpeedLines(spec), startMs = startMs, endMs = endMs, blend = blend)
 
+    /**
+     * A **styled-vector-text** layer — a title / caption / lower-third, centred in the box (position it
+     * with [x] / [y], a fraction of the box). [size] is the em height as a fraction of the stage height;
+     * an optional [style] pack inks the glyphs hand-drawn (`roughen`) or alive (`boil` / `wave`).
+     */
+    fun text(
+        id: String,
+        text: String,
+        size: Float = 0.14f,
+        color: String = "#FFFFFF",
+        bold: Boolean = false,
+        italic: Boolean = false,
+        family: String? = null,
+        style: OGStyleSpec? = null,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        rotationDeg: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        look: OGLookSpec? = null,
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(
+        id = id,
+        content = OGStageContent.Text(text, size, color, bold, italic, family, style),
+        startMs = startMs, endMs = endMs,
+        x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
+    )
+
     // --- Prompt: hand a model the contract -----------------------------------------------------
 
     /**
@@ -176,8 +207,16 @@ object OGStages {
           { "type":"slash", "slash": <an OGSlashSpec> }                 // a water/flame/thunder sweep
           { "type":"lightning", "lightning": <an OGLightningSpec> }     // a forked bolt
           { "type":"speedlines", "speedLines": <an OGSpeedLinesSpec> }  // manga impact lines
+          { "type":"text", "text":"TITLE", "size":0.14, "color":"#RRGGBB", "bold":false,
+            "italic":false, "family":null, "style": <an OGStyleSpec, optional> }  // styled vector text
         The slash/lightning/speedlines specs are the KMPMedia action-FX packs, authored as their own
         JSON; they play as live, self-animating layers (good on a key beat, usually blend "plus").
+        A "text" layer is a title / caption / lower-third: its glyphs are vectorized and filled, centred
+        in the layer box — position it with the layer's x/y tracks, size it with "size" (em height as a
+        fraction of the movie height, e.g. 0.1 a caption, 0.25 a big title), and fade it in/out with an
+        "opacity" track or its startMs/endMs window. Its optional "style" is an OGStyleSpec drawing-style
+        pipeline (ops like {"op":"roughen","amplitude":0.02} for hand-drawn edges, or {"op":"boil",...} /
+        {"op":"wave",...} to keep the letters alive); omit it for clean filled letters.
 
         An OGSceneSpec is the SAME model-authored vector scene used elsewhere: labelled polygon
         regions in normalized 0..1 space with fills / gradients / smoothing / opacity / blend, an
@@ -191,8 +230,9 @@ object OGStages {
         ("circle"|"square"|"triangle"|"star"|"petal"|"teardrop"), and "seed".
 
         Compose the movie from these: e.g. a scene layer for the backdrop (with its own day->night
-        motion), a particle layer of drifting petals on top with blend "plus", and a gentle "scale"
-        track on the backdrop for a slow push-in. Keep it resolution-independent (normalized coords).
+        motion), a particle layer of drifting petals on top with blend "plus", a gentle "scale" track on
+        the backdrop for a slow push-in, and a "text" title card that fades in over the first second.
+        Keep it resolution-independent (normalized coords).
 
         Output the JSON only, with no prose and no markdown fences.
 

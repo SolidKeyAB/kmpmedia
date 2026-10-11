@@ -53,6 +53,10 @@ object OGAiVector {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = false
+        // Model output is rarely case-perfect: a prompt that says blend "plus" or easing "ease_out"
+        // should decode even though the enum constants are PLUS / EASE_OUT. Encoding still emits the
+        // canonical upper-case name, so the wire format and round-trips are unchanged.
+        decodeEnumsCaseInsensitive = true
     }
 
     // --- Decode: model output → live primitives -----------------------------------------------

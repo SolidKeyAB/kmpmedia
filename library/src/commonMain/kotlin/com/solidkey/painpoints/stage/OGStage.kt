@@ -11,6 +11,7 @@ import com.solidkey.painpoints.fx.OGSpeedLinesSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
+import com.solidkey.painpoints.style.OGStyleSpec
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.max
@@ -43,9 +44,9 @@ import kotlin.math.roundToInt
  * layer kind in the same JSON. Everything here is already serializable data, so a whole stage round
  * trips losslessly.
  *
- * The three starters cover the two halves of the engine (a generated scene + a generative-motion
- * pack) plus a flat fill; `fx` / `rig` / `cloth` / an image bitmap slot in behind the same interface
- * with no change to [OGStage] or [OGStageView].
+ * The kinds cover the two halves of the engine (a generated scene + a generative-motion pack), the
+ * action-FX packs, styled vector [Text] for titles/captions, and a flat fill; `rig` / `cloth` / an
+ * image bitmap slot in behind the same interface with no change to [OGStage] or [OGStageView].
  */
 @Serializable
 sealed interface OGStageContent {
@@ -78,7 +79,35 @@ sealed interface OGStageContent {
     @Serializable
     @SerialName("speedlines")
     data class SpeedLines(val speedLines: OGSpeedLinesSpec) : OGStageContent
+
+    /**
+     * A line of **styled vector text** — a title, caption or lower-third. The glyphs are vectorized to
+     * outlines and filled, centred in the layer box (position / scale / rotate it with the layer's own
+     * transform tracks). An optional [style] pipeline (`roughen` / `boil` / `wave` / …) inks the letters
+     * hand-drawn and — for a time-varying op — alive on the layer's local clock.
+     *
+     * @param size the em height as a **fraction of the stage height**, so the text stays
+     *   resolution-independent (a single stage renders the same on any output size). `0.14` ≈ a caption.
+     * @param color the glyph fill (an SVG colour string).
+     * @param bold / [italic] / [family] the font selection ([family] = a platform family like
+     *   `"serif"` / `"monospace"`, or `null` for the default sans).
+     * @param style an optional [OGStyleSpec] run over every glyph outline; `null` = a clean fill.
+     */
+    @Serializable
+    @SerialName("text")
+    data class Text(
+        val text: String,
+        val size: Float = 0.14f,
+        val color: String = "#FFFFFF",
+        val bold: Boolean = false,
+        val italic: Boolean = false,
+        val family: String? = null,
+        val style: OGStyleSpec? = null,
+    ) : OGStageContent
 }
+
+/** Style ops whose output changes with time — a [OGStageContent.Text] carrying one of these animates. */
+private val TEXT_LIVE_OPS = setOf("boil", "wave", "ripple")
 
 /**
  * One layer of an [OGStage]: some [content] placed over the whole stage box, transformed by five
@@ -158,6 +187,7 @@ data class OGStage(
                 is OGStageContent.Slash -> true
                 is OGStageContent.Lightning -> true
                 is OGStageContent.SpeedLines -> true
+                is OGStageContent.Text -> c.style?.ops?.any { it.op.lowercase() in TEXT_LIVE_OPS } == true
                 is OGStageContent.Solid -> false
             }
             contentLive ||
