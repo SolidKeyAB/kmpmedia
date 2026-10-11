@@ -251,6 +251,15 @@ object OGAiVector {
                 region as a whole field of trees/tufts
                 ({"count":<n>,"x0":<>,"y0":<>,"x1":<>,"y1":<>,"scaleMin":<>,"scaleMax":<>}).
 
+                To MAKE IT LIVE (optional), a region may carry "motion" to move over time
+                ({"duration":<sec>,"mode":"reverse|loop|once","easing":"easeInOut",
+                "translate":{"from":[x,y],"to":[x,y]},"scale":{"from":1,"to":1.2},
+                "rotate":{"from":0,"to":10},"opacity":{"from":1,"to":0}} — offsets are scene-space 0..1),
+                and the scene may carry a top-level "motion" to swing a whole-frame grade + base coat
+                ({"duration":<sec>,"mode":"reverse","look":{"from":{},"to":{"brightness":-0.4,
+                "temperature":-0.3}},"background":{"from":"#RRGGBB","to":"#RRGGBB"}}) — e.g. a sun that
+                rises then sets while the sky grades day→night. Omit "motion" entirely for a still.
+
                 Make it resemble the photo, not a flat cartoon: the sky is ONE region with a single
                 vertical gradient (never stacked stripes); a light source is a bright radial disc plus a
                 larger halo whose last stop is transparent with blend "plus" (or a "glow"); give organic

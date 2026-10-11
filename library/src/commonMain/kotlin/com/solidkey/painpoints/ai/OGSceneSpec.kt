@@ -222,6 +222,8 @@ data class OGPlacedShapeSpec(
     val glow: OGGlowSpec? = null,
     /** (v3) Stamp this region as a whole seeded field (trees / tufts); resolve with [OGSceneSpec.expanded]. */
     val scatter: OGScatterSpec? = null,
+    /** (v4) Make this region MOVE over time — translate/scale/rotate/fade; apply with [animatedAt]. */
+    val motion: OGRegionMotion? = null,
 ) {
     /** The lasso as a plain [OGPolygonSpec] (drops the metadata). */
     fun toPolygonSpec(): OGPolygonSpec = OGPolygonSpec(points)
@@ -246,6 +248,7 @@ data class OGPlacedShapeSpec(
         texture = texture?.sanitized(),
         glow = glow?.sanitized(),
         scatter = scatter?.sanitized(),
+        motion = motion?.sanitized(),
     )
 
     companion object {
@@ -272,6 +275,9 @@ data class OGSceneSpec(
     val look: OGLookSpec? = null,
     /** How this scene was traced from a source image — provenance, never rendered. */
     val trace: OGTraceSpec? = null,
+    /** (v4) A scene-wide timeline — a colour grade / base coat that swings over time (day→night);
+     *  resolve with [liveAt] or [OGSceneMotion.lookAt]. */
+    val motion: OGSceneMotion? = null,
 ) {
     /** Every region as a live clip [OGPolygonShape], in order. [smoothing] is the per-shape default. */
     fun toShapes(smoothing: Float = 0f): List<OGPolygonShape> = shapes.map { it.toShape(smoothing) }
@@ -281,7 +287,7 @@ data class OGSceneSpec(
 
     /** Drop regions that can't render and pull every vertex to finite `0..1`; keeps scene-level
      *  metadata ([version]/[background]/[look]/[trace]) and label↔shape alignment. */
-    fun sanitized(): OGSceneSpec = copy(shapes = shapes.filter { it.isRenderable }.map { it.sanitized() })
+    fun sanitized(): OGSceneSpec = copy(shapes = shapes.filter { it.isRenderable }.map { it.sanitized() }, motion = motion?.sanitized())
 
     companion object {
         /** Build a scene from placed shapes. */

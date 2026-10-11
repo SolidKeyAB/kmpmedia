@@ -4,6 +4,20 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.40.0] — 2026-10-11
+
+> **Make it live: a scene animates itself from its JSON.** Phase 3 of the AI scene format (`OGSceneSpec`) lets a still *move* — a region can declare an `OGRegionMotion` (translate / scale / rotate / fade over a looping timeline) and the scene an `OGSceneMotion` (a colour grade + base coat that swing over time — day→dusk→night). The evaluator is **pure and t-addressable**: `scene.liveAt(t)` / `shape.animatedAt(t)` give the exact state at any time with no clock and no per-frame allocation beyond the moved points, so a compositor can scrub/export it and a live preview holds 60fps by re-evaluating only the handful of regions that move. Every field is optional, so a 1.39 scene decodes and renders unchanged, and an older library ignores the new keys.
+
+### Added
+- **`OGRegionMotion` — per-region animation.** A looping `duration`-second timeline shaped by an `easing` curve (reusing `OGEasing`/`ogEasingOf`) and repeated per `mode` (`loop` | `reverse` | `once`), driving any of four optional `from → to` channels: `translate` (`OGMotionOffset`, scene-space offset), `scale` and `rotate` (`OGMotionScalar`, about the region's centroid), and `opacity`. `phase(t)` is the eased `0..1` position; `OGPlacedShapeSpec.animatedAt(t)` returns the region transformed for time `t` (identity when it carries no motion).
+- **`OGSceneMotion` — scene-level timeline.** A whole-frame colour grade (`OGLookMotion`, two `OGLookSpec` ends, field-wise lerped) and/or base coat (`OGColorMotion`, two colour strings) that swing over a looping timeline — the one knob that turns a daylit still into a day→night cycle. `lookAt(t)` / `backgroundAt(t)` resolve the grade/colour at time `t` (apply the look via `Modifier.ogLook`, as a static `look` would be).
+- **`OGSceneSpec.liveAt(t): OGLiveFrame`** — the whole scene frozen at an instant: scatter expanded, every region's motion applied, and the scene grade/base-coat resolved (falling back to the static `look` / `background` when there's no motion). Plus `OGSceneSpec.isLive`. Optional `motion` fields on `OGPlacedShapeSpec` and `OGSceneSpec`; `imageToVectorPrompt(SCENE)` now teaches the motion schema (a sun that rises/sets + a day→night swing).
+
+### Notes
+- Pure, deterministic and closed-form in `t` (the timeline maths handle `loop`/`reverse`/`once` + `delay`), so it stays off the 60fps path and is identical on Android & iOS. 531 JVM + 522 iOS tests green (15 new in `OGSceneLiveTest`).
+- Backward compatible both directions (optional fields + `ignoreUnknownKeys` + `encodeDefaults = false`); `sanitized()` clamps the timing knobs. Still only polygons + fills under the hood — this animates *where/how* a region is painted over time, nothing new to render.
+- For a 60fps live preview, expand once and call `animatedAt(t)` only on the moving regions (the convenience `liveAt` sanitizes + expands every call — fine for export/scrub). Richer channels (per-stop gradient animation, texture drift) remain additive later work.
+
 ## [1.39.0] — 2026-10-11
 
 > **Richer stills: fur, bloom and fields.** Phase 2 of the AI scene format (`OGSceneSpec`) adds three optional, data-defined ways to paint a region beyond a flat/gradient fill — a procedural **texture**, an additive **glow** halo, and a seeded **scatter** — the biggest "flat cartoon → painterly" jump. Every generator is pure and deterministic (byte-for-byte identical on Android & iOS), computed once at decode/author time, never on the 60fps path. All three are optional fields, so a 1.38 scene decodes unchanged and an older library ignores the new keys.
