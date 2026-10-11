@@ -91,8 +91,9 @@ private fun DrawScope.drawPolyParticle(
     }
 }
 
-/** Unit outline (centred, spanning `[-1,1]`) for a non-circle shape; `null` means draw a circle. */
-private fun unitOutline(shape: OGParticleShape): List<Offset>? = when (shape) {
+/** Unit outline (centred, spanning `[-1,1]`) for a non-circle shape; `null` means draw a circle.
+ *  Shared with the off-screen stage exporter so an exported particle has the same silhouette. */
+internal fun unitOutline(shape: OGParticleShape): List<Offset>? = when (shape) {
     OGParticleShape.CIRCLE -> null
     OGParticleShape.SQUARE -> listOf(Offset(-1f, -1f), Offset(1f, -1f), Offset(1f, 1f), Offset(-1f, 1f))
     OGParticleShape.TRIANGLE -> OGParametric.regularPolygon(3).map { Offset((it.x - 0.5f) * 2f, (it.y - 0.5f) * 2f) }

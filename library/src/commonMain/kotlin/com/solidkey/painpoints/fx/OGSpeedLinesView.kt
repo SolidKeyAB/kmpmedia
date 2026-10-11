@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.solidkey.painpoints.ai.toSpecColor
 import kotlin.math.cos
 import kotlin.math.sin
@@ -43,13 +44,29 @@ fun OGSpeedLinesView(
     }
 
     Canvas(modifier.clipToBounds()) {
-        val w = size.width; val h = size.height
-        val short = minOf(w, h)
-        val halfDiag = sqrt(w * w + h * h) * 0.5f
-        val phase = TWO_PI * spec.speed * elapsed / 1000f
-        val path = Path()
+        drawOGSpeedLinesFrame(spec, elapsed, color, lines)
+    }
+}
 
-        if (spec.isRadial) {
+/**
+ * Draw one frame of a [spec]'s speed / impact lines into the current [DrawScope] at [elapsedMs], given
+ * its resolved [color] and already-built [lines] (from [speedLineParams]). The per-frame body shared by
+ * the live [OGSpeedLinesView] and the off-screen stage exporter (`com.solidkey.painpoints.stage`) — one
+ * code path, so an exported GIF matches the preview. Pure Compose drawing; clip to the bounds first.
+ */
+internal fun DrawScope.drawOGSpeedLinesFrame(
+    spec: OGSpeedLinesSpec,
+    elapsedMs: Float,
+    color: Color,
+    lines: List<OGSpeedLine>,
+) {
+    val w = size.width; val h = size.height
+    val short = minOf(w, h)
+    val halfDiag = sqrt(w * w + h * h) * 0.5f
+    val phase = TWO_PI * spec.speed * elapsedMs / 1000f
+    val path = Path()
+
+    if (spec.isRadial) {
             val fx = spec.cx * w; val fy = spec.cy * h
             lines.forEachIndexed { i, ln ->
                 val breathe = 1f - spec.pulse * (0.5f + 0.5f * sin(phase + i * 0.3f))
@@ -90,7 +107,6 @@ fun OGSpeedLinesView(
                 drawPath(path, color, alpha = spec.alpha)
             }
         }
-    }
 }
 
 private const val TWO_PI = 6.2831855f

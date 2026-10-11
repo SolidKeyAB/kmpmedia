@@ -1,10 +1,13 @@
 package com.solidkey.painpoints.compositor
 
+import kotlinx.serialization.Serializable
+
 /**
  * Easing curve applied to the segment that **ends** at a keyframe — i.e. the interpolation from the
  * previous keyframe up to this one uses this keyframe's [OGKeyframe.easing]. All curves are pure math
  * over a normalized `t in 0..1`, so they cost nothing and are identical on Android and iOS.
  */
+@Serializable
 enum class OGEasing { LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT }
 
 /** Maps a linear `t in 0..1` through [easing]. Pure + platform-independent (directly unit-testable). */
@@ -22,6 +25,7 @@ fun ogEase(easing: OGEasing, t: Float): Float {
  * A single stop on an [OGKeyframedFloat] track: the property reaches [value] at [timeMs] (absolute
  * composition time, milliseconds), and the ramp *into* this stop from the previous one uses [easing].
  */
+@Serializable
 data class OGKeyframe(
     val timeMs: Long,
     val value: Float,
@@ -37,6 +41,7 @@ data class OGKeyframe(
  * **once per frame** with a couple of multiplies — the parse-once / lerp-per-frame budget that keeps
  * a composition preview at 60fps.
  */
+@Serializable
 data class OGKeyframedFloat(
     val default: Float,
     val keyframes: List<OGKeyframe> = emptyList(),

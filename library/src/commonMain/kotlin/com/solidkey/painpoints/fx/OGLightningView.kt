@@ -48,20 +48,36 @@ fun OGLightningView(
     }
 
     Canvas(modifier.clipToBounds()) {
-        val w = size.width; val h = size.height
-        val short = minOf(w, h)
-        val strike = lightningStrikeAt(spec, elapsed)
-        if (strike.alpha <= 0f) return@Canvas
+        drawOGLightningFrame(spec, elapsed, color, coreColor, glowColor)
+    }
+}
 
-        val a = OGPoint(spec.endpointA().x * w, spec.endpointA().y * h)
-        val b = OGPoint(spec.endpointB().x * w, spec.endpointB().y * h)
-        val main = lightningChannel(a, b, short * spec.jaggedness, spec.detail, spec.seed + strike.index * 7919)
-        val baseW = short * spec.width
+/**
+ * Draw one frame of a [spec]'s forked bolt into the current [DrawScope] at [elapsedMs], given its
+ * resolved channel / core / glow colours. The per-frame body shared by the live [OGLightningView] and
+ * the off-screen stage exporter (`com.solidkey.painpoints.stage`) — one code path, so an exported GIF
+ * matches the preview. Pure Compose drawing; clip to the target bounds before calling.
+ */
+internal fun DrawScope.drawOGLightningFrame(
+    spec: OGLightningSpec,
+    elapsedMs: Float,
+    color: Color,
+    coreColor: Color,
+    glowColor: Color,
+) {
+    val w = size.width; val h = size.height
+    val short = minOf(w, h)
+    val strike = lightningStrikeAt(spec, elapsedMs)
+    if (strike.alpha <= 0f) return
 
-        drawChannel(polylinePath(main), baseW, spec.glow, strike.alpha, color, coreColor, glowColor)
-        for (br in lightningBranches(main, spec, strike.index, short)) {
-            if (br.size >= 2) drawChannel(polylinePath(br), baseW * 0.5f, spec.glow, strike.alpha * 0.9f, color, coreColor, glowColor)
-        }
+    val a = OGPoint(spec.endpointA().x * w, spec.endpointA().y * h)
+    val b = OGPoint(spec.endpointB().x * w, spec.endpointB().y * h)
+    val main = lightningChannel(a, b, short * spec.jaggedness, spec.detail, spec.seed + strike.index * 7919)
+    val baseW = short * spec.width
+
+    drawChannel(polylinePath(main), baseW, spec.glow, strike.alpha, color, coreColor, glowColor)
+    for (br in lightningBranches(main, spec, strike.index, short)) {
+        if (br.size >= 2) drawChannel(polylinePath(br), baseW * 0.5f, spec.glow, strike.alpha * 0.9f, color, coreColor, glowColor)
     }
 }
 

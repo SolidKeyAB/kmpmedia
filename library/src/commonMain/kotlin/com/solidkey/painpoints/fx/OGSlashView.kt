@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.solidkey.painpoints.ai.toSpecColor
 import com.solidkey.painpoints.shape.OGPoint
@@ -57,81 +58,99 @@ fun OGSlashView(
     }
 
     Canvas(modifier.clipToBounds()) { // keep wide glow + forked branches inside the view's bounds
-        if (centerline.size < 2) return@Canvas
-        val w = size.width
-        val h = size.height
-        val short = minOf(w, h)
+        drawOGSlashFrame(spec, elapsed, centerline, head, tail, glowColor)
+    }
+}
 
-        val frame = slashFrameAt(spec, elapsed)
-        if (frame.reveal <= 0f || frame.alpha <= 0f) return@Canvas
+/**
+ * Draw one frame of a [spec]'s slash ribbon into the current [DrawScope] at [elapsedMs], given its
+ * already-sampled [centerline] (from [slashCenterline]) and resolved head / tail / glow colours. This
+ * is the per-frame body shared by the live [OGSlashView] (which remembers those inputs for 60fps) and
+ * the off-screen stage exporter (`com.solidkey.painpoints.stage`) — one code path, so the exported GIF
+ * matches the preview exactly. Pure Compose drawing; clip to the target bounds before calling.
+ */
+internal fun DrawScope.drawOGSlashFrame(
+    spec: OGSlashSpec,
+    elapsedMs: Float,
+    centerline: List<OGPoint>,
+    head: Color,
+    tail: Color,
+    glowColor: Color,
+) {
+    if (centerline.size < 2) return
+    val w = size.width
+    val h = size.height
+    val short = minOf(w, h)
 
-        // Centreline in PIXELS so normals (hence thickness) are correct on any aspect ratio.
-        val clPx = centerline.map { OGPoint(it.x * w, it.y * h) }
-        // Thickness fractions are of the shorter side → widthScale = short.
-        val outline = slashRibbonOutline(clPx, spec, frame.reveal, elapsed.toLong(), widthScale = short)
-        if (outline.size < 3) return@Canvas
+    val frame = slashFrameAt(spec, elapsedMs)
+    if (frame.reveal <= 0f || frame.alpha <= 0f) return
 
-        val ribbon = Path()
-        ribbon.moveTo(outline[0].x, outline[0].y)
-        for (i in 1 until outline.size) ribbon.lineTo(outline[i].x, outline[i].y)
-        ribbon.close()
+    // Centreline in PIXELS so normals (hence thickness) are correct on any aspect ratio.
+    val clPx = centerline.map { OGPoint(it.x * w, it.y * h) }
+    // Thickness fractions are of the shorter side → widthScale = short.
+    val outline = slashRibbonOutline(clPx, spec, frame.reveal, elapsedMs.toLong(), widthScale = short)
+    if (outline.size < 3) return
 
-        // Flowing gradient from head to the drawn-on tip — interpolated in OKLab (perceptually even,
-        // no muddy middle) by sampling into stops the GPU then blends per-segment.
-        val lastIdx = clPx.size - 1
-        val tipIdx = (frame.reveal * lastIdx).toInt().coerceIn(0, lastIdx)
-        val headPx = Offset(clPx[0].x, clPx[0].y)
-        val tailPx = Offset(clPx[tipIdx].x, clPx[tipIdx].y)
-        val brush = Brush.linearGradient(OGFxColor.oklabStops(head, tail), start = headPx, end = tailPx)
+    val ribbon = Path()
+    ribbon.moveTo(outline[0].x, outline[0].y)
+    for (i in 1 until outline.size) ribbon.lineTo(outline[i].x, outline[i].y)
+    ribbon.close()
 
-        // Layered additive bloom: several strokes of the tapered OUTLINE, wide+faint → tight+bright, so
-        // the halo hugs the silhouette (tapers with the blade) and sums toward a hot core under Plus
-        // blend — a real neon bloom, still zero-dep, 60fps, and frame-identical on Android & iOS (no
-        // RenderEffect / platform blur, which is API-floored on Android and not cross-platform-identical).
-        val glow = spec.glow.coerceIn(0f, 1f)
-        if (glow > 0f) {
-            val baseW = spec.width * short
-            val passes = 4
-            for (p in 0 until passes) {
-                val t = p / (passes - 1f) // 0 = outermost & faintest, 1 = innermost & brightest
-                drawPath(
-                    ribbon, glowColor, alpha = lerp(0.05f, 0.20f, t) * glow * frame.alpha,
-                    style = Stroke(width = baseW * lerp(2.8f, 0.55f, t), cap = StrokeCap.Round, join = StrokeJoin.Round),
-                    blendMode = BlendMode.Plus,
-                )
-            }
-        }
+    // Flowing gradient from head to the drawn-on tip — interpolated in OKLab (perceptually even,
+    // no muddy middle) by sampling into stops the GPU then blends per-segment.
+    val lastIdx = clPx.size - 1
+    val tipIdx = (frame.reveal * lastIdx).toInt().coerceIn(0, lastIdx)
+    val headPx = Offset(clPx[0].x, clPx[0].y)
+    val tailPx = Offset(clPx[tipIdx].x, clPx[tipIdx].y)
+    val brush = Brush.linearGradient(OGFxColor.oklabStops(head, tail), start = headPx, end = tailPx)
 
-        // Crisp gradient-filled ribbon on top.
-        drawPath(ribbon, brush, alpha = frame.alpha)
-
-        // A white-hot core along the drawn-on spine — the "neon" centre, scaled by glow.
-        if (glow > 0f) {
-            val core = Path()
-            core.moveTo(headPx.x, headPx.y)
-            for (i in 1..tipIdx) core.lineTo(clPx[i].x, clPx[i].y)
+    // Layered additive bloom: several strokes of the tapered OUTLINE, wide+faint → tight+bright, so
+    // the halo hugs the silhouette (tapers with the blade) and sums toward a hot core under Plus
+    // blend — a real neon bloom, still zero-dep, 60fps, and frame-identical on Android & iOS (no
+    // RenderEffect / platform blur, which is API-floored on Android and not cross-platform-identical).
+    val glow = spec.glow.coerceIn(0f, 1f)
+    if (glow > 0f) {
+        val baseW = spec.width * short
+        val passes = 4
+        for (p in 0 until passes) {
+            val t = p / (passes - 1f) // 0 = outermost & faintest, 1 = innermost & brightest
             drawPath(
-                core, Color.White, alpha = 0.5f * glow * frame.alpha,
-                style = Stroke(width = spec.width * short * 0.35f, cap = StrokeCap.Round),
+                ribbon, glowColor, alpha = lerp(0.05f, 0.20f, t) * glow * frame.alpha,
+                style = Stroke(width = baseW * lerp(2.8f, 0.55f, t), cap = StrokeCap.Round, join = StrokeJoin.Round),
                 blendMode = BlendMode.Plus,
             )
         }
+    }
 
-        // Forked lightning branches (bolt edge only): thin glowing sub-channels off the main bolt.
-        if (spec.edgeMode == OGSlashEdge.BOLT) {
-            val bw = spec.width * short
-            for (br in slashBranches(clPx, spec, frame.reveal, elapsed.toLong(), short)) {
-                if (br.size < 2) continue
-                val p = Path()
-                p.moveTo(br[0].x, br[0].y)
-                for (i in 1 until br.size) p.lineTo(br[i].x, br[i].y)
-                if (glow > 0f) {
-                    drawPath(p, glowColor, alpha = 0.3f * glow * frame.alpha,
-                        style = Stroke(width = bw * 0.8f, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = BlendMode.Plus)
-                }
-                drawPath(p, Color.White, alpha = (0.4f + 0.5f * glow) * frame.alpha,
-                    style = Stroke(width = bw * 0.28f, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = BlendMode.Plus)
+    // Crisp gradient-filled ribbon on top.
+    drawPath(ribbon, brush, alpha = frame.alpha)
+
+    // A white-hot core along the drawn-on spine — the "neon" centre, scaled by glow.
+    if (glow > 0f) {
+        val core = Path()
+        core.moveTo(headPx.x, headPx.y)
+        for (i in 1..tipIdx) core.lineTo(clPx[i].x, clPx[i].y)
+        drawPath(
+            core, Color.White, alpha = 0.5f * glow * frame.alpha,
+            style = Stroke(width = spec.width * short * 0.35f, cap = StrokeCap.Round),
+            blendMode = BlendMode.Plus,
+        )
+    }
+
+    // Forked lightning branches (bolt edge only): thin glowing sub-channels off the main bolt.
+    if (spec.edgeMode == OGSlashEdge.BOLT) {
+        val bw = spec.width * short
+        for (br in slashBranches(clPx, spec, frame.reveal, elapsedMs.toLong(), short)) {
+            if (br.size < 2) continue
+            val p = Path()
+            p.moveTo(br[0].x, br[0].y)
+            for (i in 1 until br.size) p.lineTo(br[i].x, br[i].y)
+            if (glow > 0f) {
+                drawPath(p, glowColor, alpha = 0.3f * glow * frame.alpha,
+                    style = Stroke(width = bw * 0.8f, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = BlendMode.Plus)
             }
+            drawPath(p, Color.White, alpha = (0.4f + 0.5f * glow) * frame.alpha,
+                style = Stroke(width = bw * 0.28f, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = BlendMode.Plus)
         }
     }
 }
