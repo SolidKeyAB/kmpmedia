@@ -110,5 +110,103 @@ Notes:
   (no key), and exposes the exact `OGStages.stagePrompt(...)` string you would send a model.
 - For very long replies you can switch to the streaming endpoint; a single stage is small, so a
   non-streaming call with `max_tokens = 16000` is fine.
-- Any model works — the format is provider-agnostic. `OGStageModel` is just "prompt in → text out".
+- Any model works, the format is provider-agnostic. `OGStageModel` is just "prompt in, text out".
+
+## On a local / on-device model, too
+
+Nothing in the loop assumes the cloud. `OGStageModel.complete(prompt): String` doesn't care whether
+the text came from Anthropic, a model running on the phone's NPU, or a local server on your laptop, so
+an on-device LLM plugs in exactly like the Claude example above. `OGStageAuthoring.resilient(...)`
+matters even more here: small quantised models emit malformed JSON more often, and a reply that
+doesn't decode into a real movie falls back to `OGOfflineStageAuthor`, so the user still gets a movie.
+
+The clean Kotlin Multiplatform shape is a per-platform factory, since the actual inference call is
+platform code:
+
+```kotlin
+// commonMain
+expect fun localStageModel(): OGStageModel
+
+// use it the same way as any other model:
+val author = OGStageAuthoring.resilient(localStageModel())   // on-device first, offline fallback
+val stage  = author.author("a stormy night over the sea")
 ```
+
+### Android — MediaPipe LLM Inference (Gemma, on-device)
+
+Runs a Gemma / Phi / StableLM checkpoint fully on the device's GPU/NPU, no network. Add
+`com.google.mediapipe:tasks-genai` and push a model file to the device. `generateResponse` blocks, so
+hop off the main thread:
+
+```kotlin
+// androidMain
+import android.content.Context
+import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.solidkey.painpoints.stage.OGStageModel
+
+class MediaPipeStageModel(context: Context, modelPath: String) : OGStageModel {
+    private val llm = LlmInference.createFromOptions(
+        context,
+        LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelPath)        // e.g. a Gemma .task/.bin on the device
+            .setMaxTokens(4096)
+            .setTemperature(0.7f)
+            .setTopK(40)
+            .build(),
+    )
+
+    override suspend fun complete(prompt: String): String =
+        withContext(Dispatchers.Default) { llm.generateResponse(prompt) }  // blocking call, off-main
+}
+```
+
+### Any platform — a local server (Ollama) over HTTP
+
+The quickest way to prototype with a real local model: run Ollama on your machine and point the same
+cross-platform ktor client at it. Ask it for strict JSON with `format: "json"`.
+
+```kotlin
+// commonMain (ktor, so it compiles on Android + iOS)
+class OllamaStageModel(
+    private val baseUrl: String = "http://10.0.2.2:11434", // host's Ollama from the Android emulator
+    private val model: String = "llama3.1",
+    private val http: HttpClient = HttpClient(),
+) : OGStageModel {
+    override suspend fun complete(prompt: String): String {
+        val body = buildJsonObject {
+            put("model", model)
+            put("prompt", prompt)
+            put("stream", false)
+            put("format", "json")                       // constrain the reply to valid JSON
+            putJsonObject("options") { put("temperature", 0.7) }
+        }
+        val raw = http.post("$baseUrl/api/generate") {
+            contentType(ContentType.Application.Json)
+            setBody(body.toString())
+        }.bodyAsText()
+        return Json.parseToJsonElement(raw).jsonObject["response"]
+            ?.jsonPrimitive?.content ?: error("no response field from Ollama")
+    }
+}
+```
+
+Host address per target: the Android **emulator** reaches the host's Ollama at `10.0.2.2`; the iOS
+**simulator** shares the host network so `127.0.0.1` / `localhost` works; a real device needs the
+host's LAN IP (and `OLLAMA_HOST=0.0.0.0` so the server listens beyond loopback).
+
+### iOS — Apple's on-device model
+
+On iOS you can back the `expect` factory with Apple's on-device **Foundation Models**
+(`LanguageModelSession`) through a small Swift shim exposed to Kotlin/Native via cinterop, or with an
+**MLC-LLM** / **llama.cpp** build. Either way it is the same `OGStageModel.complete` contract, and the
+library stays free of the dependency.
+
+### Expect the fallback to earn its keep
+
+The stage prompt is a full JSON schema (layers, keyframe tracks, enums), so a tiny 1–3B model will
+stumble often and `resilient(...)` will drop to the offline director a lot. A ~7B+ instruct model that
+follows JSON is the realistic floor for authoring a genuine stage. Either way the loop never breaks:
+worst case it is the deterministic offline movie, best case a model-written one, in the identical
+`OGStage` format and player.
