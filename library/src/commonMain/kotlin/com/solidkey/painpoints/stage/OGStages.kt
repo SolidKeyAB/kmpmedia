@@ -297,8 +297,16 @@ object OGStages {
         as joined, not as two floating boxes with a gap. Avoid sharp straight-edged rectangles and hard
         corners unless the thing really is angular.
 
+        For extra REALISM (optional, and still fully movable): SHADE the major shapes with gradients —
+        define an SVG <linearGradient> or <radialGradient> in <defs> and reference it with fill="url(#id)"
+        — lighter where the light falls, darker in creases and on undersides; add small HIGHLIGHT glints
+        (a pale dot on each eye and the nose, a bright rim on a lit edge) and soft SHADOW patches where
+        parts overlap. Gradients and highlights read as depth while every part stays its own labelled
+        region (a radialGradient on a round body, a vertical linearGradient on fur, etc.).
+
         Give every shape an "id" (it becomes that part's animatable name, e.g. id="tail" or id="forearm_l")
-        and a solid "fill"; use paths / polygons / rect / circle / ellipse, ordered back-to-front. We
+        and a "fill" (a solid #RRGGBB, or url(#id) for a gradient); use paths / polygons / rect / circle /
+        ellipse, ordered back-to-front. We
         compile it into the same movie (each element becomes a labelled region you can later animate or tap).
 
         Use the JSON movie format above instead only when the request is an ATMOSPHERE or mood (a stormy
