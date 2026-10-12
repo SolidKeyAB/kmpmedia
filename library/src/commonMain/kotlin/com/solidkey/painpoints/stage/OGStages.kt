@@ -283,8 +283,12 @@ object OGStages {
         the two pieces OVERLAP heavily at the joint (elbow/knee) so there is no gap, with the joint where
         it really bends. Imply fur / feather / scale TEXTURE by giving the silhouette
         a slightly jagged, tufted OUTLINE (little notches along the back, tail, cheeks, chest) plus a few
-        short accent tufts, done with the shape EDGES themselves — not hundreds of tiny shapes. Aim for
-        about 20-50 shapes total so it still plays at 60fps.
+        short accent tufts. Part COUNT is NOT a limit — the player renders 100+ shapes at 60fps — so
+        make it RICH: keep the STRUCTURAL skeleton small and carefully placed (body, head, rooted limbs,
+        roughly 20-30 shapes), then layer on as much DETAIL as you like (fur tufts along edges, shading
+        and highlight patches, finer facial features, claws, whiskers, spots). Detail shapes sit ON TOP
+        of already-placed parts, so they add richness WITHOUT risking the pose. A rich subject is happily
+        50-100 shapes; just don't scatter loose STRUCTURAL pieces — pile the extra shapes into detail.
 
         Make the forms feel REAL, not blocky: build the body and limbs from smooth, CURVED outlines — a
         forearm or shin is a rounded, slightly TAPERED capsule, not a hard bar; draw them with curved
