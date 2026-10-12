@@ -275,11 +275,13 @@ object OGStages {
         in SVG than by hand-placing JSON polygon points, so do NOT fall back to an atmospheric background
         + title when a concrete subject is asked for — compose it part by part.
 
-        For a creature or figure, give it believable ANATOMY: draw each arm and leg as TWO segments
-        meeting at a joint placed where it really bends (shoulder -> upper-arm -> elbow -> forearm ->
-        wrist -> a HAND with a few fingers; hip -> thigh -> knee -> shin -> ankle -> a FOOT or paw with
-        toes) — not a single stick — and keep the segments touching at each joint so the limb reads as
-        connected and could be posed later. Imply fur / feather / scale TEXTURE by giving the silhouette
+        For a creature or figure, give it believable ANATOMY. Draw each whole arm and leg as ONE
+        continuous, smooth, slightly TAPERED shape that is ROOTED where it meets the body (at the
+        shoulder or hip) and overlaps the torso there, so a limb can NEVER float free; the hand or foot
+        is a rounded shape attached at the far end (a few fingers / toes). Only split a limb into an
+        upper + lower piece when it is clearly BENT (a raised waving arm, a kneeling leg) — and then make
+        the two pieces OVERLAP heavily at the joint (elbow/knee) so there is no gap, with the joint where
+        it really bends. Imply fur / feather / scale TEXTURE by giving the silhouette
         a slightly jagged, tufted OUTLINE (little notches along the back, tail, cheeks, chest) plus a few
         short accent tufts, done with the shape EDGES themselves — not hundreds of tiny shapes. Aim for
         about 20-50 shapes total so it still plays at 60fps.
