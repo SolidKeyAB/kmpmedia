@@ -267,12 +267,20 @@ object OGStages {
         the backdrop for a slow push-in, and a "text" title card that fades in over the first second.
         Keep it resolution-independent (normalized coords).
 
-        Alternative format (often easier for a single rich still): instead of the JSON above, you MAY
-        reply with ONE standalone <svg ...>...</svg> document and nothing else. Give every shape an
-        "id" (it becomes that part's animatable name, e.g. id="tail") and a solid "fill"; use paths /
-        polygons / rect / circle / ellipse. We compile it into the same movie (each element becomes a
-        labelled region you can later animate or tap). Pick EXACTLY ONE format — the JSON movie OR one
-        SVG document — never both.
+        Alternative format — STRONGLY PREFERRED whenever the request names a recognizable SUBJECT (an
+        animal, person, character, object, vehicle, plant, food): reply with ONE standalone
+        <svg ...>...</svg> document and nothing else, and actually DRAW that subject as 12-30 labelled,
+        filled parts (for "a monkey on a branch holding a banana": branch, tail, body, belly, arms, legs,
+        head, ears, face, eyes, muzzle, banana — each its own shape). A language model draws FAR more
+        reliably in SVG than by hand-placing JSON polygon points, so do NOT fall back to an atmospheric
+        background + title when a concrete subject is asked for — compose it part by part. Give every
+        shape an "id" (it becomes that part's animatable name, e.g. id="tail") and a solid "fill"; use
+        paths / polygons / rect / circle / ellipse, ordered back-to-front. We compile it into the same
+        movie (each element becomes a labelled region you can later animate or tap).
+
+        Use the JSON movie format above instead only when the request is an ATMOSPHERE or mood (a stormy
+        sea, a neon city, a calm dawn) with no specific subject to draw. Pick EXACTLY ONE format — the
+        JSON movie OR one SVG document — never both.
 
         Output only that one JSON object OR that one <svg> document — no prose, no markdown fences.
 
