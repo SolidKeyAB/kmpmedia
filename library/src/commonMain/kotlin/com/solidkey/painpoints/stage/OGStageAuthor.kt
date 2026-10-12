@@ -47,10 +47,12 @@ public object OGStageAuthoring {
     public fun promptFor(instruction: String): String = OGStages.stagePrompt(instruction)
 
     /** Turn a model's raw [reply] into a stage, or `null` if it won't decode into a non-empty movie.
-     *  (A decode that yields zero layers is treated as a failure, so an empty `{}` triggers a fallback
-     *  rather than a blank screen.) */
+     *  Tries the stage JSON first, then falls back to lifting an `<svg>…</svg>` out of the reply and
+     *  compiling it ([OGStageSvg]) — a model is often more fluent in SVG. (A decode that yields zero
+     *  layers is treated as a failure, so an empty `{}` triggers a fallback rather than a blank screen.) */
     public fun fromReply(reply: String): OGStage? =
         OGStages.decodeOrNull(reply)?.takeIf { it.layers.isNotEmpty() }
+            ?: OGStageSvg.fromReply(reply)
 
     /**
      * Wrap a raw text [model] into an [OGStageAuthor]: build the stage prompt from the plain

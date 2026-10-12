@@ -267,7 +267,14 @@ object OGStages {
         the backdrop for a slow push-in, and a "text" title card that fades in over the first second.
         Keep it resolution-independent (normalized coords).
 
-        Output the JSON only, with no prose and no markdown fences.
+        Alternative format (often easier for a single rich still): instead of the JSON above, you MAY
+        reply with ONE standalone <svg ...>...</svg> document and nothing else. Give every shape an
+        "id" (it becomes that part's animatable name, e.g. id="tail") and a solid "fill"; use paths /
+        polygons / rect / circle / ellipse. We compile it into the same movie (each element becomes a
+        labelled region you can later animate or tap). Pick EXACTLY ONE format — the JSON movie OR one
+        SVG document — never both.
+
+        Output only that one JSON object OR that one <svg> document — no prose, no markdown fences.
 
         Task: $instruction
     """.trimIndent()

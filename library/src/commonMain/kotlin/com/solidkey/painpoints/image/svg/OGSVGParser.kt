@@ -2050,6 +2050,26 @@ fun parsePolygonPath(points: String, isPolygon: Boolean): List<OGSVGCommand> {
     return commands
 }
 
+/** One SVG presentation attribute (`name="value"` / `name='value'`, any spacing), case-insensitive. */
+private fun svgAttr(attrs: String, name: String): String? =
+    Regex("""(?:^|\s)${Regex.escape(name)}\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE)
+        .find(attrs)?.groupValues?.get(1)?.trim()
+
+/** One CSS property out of an inline `style="a:1;b:2"` string, case-insensitive. */
+private fun svgStyleProp(style: String?, prop: String): String? {
+    if (style.isNullOrBlank()) return null
+    return Regex("""(?:^|;)\s*${Regex.escape(prop)}\s*:\s*([^;]+)""", RegexOption.IGNORE_CASE)
+        .find(style)?.groupValues?.get(1)?.trim()
+}
+
+/** SVG gradient-stop offset: "50%" -> 0.5, bare "0.5"/".5" -> 0.5, missing/garbage -> 0; clamped 0..1. */
+private fun parseStopOffset(raw: String?): Float {
+    val t = raw?.trim().orEmpty()
+    if (t.isEmpty()) return 0f
+    val v = if (t.endsWith("%")) (t.dropLast(1).toFloatOrNull() ?: 0f) / 100f else (t.toFloatOrNull() ?: 0f)
+    return v.coerceIn(0f, 1f)
+}
+
 fun parseSVGGradients(svgContent: String): Map<String, OGSVGGradient> {
     val gradients = mutableMapOf<String, OGSVGGradient>()
     val visited = mutableSetOf<String>()
@@ -2073,23 +2093,32 @@ fun parseSVGGradients(svgContent: String): Map<String, OGSVGGradient> {
             var referencedId = hrefMatch?.groupValues?.get(1)
 
             val stops = mutableListOf<Pair<Float, Color>>()
-            val stopRegex =
-                Regex("""<stop\s+[^>]*offset=["']([\d.]+%)["']\s+stop-color=["']([^"']+)["'][^>]*\/?>""")
+            // Match each <stop> element with attributes in ANY order, then pull out colour/offset
+            // tolerantly: offset accepts "50%" OR a 0..1 decimal ("0.5"/".5") OR is omitted
+            // (defaults to 0); the colour comes from a `stop-color` attribute OR an inline
+            // `style="stop-color:..;stop-opacity:.."`; a `stop-opacity` (attr or style) folds into
+            // the stop's alpha. This matches how real SVG — and LLM-authored SVG — is actually written.
+            val stopRegex = Regex("""<stop\b([^>]*?)/?>""", RegexOption.IGNORE_CASE)
 
             stopRegex.findAll(gradientContent).forEach { stopMatch ->
-                val offset = stopMatch.groupValues[1].removeSuffix("%").toFloat() / 100f
-                val color = parseColor(stopMatch.groupValues[2])
+                val attrs = stopMatch.groupValues[1]
+                val style = svgAttr(attrs, "style")
+                val colorStr = svgAttr(attrs, "stop-color") ?: svgStyleProp(style, "stop-color")
+                    ?: return@forEach
+                val offset = parseStopOffset(svgAttr(attrs, "offset"))
+                val opacity = (svgAttr(attrs, "stop-opacity") ?: svgStyleProp(style, "stop-opacity"))
+                    ?.toFloatOrNull()?.coerceIn(0f, 1f)
 
-                // parseColor returns OGColorBase; only a solid OGColor is a valid
-                // gradient stop. Guard the cast so a non-solid value (e.g. a
-                // nested url(...) resolving to an OGBrush) is skipped instead of
-                // throwing ClassCastException.
-                val solid = (color as? OGColor)?.color
+                // parseColor returns OGColorBase; only a solid OGColor is a valid gradient stop.
+                // Guard the cast so a non-solid value (e.g. a nested url(...) resolving to an
+                // OGBrush) is skipped instead of throwing ClassCastException.
+                val solid = (parseColor(colorStr.trim()) as? OGColor)?.color
                 if (solid != null) {
-                    stops.add(offset to solid)
-                    Logger.e("  ➡️ Added stop: offset=$offset, color=$solid")
+                    val c = if (opacity != null) solid.copy(alpha = opacity) else solid
+                    stops.add(offset to c)
+                    Logger.e("  ➡️ Added stop: offset=$offset, color=$c")
                 } else {
-                    Logger.e("  ⚠️ Skipped stop with non-solid color: ${stopMatch.groupValues[2]}")
+                    Logger.e("  ⚠️ Skipped stop with non-solid color: $colorStr")
                 }
             }
 
