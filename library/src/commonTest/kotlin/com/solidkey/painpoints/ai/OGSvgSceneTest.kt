@@ -106,4 +106,19 @@ class OGSvgSceneTest {
         val grad = assertNotNull(bg.gradient, "decimal-offset / style-stop-color gradient should parse")
         assertEquals(3, grad.stops.size, "stops=${grad.stops}")
     }
+
+    @Test
+    fun roundedRectCornersBecomeCurves() {
+        // A model's "rounded rectangle" limb (rx) should keep soft corners (many sampled points),
+        // while a plain rect stays a 4-corner box.
+        val svg = """
+            <svg viewBox="0 0 100 100">
+              <rect id="arm" x="10" y="10" width="60" height="20" rx="10" fill="#7a4a28"/>
+              <rect id="bar" x="10" y="40" width="60" height="20" fill="#7a4a28"/>
+            </svg>
+        """.trimIndent()
+        val byLabel = OGSvgScene.toScene(svg).shapes.associateBy { it.label }
+        assertTrue((byLabel["arm"]?.points?.size ?: 0) > 8, "rounded rect should curve, got ${byLabel["arm"]?.points?.size}")
+        assertEquals(4, byLabel["bar"]?.points?.size, "plain rect stays a box")
+    }
 }

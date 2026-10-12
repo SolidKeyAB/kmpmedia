@@ -269,14 +269,31 @@ object OGStages {
 
         Alternative format — STRONGLY PREFERRED whenever the request names a recognizable SUBJECT (an
         animal, person, character, object, vehicle, plant, food): reply with ONE standalone
-        <svg ...>...</svg> document and nothing else, and actually DRAW that subject as 12-30 labelled,
-        filled parts (for "a monkey on a branch holding a banana": branch, tail, body, belly, arms, legs,
-        head, ears, face, eyes, muzzle, banana — each its own shape). A language model draws FAR more
-        reliably in SVG than by hand-placing JSON polygon points, so do NOT fall back to an atmospheric
-        background + title when a concrete subject is asked for — compose it part by part. Give every
-        shape an "id" (it becomes that part's animatable name, e.g. id="tail") and a solid "fill"; use
-        paths / polygons / rect / circle / ellipse, ordered back-to-front. We compile it into the same
-        movie (each element becomes a labelled region you can later animate or tap).
+        <svg ...>...</svg> document and nothing else, and actually DRAW that subject as labelled, filled
+        parts (for "a monkey on a branch holding a banana": branch, tail, body, belly, arms, legs, head,
+        ears, face, eyes, muzzle, banana — each its own shape). A language model draws FAR more reliably
+        in SVG than by hand-placing JSON polygon points, so do NOT fall back to an atmospheric background
+        + title when a concrete subject is asked for — compose it part by part.
+
+        For a creature or figure, give it believable ANATOMY: draw each arm and leg as TWO segments
+        meeting at a joint placed where it really bends (shoulder -> upper-arm -> elbow -> forearm ->
+        wrist -> a HAND with a few fingers; hip -> thigh -> knee -> shin -> ankle -> a FOOT or paw with
+        toes) — not a single stick — and keep the segments touching at each joint so the limb reads as
+        connected and could be posed later. Imply fur / feather / scale TEXTURE by giving the silhouette
+        a slightly jagged, tufted OUTLINE (little notches along the back, tail, cheeks, chest) plus a few
+        short accent tufts, done with the shape EDGES themselves — not hundreds of tiny shapes. Aim for
+        about 20-50 shapes total so it still plays at 60fps.
+
+        Make the forms feel REAL, not blocky: build the body and limbs from smooth, CURVED outlines — a
+        forearm or shin is a rounded, slightly TAPERED capsule, not a hard bar; draw them with curved
+        bezier path edges (C / Q commands), or a <rect> with an "rx" corner radius; hands, feet, belly,
+        head and cheeks are soft ovals. OVERLAP the ends of connected segments a little so a joint reads
+        as joined, not as two floating boxes with a gap. Avoid sharp straight-edged rectangles and hard
+        corners unless the thing really is angular.
+
+        Give every shape an "id" (it becomes that part's animatable name, e.g. id="tail" or id="forearm_l")
+        and a solid "fill"; use paths / polygons / rect / circle / ellipse, ordered back-to-front. We
+        compile it into the same movie (each element becomes a labelled region you can later animate or tap).
 
         Use the JSON movie format above instead only when the request is an ATMOSPHERE or mood (a stormy
         sea, a neon city, a calm dawn) with no specific subject to draw. Pick EXACTLY ONE format — the

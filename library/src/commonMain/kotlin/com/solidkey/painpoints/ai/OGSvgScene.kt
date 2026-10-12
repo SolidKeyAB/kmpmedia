@@ -122,14 +122,7 @@ object OGSvgScene {
     private fun shapeToRings(s: OGSVGShape, samples: Int): List<List<OGPointSpec>> = when (s) {
         is OGSVGPath -> flatten(s.commands, samples)
         is OGSVGPolygon -> listOf(s.points.map { OGPointSpec(it.x, it.y) })
-        is OGSVGRect -> listOf(
-            listOf(
-                OGPointSpec(s.x, s.y),
-                OGPointSpec(s.x + s.width, s.y),
-                OGPointSpec(s.x + s.width, s.y + s.height),
-                OGPointSpec(s.x, s.y + s.height),
-            ),
-        )
+        is OGSVGRect -> listOf(roundedRect(s.x, s.y, s.width, s.height, s.rx, s.ry, samples))
         is OGSVGCircle -> listOf(ellipse(s.cx, s.cy, s.r, s.r, samples * 3))
         is OGSVGEllipse -> listOf(ellipse(s.cx, s.cy, s.rx, s.ry, samples * 3))
         is OGSVGLine -> emptyList() // no enclosed area
@@ -142,6 +135,41 @@ object OGSvgScene {
             val a = 2.0 * PI * i / count
             OGPointSpec(cx + rx * cos(a).toFloat(), cy + ry * sin(a).toFloat())
         }
+    }
+
+    /** Trace a rect, rounding the corners into quarter-ellipse arcs when `rx`/`ry` are set — so a
+     *  model's "rounded rectangle" limb keeps its soft corners instead of flattening to a hard box.
+     *  SVG rules: a missing radius mirrors the other, both clamp to half the side, 0 -> sharp corners. */
+    private fun roundedRect(x: Float, y: Float, w: Float, h: Float, rxIn: Float, ryIn: Float, samples: Int): List<OGPointSpec> {
+        var rx = if (rxIn > 0f) rxIn else ryIn
+        var ry = if (ryIn > 0f) ryIn else rxIn
+        rx = rx.coerceIn(0f, w / 2f)
+        ry = ry.coerceIn(0f, h / 2f)
+        if (rx <= 0f || ry <= 0f) {
+            return listOf(
+                OGPointSpec(x, y),
+                OGPointSpec(x + w, y),
+                OGPointSpec(x + w, y + h),
+                OGPointSpec(x, y + h),
+            )
+        }
+        val n = samples.coerceIn(3, 16)
+        // corner centre + arc start (in half-PI units), swept clockwise: TR, BR, BL, TL.
+        val corners = listOf(
+            Triple(x + w - rx, y + ry, 1.5),
+            Triple(x + w - rx, y + h - ry, 0.0),
+            Triple(x + rx, y + h - ry, 0.5),
+            Triple(x + rx, y + ry, 1.0),
+        )
+        val pts = ArrayList<OGPointSpec>(4 * (n + 1))
+        for ((cx, cy, startHalfPi) in corners) {
+            val a0 = startHalfPi * PI
+            for (k in 0..n) {
+                val a = a0 + (PI / 2.0) * k / n
+                pts.add(OGPointSpec((cx + rx * cos(a)).toFloat(), (cy + ry * sin(a)).toFloat()))
+            }
+        }
+        return pts
     }
 
     /** Flatten one path's commands into one polyline per subpath (split at each `MoveTo`), mirroring
