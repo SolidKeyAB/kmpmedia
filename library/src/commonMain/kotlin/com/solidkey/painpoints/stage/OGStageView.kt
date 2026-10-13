@@ -189,10 +189,11 @@ private fun StageLayerBox(
     onTap: () -> Unit,
     livePlay: Boolean,
 ) {
-    // A scene's OWN live grade (its day->night) wins over the layer's static look; it changes with
-    // time, so recompute per frame — ogLook caches the filter per spec instance, a cheap rebuild.
-    val effLook: OGLookSpec? = when (r.content) {
-        is OGStageContent.Scene -> r.sceneFrameAt()?.look ?: r.look
+    // A scene's OWN live grade (its day->night) wins over the layer's static look. Read the look channel
+    // DIRECTLY (motion.lookAt, falling back to the scene's base look) — never via sceneFrameAt(), which
+    // would re-sanitize + re-expand every region of the scene each frame just to pull one grade.
+    val effLook: OGLookSpec? = when (val c = r.content) {
+        is OGStageContent.Scene -> c.scene.motion?.lookAt(r.localTimeMs / 1000f) ?: c.scene.look ?: r.look
         else -> r.look
     }
 

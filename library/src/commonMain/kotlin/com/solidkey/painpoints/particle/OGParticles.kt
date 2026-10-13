@@ -47,7 +47,7 @@ object OGParticles {
           maxParticles, emissionRate (per sec), burst (one-shot count), lifetimeMs, lifetimeJitter,
           x, y, spawnRadius, angleDeg, spreadDeg, speed, speedJitter, gravityX, gravityY, drag,
           startSize, endSize, sizeJitter, startColor, endColor, startAlpha, endAlpha,
-          spinDeg, spinJitter, shape ("circle"|"square"|"triangle"|"star"), seed.
+          spinDeg, spinJitter, shape ("circle"|"square"|"triangle"|"star"|"petal"|"teardrop"), seed.
 
         Schema: {"name":"<short name>", ...fields...}
         Examples:

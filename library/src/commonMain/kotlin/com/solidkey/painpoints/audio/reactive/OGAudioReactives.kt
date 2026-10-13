@@ -34,7 +34,7 @@ object OGAudioReactives {
     )
 
     /** Look up a [presets] entry by name, or `null` if there is none. */
-    fun preset(name: String): OGAudioReactiveSpec? = presets[name]
+    fun preset(name: String): OGAudioReactiveSpec? = presets[name.lowercase()]
 
     /**
      * Build a ready-to-send instruction constraining a model to output exactly the reactive-pack JSON

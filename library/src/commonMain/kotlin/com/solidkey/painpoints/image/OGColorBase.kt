@@ -5,7 +5,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TileMode
-import co.touchlab.kermit.Logger
 import com.solidkey.painpoints.image.svg.OGGradientType
 import com.solidkey.painpoints.image.svg.OGLinearGradientType
 import com.solidkey.painpoints.image.svg.OGRadialGradientType
@@ -16,12 +15,17 @@ sealed class OGColorBase {
     abstract fun toBrush(x: Float, y: Float, width: Float, height: Float): Brush
 
     companion object {
-        // ✅ Centralized Cache for Brushes
+        /** Upper bound on cached brushes. An animated SVG mints a fresh bbox-keyed entry per frame, so the
+         *  cache must evict or it grows without limit — bound it and drop the oldest on overflow. */
+        private const val BRUSH_CACHE_MAX = 128
+
+        // Insertion-ordered (mutableMapOf == LinkedHashMap), so keys.first() is the oldest entry to evict.
         private val brushCache: MutableMap<String, Brush> = mutableMapOf()
 
         /**
-         * Retrieves a cached brush or creates a new one.
-         * Avoids unnecessary recompositions by maintaining a stable reference.
+         * Retrieves a cached brush or creates a new one, keeping a stable reference so identical paints
+         * don't recompose. The cache is bounded (see [BRUSH_CACHE_MAX]); this runs in the draw path, so it
+         * does no logging.
          */
         fun getCachedBrush(
             colorBase: OGColorBase?,
@@ -33,38 +37,25 @@ sealed class OGColorBase {
         ): Brush {
             if (colorBase == null && gradient == null) return SolidColor(Color.Transparent)
 
-            // Create a unique cache key that includes the gradient ID if present
+            // A unique cache key. For a solid colour use the data-class value (not hashCode(): a 32-bit
+            // hash collision would otherwise hand back the wrong brush); gradients key on their id.
             val cacheKey = if (gradient != null) {
                 "GRADIENT-${gradient.id}-$x-$y-$width-$height"
             } else {
-                "COLOR-${colorBase.hashCode()}-$x-$y-$width-$height"
+                "COLOR-$colorBase-$x-$y-$width-$height"
             }
 
-            Logger.e("🧠 Checking cache for key: $cacheKey")
+            brushCache[cacheKey]?.let { return it }
 
-            // Check if a cached brush is available
-            val cachedBrush = brushCache[cacheKey]
-            if (cachedBrush != null) {
-                Logger.e("✅ Cache hit: Using cached brush for key: $cacheKey")
-                return cachedBrush
-            } else {
-                Logger.e("❌ Cache miss: Generating new brush for key: $cacheKey")
-            }
-
-            // Create a new brush based on the gradient or solid color
             val newBrush = when {
-                gradient != null -> {
-                    Logger.e("🖌️ Creating gradient brush for ID: ${gradient.id}")
-                    gradient.brush.toBrush(x, y, width, height)
-                }
-                colorBase != null -> {
-                    Logger.e("🖌️ Creating solid color brush: $colorBase")
-                    colorBase.toBrush(x, y, width, height)
-                }
+                gradient != null -> gradient.brush.toBrush(x, y, width, height)
+                colorBase != null -> colorBase.toBrush(x, y, width, height)
                 else -> SolidColor(Color.Transparent)
             }
 
-            // Cache and return the new brush
+            if (brushCache.size >= BRUSH_CACHE_MAX) {
+                brushCache.keys.firstOrNull()?.let { brushCache.remove(it) }
+            }
             brushCache[cacheKey] = newBrush
             return newBrush
         }

@@ -24,14 +24,12 @@ fun OGComposition.exportGif(
     loopCount: Int = 0,
     alphaThreshold: Int = OGGifEncoder.DEFAULT_ALPHA_THRESHOLD,
     dither: OGGifDither = OGGifDither.FLOYD_STEINBERG,
-): ByteArray {
-    val frames = ArrayList<OGGifFrame>(frameCount)
-    for (i in 0 until frameCount) {
-        val bitmap = renderFrame(frameTimeMs(i))
-        frames.add(OGGifFrame(bitmap.toArgbPixels(), frameDelayCs))
+): ByteArray =
+    // Stream frames through the encoder (render → sample → drop, then render → write → drop) so a full-size
+    // movie never retains every frame's ARGB at once. Byte-identical to encoding a materialized frame list.
+    OGGifEncoder.encodeStreaming(width, height, frameCount, frameDelayCs, loopCount, alphaThreshold, dither) { i ->
+        renderFrame(frameTimeMs(i)).toArgbPixels()
     }
-    return OGGifEncoder.encode(width, height, frames, loopCount, alphaThreshold, dither)
-}
 
 /**
  * Read an [ImageBitmap] into a row-major `0xAARRGGBB` array (length `width * height`). Goes through

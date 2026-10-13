@@ -82,7 +82,9 @@ fun OGImageView(
     // visual partner to [onError], which still fires. null keeps the previous behavior (a solid
     // fallback colour). Also shown if the source location can't be resolved at all.
     error: (@Composable () -> Unit)? = null,
-    onEventTriggered: (OGLayerItemEvent, String) -> Unit,
+    // Layer-item events (used by the layering editor); defaulted so the common `OGImageView(source)` and
+    // media-in-shape calls compile without supplying a handler.
+    onEventTriggered: (OGLayerItemEvent, String) -> Unit = { _, _ -> },
     debugVisual: Boolean = false // 🧪 NEW: enables colored box background for debug
 ) {
     val densityObj = LocalDensity.current            // full object for image processing

@@ -18,7 +18,10 @@ object OGSceneIdle {
      * Regions that already declare their own [OGRegionMotion] are left untouched; labels that match
      * nothing stay still.
      */
-    fun animate(scene: OGSceneSpec): OGSceneSpec {
+    fun animate(
+        scene: OGSceneSpec,
+        rules: Map<String, OGRegionMotion> = emptyMap(),
+    ): OGSceneSpec {
         // Eye regions (matched by label) also tell us WHERE catchlights live. A catchlight / glint is a
         // small bright shape drawn ON the eyeball, and a model rarely labels it "eye" — so a pure label
         // match leaves that white dot floating, fully opaque, while the eye fades shut (the monkey bug).
@@ -26,14 +29,26 @@ object OGSceneIdle {
         val eyeBoxes = scene.shapes.mapNotNull { s ->
             if (isEyeLabel((s.label ?: "").lowercase())) boxOf(s.points) else null
         }
+        // Caller rules are matched by case-insensitive substring and WIN over the built-in English
+        // heuristics, so an app can drive idle motion for non-English labels or a custom rig (e.g.
+        // mapOf("göz" to OGSceneIdle.Blink, "kuyruk" to OGSceneIdle.TailSway)) without forking this table.
+        val loweredRules = rules.mapKeys { it.key.lowercase() }
         return scene.copy(
             shapes = scene.shapes.map { s ->
                 if (s.motion != null) return@map s
-                val motion = idleFor((s.label ?: "").lowercase())
-                    ?: if (sitsOnAnEye(s.points, eyeBoxes)) BLINK else null
+                val label = (s.label ?: "").lowercase()
+                val motion = ruleFor(label, loweredRules)
+                    ?: idleFor(label)
+                    ?: if (sitsOnAnEye(s.points, eyeBoxes)) Blink else null
                 motion?.let { s.copy(motion = it) } ?: s
             },
         )
+    }
+
+    /** First caller [rules] entry whose (already-lowercased) key appears in [label], or null. */
+    private fun ruleFor(label: String, rules: Map<String, OGRegionMotion>): OGRegionMotion? {
+        if (rules.isEmpty() || label.isEmpty()) return null
+        return rules.entries.firstOrNull { it.key.isNotEmpty() && it.key in label }?.value
     }
 
     /** Eyes (but not eyebrows); whites + pupils + irises share the one blink timeline so they close
@@ -45,10 +60,10 @@ object OGSceneIdle {
 
     private fun idleFor(label: String): OGRegionMotion? = when {
         label.isEmpty() -> null
-        isEyeLabel(label) -> BLINK
-        "tail" in label -> TAIL_SWAY
+        isEyeLabel(label) -> Blink
+        "tail" in label -> TailSway
         "body" in label || "belly" in label || "chest" in label || "torso" in label ||
-            "tummy" in label || "breast" in label -> BREATHE
+            "tummy" in label || "breast" in label -> Breathe
         else -> null
     }
 
@@ -82,13 +97,15 @@ object OGSceneIdle {
         return eyeBoxes.any { e -> cx in e[0]..e[2] && cy in e[1]..e[3] && a <= areaOf(e) + 1e-6f }
     }
 
+    // The ready-made idle motions, public so a caller can map them to its own labels via [animate]'s rules.
+
     /** A slow chest rise-and-fall about the region centroid (subtle, so attached parts don't drift). */
-    private val BREATHE = OGRegionMotion(duration = 2.6f, mode = "reverse", easing = "easeInOut", scale = OGMotionScalar(1f, 1.045f))
+    val Breathe = OGRegionMotion(duration = 2.6f, mode = "reverse", easing = "easeInOut", scale = OGMotionScalar(1f, 1.045f))
 
     /** A gentle side-to-side tail wag about the tail centroid. */
-    private val TAIL_SWAY = OGRegionMotion(duration = 1.8f, mode = "reverse", easing = "easeInOut", rotate = OGMotionScalar(-7f, 7f))
+    val TailSway = OGRegionMotion(duration = 1.8f, mode = "reverse", easing = "easeInOut", rotate = OGMotionScalar(-7f, 7f))
 
     /** A periodic blink: the eye fades fully shut and back open (ping-pong), a clear beat every ~3s so
      *  the face shows through — a visible blink, not an imperceptible flash. */
-    private val BLINK = OGRegionMotion(duration = 1.5f, mode = "reverse", easing = "easeInOut", opacity = OGMotionScalar(1f, 0f))
+    val Blink = OGRegionMotion(duration = 1.5f, mode = "reverse", easing = "easeInOut", opacity = OGMotionScalar(1f, 0f))
 }

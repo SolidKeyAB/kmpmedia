@@ -75,6 +75,24 @@ class OGSceneIdleTest {
     }
 
     @Test
+    fun callerRulesDriveNonEnglishLabels() {
+        val scene = OGSceneSpec(
+            shapes = listOf(
+                OGPlacedShapeSpec(points = triAt(0.42f, 0.30f), label = "göz", fill = "#111111"),     // "eye" (tr)
+                OGPlacedShapeSpec(points = triAt(0.10f, 0.80f), label = "kuyruk", fill = "#7a4a28"),   // "tail" (tr)
+            ),
+            version = 3,
+        )
+        val out = OGSceneIdle.animate(
+            scene,
+            rules = mapOf("göz" to OGSceneIdle.Blink, "kuyruk" to OGSceneIdle.TailSway),
+        ).shapes.associateBy { it.label }
+
+        assertNotNull(out["göz"]?.motion?.opacity, "a caller rule blinks a non-English eye label")
+        assertNotNull(out["kuyruk"]?.motion?.rotate, "a caller rule sways a non-English tail label")
+    }
+
+    @Test
     fun preservesExistingMotion() {
         val own = OGRegionMotion(rotate = OGMotionScalar(0f, 90f))
         val scene = OGSceneSpec(

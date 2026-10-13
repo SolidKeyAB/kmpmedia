@@ -77,7 +77,7 @@ data class OGParticleSpec(
     val spinDeg: Float = 0f,
     /** Spin spread as a fraction (`0..1`). */
     val spinJitter: Float = 1f,
-    /** Particle shape: `circle` · `square` · `triangle` · `star`. */
+    /** Particle shape: `circle` · `square` · `triangle` · `star` · `petal` · `teardrop`. */
     val shape: String = "circle",
     /** Seed for the deterministic jitter — change it for a different-but-repeatable burst. */
     val seed: Int = 0,

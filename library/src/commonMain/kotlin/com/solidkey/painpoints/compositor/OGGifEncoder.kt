@@ -101,6 +101,87 @@ object OGGifEncoder {
         return out.toByteArray()
     }
 
+    /**
+     * Encode [frameCount] frames into one animated GIF **without ever holding more than one frame in
+     * memory** — the streaming twin of [encode]. [renderArgb] produces frame `i`'s row-major
+     * `0xAARRGGBB` pixels (length `width * height`); it is invoked **twice** per frame (once to sample the
+     * shared palette, once to write), so keep it pure. Produces byte-for-byte the same GIF as [encode]
+     * would for the same frames at a constant [frameDelayCs] (guarded by a parity test). This is what the
+     * exporters use so a full-size movie can't OOM by retaining every frame's bitmap (a default
+     * 1080×1080×60fps×4s stage would otherwise retain ~1.1GB of ARGB).
+     */
+    fun encodeStreaming(
+        width: Int,
+        height: Int,
+        frameCount: Int,
+        frameDelayCs: Int,
+        loopCount: Int = 0,
+        alphaThreshold: Int = DEFAULT_ALPHA_THRESHOLD,
+        dither: OGGifDither = OGGifDither.FLOYD_STEINBERG,
+        renderArgb: (Int) -> IntArray,
+    ): ByteArray {
+        require(width > 0 && height > 0) { "GIF size must be positive, was ${width}x$height" }
+        require(frameCount > 0) { "GIF needs at least one frame" }
+        val pxPerFrame = width * height
+
+        // Pass 1: render each frame, fold its opaque colours into the shared-palette sample set and detect
+        // transparency, then drop the pixels. Same samples (same global stride + running counter) as the
+        // batch path, so the palette — and therefore every output byte — is identical.
+        val checkTransparency = alphaThreshold in 0..255
+        val total = frameCount.toLong() * pxPerFrame
+        val stride = max(1L, total / SAMPLE_CAP).toInt()
+        val acc = ArrayList<Int>(minOf(SAMPLE_CAP.toLong(), total).toInt() + 1)
+        var hasTransparency = false
+        var counter = 0
+        for (i in 0 until frameCount) {
+            val argb = renderArgb(i)
+            require(argb.size == pxPerFrame) {
+                "frame $i has ${argb.size} pixels, expected $pxPerFrame ($width x $height)"
+            }
+            if (checkTransparency && !hasTransparency) {
+                hasTransparency = argb.any { (it ushr 24 and 0xFF) < alphaThreshold }
+            }
+            counter = appendOpaqueSamples(acc, argb, counter, stride, alphaThreshold, checkTransparency)
+        }
+        if (acc.isEmpty()) acc.add(0)
+
+        val maxColors = if (hasTransparency) 255 else 256
+        val paletteRgb = medianCutPalette(acc.toIntArray(), maxColors)
+        val transparentIndex = if (hasTransparency) paletteRgb.size else -1
+        val colorCount = paletteRgb.size + if (hasTransparency) 1 else 0
+        val gctSize = gctSizeFor(colorCount)
+        val minCodeSize = max(2, log2(gctSize))
+        val nearest = NearestColorCache(paletteRgb)
+
+        val out = ByteBuf()
+        writeHeader(out, width, height, gctSize, backgroundIndex = if (hasTransparency) transparentIndex else 0)
+        writeGlobalColorTable(out, paletteRgb, gctSize)
+        writeLoopExtension(out, loopCount)
+
+        // Pass 2: re-render each frame, map it to the palette, LZW-compress, write — dropping each after.
+        for (i in 0 until frameCount) {
+            val argb = renderArgb(i)
+            require(argb.size == pxPerFrame) {
+                "frame $i has ${argb.size} pixels, expected $pxPerFrame ($width x $height)"
+            }
+            writeGraphicControl(out, frameDelayCs, transparentIndex, hasTransparency)
+            writeImageDescriptor(out, width, height)
+            val indices = when (dither) {
+                OGGifDither.NONE ->
+                    mapNearest(argb, nearest, hasTransparency, alphaThreshold, transparentIndex)
+                OGGifDither.FLOYD_STEINBERG ->
+                    mapFloydSteinberg(
+                        argb, width, height, nearest, paletteRgb,
+                        hasTransparency, alphaThreshold, transparentIndex,
+                    )
+            }
+            out.byte(minCodeSize)
+            writeSubBlocks(out, lzwEncode(indices, minCodeSize))
+        }
+        out.byte(0x3B) // trailer
+        return out.toByteArray()
+    }
+
     // ---- pixel → palette mapping --------------------------------------------------------------------
 
     /** Plain nearest-colour mapping: every pixel takes its closest palette entry (transparent passes through). */
@@ -185,26 +266,48 @@ object OGGifEncoder {
 
     // ---- palette (median cut) ----------------------------------------------------------------------
 
+    /** Bounded colour-sample budget shared by the batch [encode] and the streaming [encodeStreaming] palette passes. */
+    private const val SAMPLE_CAP = 16384
+
     /** Collect a bounded set of opaque RGB samples across all frames (stride-sampled for speed). */
     private fun sampleOpaqueColors(
         frames: List<OGGifFrame>,
         alphaThreshold: Int,
         hasTransparency: Boolean,
     ): IntArray {
-        val cap = 16384
         val total = frames.sumOf { it.argb.size }
-        val stride = max(1, total / cap)
-        val acc = ArrayList<Int>(minOf(cap, total) + 1)
+        val stride = max(1, total / SAMPLE_CAP)
+        val acc = ArrayList<Int>(minOf(SAMPLE_CAP, total) + 1)
         var counter = 0
         for (f in frames) {
-            for (argb in f.argb) {
-                if (counter++ % stride != 0) continue
-                if (hasTransparency && (argb ushr 24 and 0xFF) < alphaThreshold) continue
-                acc.add(argb and 0xFFFFFF)
-            }
+            counter = appendOpaqueSamples(acc, f.argb, counter, stride, alphaThreshold, hasTransparency)
         }
         if (acc.isEmpty()) acc.add(0) // all-transparent frames still need one palette colour
         return acc.toIntArray()
+    }
+
+    /**
+     * Stride-sample one frame's opaque RGB into [acc], continuing the running [startCounter] across frames
+     * so a streaming pass draws the exact same samples (same order) as the batch [sampleOpaqueColors] over
+     * the whole list. Below-threshold pixels are skipped when [skipTransparent] — which only skips anything
+     * when such pixels actually exist, so passing it unconditionally in streaming stays batch-identical.
+     * Returns the advanced counter.
+     */
+    private fun appendOpaqueSamples(
+        acc: ArrayList<Int>,
+        argb: IntArray,
+        startCounter: Int,
+        stride: Int,
+        alphaThreshold: Int,
+        skipTransparent: Boolean,
+    ): Int {
+        var counter = startCounter
+        for (c in argb) {
+            if (counter++ % stride != 0) continue
+            if (skipTransparent && (c ushr 24 and 0xFF) < alphaThreshold) continue
+            acc.add(c and 0xFFFFFF)
+        }
+        return counter
     }
 
     /**

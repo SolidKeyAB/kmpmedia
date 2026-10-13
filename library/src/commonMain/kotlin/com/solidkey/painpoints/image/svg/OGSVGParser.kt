@@ -1911,9 +1911,6 @@ fun parseColor(
     gradients: Map<String, OGSVGGradient>? = null,
     isFill: Boolean = true
 ): OGColorBase {
-    Logger.e("Parsing OGColorBase: $colorString (isFill=$isFill)")
-    Logger.e("SVG>>parseOGColorBase>> Gradient Count: ${gradients?.size}")
-
     // ✅ Default Colors
     if (colorString.isNullOrEmpty()) {
         return if (isFill) OGColor(Color.Black) else OGColor(Color.Transparent)
@@ -1926,7 +1923,6 @@ fun parseColor(
         val gradientId = colorString.removePrefix("url(#").removeSuffix(")")
         val gradient = gradients?.get(gradientId)
         if (gradient != null) {
-            Logger.e("Applying gradient: $gradientId")
             return gradient.brush
         }
         return OGColor(Color.Transparent)
@@ -1937,7 +1933,6 @@ fun parseColor(
         return try {
             OGColor(parseHexColor(colorString))
         } catch (e: Exception) {
-            Logger.e("Error parsing hex color: $colorString. Using default transparent.")
             OGColor(Color.Transparent)
         }
     }
@@ -1950,14 +1945,15 @@ fun parseColor(
     val rgbColor = parseRgbColor(colorString)
     if (rgbColor != null) return OGColor(rgbColor)
 
-    Logger.e("Unknown color: $colorString. Using default transparent.")
     return OGColor(Color.Transparent)
 }
 
 
+// Compiled once, not per call — this is on the per-frame colour-resolve path for animated scenes.
+private val RGB_REGEX = """rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)""".toRegex()
+
 fun parseRgbColor(colorString: String): Color? {
-    val regex = """rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)""".toRegex()
-    val match = regex.find(colorString)
+    val match = RGB_REGEX.find(colorString)
     return if (match != null) {
         val (r, g, b, a) = match.destructured
         Color(
@@ -1967,13 +1963,11 @@ fun parseRgbColor(colorString: String): Color? {
             alpha = a.toFloatOrNull() ?: 1f
         )
     } else {
-        Logger.e("Error parsing RGB color: $colorString. Using transparent.")
         Color.Transparent
     }
 }
 
 fun parseNamedColor(colorString: String): Color? {
-    Logger.e("Named color: $colorString")
     return when (colorString.lowercase()) {
         "black" -> Color.Black
         "white" -> Color.White
@@ -1991,25 +1985,17 @@ fun parseNamedColor(colorString: String): Color? {
         "darkred" -> Color(139 / 255f, 0f, 0f, 1f)
         "goldenrod" -> Color(218 / 255f, 165 / 255f, 32 / 255f, 1f)
         "transparent" -> Color.Transparent
-        else -> {
-            Logger.e("Unknown color name: $colorString. Using transparent.")
-            null
-        }
+        else -> null
     }
 }
 
 private fun parseHexColor(hex: String): Color {
-    Logger.e("parseHexColor>> Received hex string: $hex")
-
     val cleanHex = hex.removePrefix("#")
 
     val expandedHex = when (cleanHex.length) {
         3 -> cleanHex.map { "$it$it" }.joinToString("") // Expand "#3A5" → "#33AA55"
         6, 8 -> cleanHex
-        else -> {
-            Logger.e("Invalid hex color: $hex. Using transparent.")
-            return Color.Transparent
-        }
+        else -> return Color.Transparent
     }
 
     return try {
@@ -2018,12 +2004,8 @@ private fun parseHexColor(hex: String): Color {
         val r = ((colorLong shr 16) and 0xFF) / 255f
         val g = ((colorLong shr 8) and 0xFF) / 255f
         val b = (colorLong and 0xFF) / 255f
-        val parsedColor = Color(r, g, b, alpha)
-
-        Logger.e("Parsed Hex Color: r=$r, g=$g, b=$b, alpha=$alpha")
-        parsedColor
+        Color(r, g, b, alpha)
     } catch (e: Exception) {
-        Logger.e("Error parsing hex color: $hex. Using transparent.")
         Color.Transparent
     }
 }

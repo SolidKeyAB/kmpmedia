@@ -23,7 +23,6 @@ import com.solidkey.painpoints.ai.liveAt
 import com.solidkey.painpoints.ai.toSpecColor
 import com.solidkey.painpoints.compositor.OGGifDither
 import com.solidkey.painpoints.compositor.OGGifEncoder
-import com.solidkey.painpoints.compositor.OGGifFrame
 import com.solidkey.painpoints.compositor.OGMp4Encoder
 import com.solidkey.painpoints.compositor.cropFlattenFrame
 import com.solidkey.painpoints.compositor.defaultMp4BitRate
@@ -291,11 +290,11 @@ fun OGStage.exportGif(
     alphaThreshold: Int = OGGifEncoder.DEFAULT_ALPHA_THRESHOLD,
     dither: OGGifDither = OGGifDither.FLOYD_STEINBERG,
 ): ByteArray {
-    val frames = ArrayList<OGGifFrame>(frameCount)
-    for (i in 0 until frameCount) {
-        frames.add(OGGifFrame(renderFrame(frameTimeMs(i)).toArgbPixels(), frameDelayCs))
+    // Stream frames through the encoder so a full-size stage GIF can't OOM by retaining every frame's ARGB
+    // (a default 1080×1080×60fps×4s stage is ~1.1GB of pixels). Byte-identical to the materialized-list path.
+    return OGGifEncoder.encodeStreaming(width, height, frameCount, frameDelayCs, loopCount, alphaThreshold, dither) { i ->
+        renderFrame(frameTimeMs(i)).toArgbPixels()
     }
-    return OGGifEncoder.encode(width, height, frames, loopCount, alphaThreshold, dither)
 }
 
 /**
