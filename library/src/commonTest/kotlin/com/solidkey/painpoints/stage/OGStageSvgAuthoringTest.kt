@@ -7,8 +7,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The describe→movie seam accepts an SVG reply, not just stage JSON: a model (offline / BYO-key / an
- * agent over nexum) can answer with an `<svg>` and it compiles into a playable [OGStage] whose scene
+ * The describe→movie seam accepts an SVG reply, not just stage JSON: a model (offline / BYO-key / a
+ * remote agent) can answer with an `<svg>` and it compiles into a playable [OGStage] whose scene
  * carries the SVG ids as animatable region labels. Exercises the public [OGStageAuthoring.fromReply].
  */
 class OGStageSvgAuthoringTest {

@@ -13,8 +13,8 @@ import kotlin.math.roundToInt
  * scene is the model-authored [com.solidkey.painpoints.ai.OGSvgScene] result — the JSON stays the
  * runtime IR, SVG is just another source language into it.
  *
- * Wired into [OGStageAuthoring.fromReply], so every author (offline, bring-your-own-key, or an agent
- * over nexum) transparently accepts an SVG reply with no extra code: if the reply isn't a stage JSON,
+ * Wired into [OGStageAuthoring.fromReply], so every author (offline, bring-your-own-key, or a remote
+ * agent) transparently accepts an SVG reply with no extra code: if the reply isn't a stage JSON,
  * we try to lift an `<svg>…</svg>` out of it and play that instead.
  */
 public object OGStageSvg {
