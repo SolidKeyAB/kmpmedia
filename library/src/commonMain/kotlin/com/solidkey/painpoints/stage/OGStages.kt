@@ -275,13 +275,87 @@ object OGStages {
         in SVG than by hand-placing JSON polygon points, so do NOT fall back to an atmospheric background
         + title when a concrete subject is asked for — compose it part by part.
 
+        Match the way you BUILD and MOVE the subject to WHAT KIND of thing it is:
+          - A CREATURE or PERSON (animal, human, character): use the anatomy + joint rules below —
+            rooted, tapered limbs, joints that fold the real way, and a few parts that
+            breathe / blink / sway.
+          - A MECHANICAL OBJECT or VEHICLE (a lamp, a door, a crane, a car, a windmill, a clock): it
+            has no muscles but it has MECHANISMS — hinges, lids, wheels, arms, pendulums. Draw each
+            moving part as its own shape anchored at its real PIVOT and leave the rigid body still: a
+            hinge or lid rotates about its hinge EDGE (data-motion="nod" or "sway" with a data-anchor
+            on that edge), a pendulum or hanging sign swings from its TOP (data-motion="sway"
+            data-anchor="top"), a wheel / gear / propeller spins about its CENTRE (wrap it in a <g>
+            and give that layer a rotate track, or data-motion="pulse" for a throb).
+          - A GAME PIECE or TOKEN (a chess knight, a die, a card, a pawn, a marble): draw it as ONE
+            rigid shape or <g> group — it has NO internal joints. Give it life through WHOLE-PIECE
+            motion on its layer/group instead: a hop (a "y" track up then down), a flip or spin (a
+            "rotationDeg" track), a slide (an "x" track), or a soft settle (data-motion="bob"). A
+            piece is a prop you MOVE and place, not a body you pose.
+        (A BOARD, grid, map or scoreboard is not one figure but a LAYOUT of many cells — build that
+        arrangement in your app and drop living pieces onto it; here you draw the single subject.)
+
+        First decide the VIEWPOINT the request implies and keep EVERY part agreeing on it — a figure
+        only reads right when the whole of it is drawn at ONE camera angle:
+          - FRONT (a portrait, "facing", "front", and the default): the body is symmetric; BOTH of
+            each paired part show (two eyes, two ears, both arms, both legs) mirrored about the centre
+            line, and the face points at the viewer.
+          - THREE-QUARTER ("3/4", "turned", "glancing away"): still both of each paired part, but the
+            FAR side is narrower and shifted toward the centre line, the far eye/ear smaller, and the
+            nose / muzzle pushed toward the near cheek.
+          - PROFILE / SIDE ("side", "profile", "from the side", "left/right facing", "walking past"):
+            draw only ONE of each paired part — ONE eye, ONE ear, ONE near arm and ONE near leg; the
+            FAR arm/leg, if shown at all, is drawn FIRST (behind the body), smaller and mostly hidden.
+            The head is a side silhouette: the nose / muzzle / beak juts out on the facing side, the
+            mouth and chin sit under it, the back of the head or hair rounds out behind, and a tail or
+            snout points the way the body faces.
+          - BACK ("from behind", "back turned"): the face is HIDDEN — show the back of the head / hair,
+            the shoulders and back, the heels; no eyes, nose or mouth.
+          - SEATED / CROUCHING / LYING: the legs FOLD at hip then knee and OVERLAP the torso; the body
+            rests on a seated base, and breathing / idle motion anchors there.
+        Paint order follows the angle: the parts NEAREST the camera draw LAST (in front). In profile
+        the near arm and near leg sit in front of the body and the far ones behind it; in three-quarter
+        the near side overlaps the far side. Choose the angle ONCE and keep every part, overlap and
+        pivot consistent with it — never a front-facing face on a side-on body.
+
+        Then decide what the subject is DOING and make the POSE show it — a figure asked to walk, run,
+        jump, gallop, fly, swim or reach must NOT be drawn in a neutral stand. A WALK or RUN splits the
+        legs into a STRIDE: one leg swings FORWARD and plants, the other trails BEHIND, the thighs open
+        at the hip and at least one knee is clearly BENT — never two near-vertical parallel legs side by
+        side (that reads as standing, not moving); the arms swing in counterpoint (the arm OPPOSITE the
+        lead leg comes forward). A gallop gathers the legs under the body then extends them front-and-
+        back; a jump tucks the legs up; a swimmer or flyer bows the SPINE / wings into the direction of
+        travel so the whole body curves with the motion. Pick the action pose FIRST, then hang the idle
+        breathing / sway on top of it.
+
         For a creature or figure, give it believable ANATOMY. Draw each whole arm and leg as ONE
         continuous, smooth, slightly TAPERED shape that is ROOTED where it meets the body (at the
         shoulder or hip) and overlaps the torso there, so a limb can NEVER float free; the hand or foot
-        is a rounded shape attached at the far end (a few fingers / toes). Only split a limb into an
+        is a rounded shape attached at the far end (a few fingers / toes). A TAIL follows the same rule:
+        root it at the rump and OVERLAP the body so its base is hidden behind the torso (order it before
+        the body, i.e. drawn behind), then let it curve out — never a separate oval floating beside the
+        body with a gap. EARS, horns and antlers follow the same rule: seat each one so its base OVERLAPS
+        well INSIDE the head outline and order it BEFORE the head (drawn behind), so only the part that
+        rises above the head shows — never a triangle perched ON TOP of the head with a flat seam across
+        the forehead or its base corners sticking out past the head's edge. Only split a limb into an
         upper + lower piece when it is clearly BENT (a raised waving arm, a kneeling leg) — and then make
         the two pieces OVERLAP heavily at the joint (elbow/knee) so there is no gap, with the joint where
-        it really bends. Imply fur / feather / scale TEXTURE by giving the silhouette
+        it really bends, and BEND IT THE WAY A REAL JOINT BENDS: the two segments meet at an ANGLE and the
+        far segment FOLDS BACK — it must NEVER continue straight on in the same outward direction past the
+        joint (that reads as a backward-bending, broken limb). For a raised waving arm, the upper arm goes
+        UP and OUT from the shoulder to the elbow (the elbow is the OUTER corner of the bend), then the
+        forearm folds back UP and slightly IN so the hand rests up beside the head — do NOT let the forearm
+        keep travelling outward past the elbow. A bent leg is the same: the knee is the forward corner and
+        the shin folds back beneath it. A RAISED or WAVING arm (data-motion="wave") is a FOREGROUND gesture: order it
+        LAST of all — AFTER the body, the head AND every face detail (cheeks, eyes, nose, whiskers) — so
+        it is drawn IN FRONT of everything, and reach the hand OUT past the head's silhouette. That way
+        the swing stays visible beside/in front of the head and is NEVER covered: not by the head, and
+        not by a cheek or other face shape layered on after it. Keep the swing clear of the eyes. When a
+        moving part is made of SEVERAL shapes (an arm = upper + forearm + hand + shading, a tail of
+        segments), WRAP those shapes in ONE <g> group and put the data-motion (+ data-anchor) on the <g>,
+        not on each piece. A group is a LAYER that moves as one: its shapes paint together at one depth
+        (order the whole <g> where the part belongs — a waving arm's <g> goes LAST, in front) and they
+        share ONE pivot, so the whole limb swings rigidly from its shoulder/base instead of each piece
+        spinning about its own centre and shearing apart. Imply fur / feather / scale TEXTURE by giving the silhouette
         a slightly jagged, tufted OUTLINE (little notches along the back, tail, cheeks, chest) plus a few
         short accent tufts. Part COUNT is NOT a limit — the player renders 100+ shapes at 60fps — so
         make it RICH: keep the STRUCTURAL skeleton small and carefully placed (body, head, rooted limbs,
@@ -289,6 +363,45 @@ object OGStages {
         and highlight patches, finer facial features, claws, whiskers, spots). Detail shapes sit ON TOP
         of already-placed parts, so they add richness WITHOUT risking the pose. A rich subject is happily
         50-100 shapes; just don't scatter loose STRUCTURAL pieces — pile the extra shapes into detail.
+
+        The NAMED joints and the way each one really bends — draw and fold every limb to agree
+        with the skeleton a pose / anatomy model already knows, so naming them keeps the figure
+        honest rather than invented:
+          - PERSON / UPRIGHT CHARACTER: the chain is hips → spine → neck → head, each arm
+            shoulder → elbow → wrist → hand, each leg hip → knee → ankle → foot. Shoulders and
+            hips are BALL joints (they swing any direction). The elbow and knee are one-way
+            HINGES that only CLOSE — the far segment folds back toward the limb's root (the elbow
+            closes ~0–150° bringing the hand toward the shoulder, the knee closes ~0–140° bringing
+            the heel back) and NEVER hyperextends past straight the other way. The neck turns /
+            tilts only ~45°; the wrist and ankle flex only a little.
+          - FOUR-LEGGED ANIMAL (cat, dog, horse, deer): the front and hind legs bend in OPPOSITE
+            directions, and getting that asymmetry right is what makes it read as a real animal.
+            FRONT leg: shoulder → elbow (tucked back near the chest) → wrist (the low "front knee",
+            which bends slightly BACKWARD) → paw. HIND leg: hip → stifle (a knee that bends FORWARD
+            like ours) → HOCK → paw — the HOCK is an ankle partway up the back leg and bends the
+            OPPOSITE way (the famous "backward knee"), then the lower leg drops straight to the
+            paw. The spine is a soft curve and the tail continues it off the rump.
+          - BIRD: the WING folds in a Z against the body (shoulder → elbow → wrist) and opens /
+            swings from the SHOULDER; the leg's one visible joint is the ANKLE and it bends
+            BACKWARD (the true knee hides up in the feathers), with the foot gripping below it.
+          - FISH: no limbs and no hinges — a flexible SPINE that curves in a smooth S; the TAIL fin
+            sweeps side to side and the body ripples with it, while the dorsal / pectoral fins flex
+            gently from where they root on the body — draw each fin with a few radiating rays and let
+            the tail fin's base overlap DEEP into the body so no fin ever looks stuck on.
+          - INSECT / BUG: a stiff body in three segments (head, thorax, abdomen) with SIX legs in
+            three pairs splaying out and DOWN from the thorax, each leg sharply jointed with its
+            "knee" pointing UP above the body; wings beat from the thorax and antennae pivot at the
+            head.
+          - REPTILE: a SNAKE is pure spine — a smooth lateral S-wave, no limbs, no hinges; a LIZARD
+            / crocodile has a SPRAWLING stance — the legs stick OUT TO THE SIDE (elbows and knees
+            point outward, not tucked under), and the tail continues the spine.
+          - HAND: wrist → palm → five fingers; every finger has three knuckle HINGES (the thumb
+            two) that all curl the SAME way toward the palm and only close, never bending backward;
+            the thumb folds across to oppose the fingers.
+          - PLANT: a stem has no hinge — it is anchored at its base / pot and BOWS smoothly along
+            its whole length; each leaf or petal pivots where it joins the stem.
+          (A mechanism / vehicle has no joints that bend — its moving parts rotate or slide about a
+          fixed pivot; see the MECHANICAL OBJECT rules above.)
 
         Make the forms feel REAL, not blocky: build the body and limbs from smooth, CURVED outlines — a
         forearm or shin is a rounded, slightly TAPERED capsule, not a hard bar; draw them with curved
@@ -308,6 +421,53 @@ object OGStages {
         and a "fill" (a solid #RRGGBB, or url(#id) for a gradient); use paths / polygons / rect / circle /
         ellipse, ordered back-to-front. We
         compile it into the same movie (each element becomes a labelled region you can later animate or tap).
+
+        To bring the drawing to LIFE, add a data-motion attribute to the few parts that should move — do
+        NOT animate everything. The vocabulary (works in ANY language, so you do not need English ids):
+          data-motion="blink"   on each eye / eyelid  (it squashes shut like a lid)
+          data-motion="breathe" on the chest / body   (a slow swell from the base)
+          data-motion="sway"    on a tail / leaf / hanging hair (a gentle wag from where it attaches)
+          data-motion="wave"    on a raised hand / arm (a bigger swing from the shoulder)
+          data-motion="bob"     on a floating thing (a soft up-and-down drift)
+          data-motion="nod"     on a head (a small nod)
+          data-motion="pulse"   on a glow / heart (a soft size pulse)
+        A rotating/squashing motion hinges at the part's BASE by default; override it with
+        data-anchor="top|bottom|left|right|center" (or "x,y" fractions) when the base is elsewhere — e.g.
+        a tail that extends to the LEFT should pivot on its right: data-anchor="right". Optionally set
+        data-dur="<seconds>" to change the beat. You can put data-motion on a <g> to move a whole group.
+        Example: <ellipse id="eye_l" cx=".." cy=".." rx=".." ry=".." fill="#111" data-motion="blink"/>.
+
+        The living motion belongs to the SUBJECT, not its surroundings. The BACKGROUND and SCENERY —
+        sky, ground, water, walls, an iceberg, hills, furniture — stays STILL; give it NO breathe, sway
+        or bob. Loose AMBIENT bits of the setting (snowflakes, dust, bubbles, falling leaves, floating
+        sparks) MAY drift, but only on their OWN slow, independent beat (a gentle "bob" with a longer
+        data-dur), never the subject's motion. Above all, never let the backdrop or its flecks rise and
+        fall in time with the figure's breathing, or the whole scene looks pinned to the subject's chest
+        instead of sitting behind it.
+
+        Before you output the SVG, CHECK the figure against this list and fix anything that fails:
+          - the whole figure holds ONE viewpoint — a side-on body carries a side-on face with ONE of
+            each paired part (not two front-facing eyes on a profile head), and the nearest parts are
+            drawn LAST / in front;
+          - every arm, leg and tail OVERLAPS the body where it attaches (nothing floats free with a gap);
+          - each ear / horn / antler is seated BEHIND the head with only its tip rising above it (no flat
+            seam across the top, no base corners poking past the head's edge);
+          - every BENT joint angles the real way and the far segment FOLDS BACK (no backward/broken elbow
+            or knee, no forearm continuing outward past the elbow);
+          - a four-legged animal's FRONT and HIND legs bend in OPPOSITE ways (the hind leg's hock
+            is a backward-bending ankle, not a second forward knee); a bird's leg bends backward at
+            the ankle; a stem bows along its length rather than snapping at a hinge; a snake or fish
+            has no limbs (it curves, never hinges); an insect has SIX legs, and a sprawling lizard's
+            legs splay out to the SIDE;
+          - if the subject is DOING something (walking, running, jumping, flying, swimming), the POSE
+            shows it — a walk / run SPLITS the legs into a stride (one forward, one trailing, a bent
+            knee), NOT two parallel vertical legs that read as a stand, and a swimmer / flyer's body or
+            wings curve with the motion;
+          - a waving / raised arm is ordered LAST so it is drawn IN FRONT of the head and every face
+            detail, with the hand reaching out past the head's silhouette and clear of the eyes;
+          - the BACKGROUND / scenery stays STILL and independent — it does NOT breathe, sway or bob in
+            time with the subject (ambient flecks may drift, but on their own slower beat);
+          - any paired eyes sit on one shared line; no important part is hidden behind another.
 
         Use the JSON movie format above instead only when the request is an ATMOSPHERE or mood (a stormy
         sea, a neon city, a calm dawn) with no specific subject to draw. Pick EXACTLY ONE format — the

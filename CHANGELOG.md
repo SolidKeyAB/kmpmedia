@@ -4,6 +4,154 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.47.0] — 2026-10-18
+
+> **Living-vector honest motion — a described figure that *articulates* — plus five authoring packs.**
+> The describe→movie figures stop faking their motion: idle life now hinges where a thing *really*
+> hinges (a tail at its joint, an eyelid on the eye's mid-line, a breath from the seated base), a model
+> can declare motion and bend-direction in the SVG itself, and a compiled illustration becomes
+> **grabbable by part** — poke the arm, the head. Around the motion work sit a provider-agnostic
+> **capability-manifest** contract, a serializable **rig codec**, and new **`OGSkin`**, **`OGControl`**,
+> **`OGFog`** and **`OGLight`** packs. Everything is additive — a **minor**.
+
+### Added — living-vector motion & articulation
+- **Honest idle motion (`OGRegionMotion` + `OGSceneIdle`).** `OGRegionMotion` gains two back-compat
+  channels — an `anchor` (the pivot for scale/rotate as a bbox fraction) and an independent `scaleY` — so
+  a motion hinges where the thing really hinges. The presets stop lying: a blink is an eyelid squash onto
+  the eye's **shared mid-line** (every part of one eye — white, pupil, catchlight — collapses
+  concentrically, no pupil poking below a shut lid), a breathe swells **upward** from the seated base, and
+  a tail/sway hinges at the **base**. The preset periods were retuned onto a `{2,3,4}s` grid so a 12s idle
+  loop wraps **seamlessly** (no per-loop snap).
+- **Model-declared motion (`OGSvgScene` `data-motion`).** `OGSvgScene` reads `data-motion`
+  (`blink`|`breathe`|`sway`|`wave`|`bob`|`nod`|`pulse`) plus optional `data-anchor` / `data-dur` on any
+  element or `<g>` (inherited down a group), compiling it straight onto the region. This lifts the
+  English-keyword ceiling — a part tagged `data-motion="blink"` blinks whatever language its id is in
+  (verified with Turkish ids) — while the auto-heuristic still animates untagged parts.
+- **Poke-to-deform (`OGRig.sceneJoints` + `OGSceneRigView`).** `OGRig.sceneJoints(scene)` derives
+  **semantic** control points (one pin per structural region's centroid, detail shapes filtered, capped +
+  deduped) from a compiled scene, and `OGSceneRigView` is a reusable composable that binds an `OGRig`
+  once, grabs the nearest pin under the finger, warps the mesh live (linear-blend skinning) and springs
+  each pin home on release via the analytic `OGSpringValue` — the frame ticker runs only while something
+  moves and parks otherwise.
+- **Code-driven posing.** `OGSceneRigView(pose = …)` renders a caller-supplied `List<OGJoint>` each frame
+  (your own animation owns the deform — a gaze that follows a target, a squash on a score) instead of the
+  touch + spring path; `pose = null` keeps touch-to-poke. The rig still binds once; only the cheap
+  re-tessellate runs per frame.
+- **Grouped parts move as one rigid unit.** A multi-shape part wrapped in `<g data-motion=…>` now
+  rotates/scales about **one shared pivot** (`OGRegionMotion.pivotAbs`, the group's combined-bbox anchor)
+  so a limb swings rigidly from one shoulder instead of shearing apart. Non-breaking: `pivotAbs` defaults
+  `null` (single shapes keep per-box pivoting, old scenes unchanged).
+- **Label-free hinge/float safety-net.** A pure-rotation wag left on a default pivot is resolved by
+  **geometry**, not labels: if its outline reaches a non-backdrop region it is re-rooted to hinge at the
+  join; if it floats in empty space it is demoted to an honest gentle float rather than a wag on empty
+  air. No "body" classifier, the drawing is never edited, and detection runs once at compile — the 60fps
+  path is untouched.
+- **Articulation ontology + a tighter authoring contract (`OGRigRecipe` / `OGStages.stagePrompt`).**
+  `OGRigRecipe` / `OGRigRecipes.select()` is a data-defined, salience-scored parts ontology; `stagePrompt`
+  now carries per-family named-joint skeletons (person / quadruped / bird / fish / insect / reptile /
+  hand / plant), a one-camera **viewpoint** rule, a build-by-kind split, an **action**/gait rule, an
+  **environment-independence** rule (the backdrop never inherits the subject's breathing), an explicit
+  **bend-direction** rule (the far segment folds back, never hyperextends), ears/horns seated into the
+  head, a raised/waving arm ordered front-most, and a pre-output anatomy self-check — each validated by a
+  keyless before/after eval.
+
+### Added — capability manifest
+- **`OGAiCapability` / `OGAiManifest` / `OGAiGateway` — a provider-agnostic, network-free AI contract.** An
+  app declares what it needs from a user's AI (`OGAiCapabilitySpec` + `OGAiAppInfo` → `OGAiManifest`, with
+  the `OGAiManifests` JSON codec), carries a built request over *any* transport (`OGAiGateway` /
+  `invokeVia`) and decodes the reply — with an on-device floor via `OGAiResilientGateway` (AI first,
+  per-capability fallback). The describe→movie seam is simply the first capability
+  (`OGAiCapability<String, OGStage>`, `id = "illustrate"`), reusing `stagePrompt` + the tolerant decode —
+  nothing duplicated. The library owns only the contract and codec: no sockets, no AI SDK, no transport.
+
+> **`OGSkin` — procedural, repeating creature/material skins.** A flat fill reads as plastic; a real hide
+> has a *pattern*. `OGSkin` grows a seamless, repeating material — reptile scales, an animal/horse hide,
+> or a woven fabric — described entirely as data, and fills any shape with it. A new
+> `com.solidkey.painpoints.skin` package, purely additive, so this stays a **minor**.
+
+### Added
+- **`OGSkin` / `OGSkinSpec` — a data-defined repeating skin.** `ogSkinTile(spec, px)` renders ONE small,
+  **seamless** tile (edge cells are hash-wrapped so it repeats with no seam) for one of three families —
+  `reptile` (overlapping shaded scales), `hide` (a coat: soft noise mottle + fine directional hairs +
+  optional dapple spots), `fabric` (plain weave: warp + weft threads crossing over/under with a
+  cross-width sheen). `Modifier.ogSkin(spec, shape)` fills a shape, and `rememberOGSkinBrush(spec, px)`
+  gives the repeating `ImageShader` `ShaderBrush` to `drawPath` yourself. One cached bitmap + a GPU tile —
+  no per-pixel work and no runtime shader, so it clears the 60fps gate and is identical on Android & iOS.
+  Every field — `kind`, `base` / `pattern` / `highlight` / `accent` colours, `cell` (pattern size),
+  `roughness`, `contrast`, `relief`, `seed` — is a plain settable knob.
+- **`OGSkins` — the codec + presets + prompt.** Mirrors `OGFog` / `OGLooks`: `decodeSpec` / `encode` over
+  the shared lenient `OGAiVector.json`, six tuned presets (`REPTILE`, `SNAKE`, `HIDE`, `DAPPLE_GREY`,
+  `DENIM`, `LINEN`) and `skinPrompt(instruction)` so a model can author a creature's hide like any pack.
+
+### Notes
+- Pure `commonMain`; no new dependency and no platform code. Covered by `OGSkinTest` (presets +
+  case-insensitive lookup, codec round-trip over all presets, lenient/partial decode, `kind` synonym
+  mapping, and `sanitized()` clamping).
+- **Dogfooded in WordStorm:** the board watcher's head is now a silhouette filled with a **reptile-scale
+  skin in its own lavender palette** (plus a dome highlight + base shadow for volume), eyes set into it —
+  the flat gradient crown replaced by a real, patterned hide. One-line swap to hide or fabric.
+
+> **`OGControl` — the whole hand-drawn button in one call.** Apps kept re-assembling the same button out of library pieces: a rounded fill, a `drawWithCache` roughened ink edge, an `ogButton` tap + press, a styled vector label, and a seasonal garnish Canvas. `OGControl` bundles all of it behind one composable + a serializable `OGControlSpec` skin, so a control is *configured*, not hand-built. Purely additive — a new `com.solidkey.painpoints.control` package — so this stays a **minor**.
+
+### Added
+- **`OGControl` — a one-call skinnable control.** A single `@Composable` that draws, in order: a flat or gradient **fill** (a `Brush` or an `OGFillSpec`), a cached hand-drawn **ink outline** (the library's own `roughenVertices` over a rounded-rect), a tap + **pressed-state** via `ogButton` (effect chosen by name), an optional seasonal **garnish**, and a centred **styled vector label** (`OGStyledText`). `enabled = false` dims the fill, halves the label, fades the ink, hides the garnish and makes the tap a consumed no-op. The vectorized label and the roughened edge are cached (parse-once), so only a moving garnish redraws — it clears the same 60fps gate as the rest of the library and is identical on Android & iOS.
+- **`OGControlSpec` / `OGControlOutline` / `OGGarnishSpec` — the data-defined skin.** Corner radius, height, label size, press effect, the ink edge, an optional gradient and a garnish, all `@Serializable`. The *live* colours and the click stay runtime arguments; everything else can live in a `.control` JSON pack. `OGGarnishSpec` generalizes the "goo oozing off an edge" look (Halloween slime, winter snow, …) into one spec driven by the library's `waveVertices` — no hand-rolled Canvas per app.
+- **`OGControls` — the codec + presets + prompt.** Mirrors `OGLooks` / `OGStyles`: `decodeSpec` / `encode` over the shared lenient `OGAiVector.json` (tolerant of code fences and unknown keys), named `presets` (plain / sketch / slime / snow) and reusable `garnishes` (slime / snow), and `controlPrompt(instruction)` so a model can author a control skin exactly like a look or a style.
+
+### Notes
+- Pure `commonMain`; no new dependency and no platform code. Covered by `OGControlTest` (codec round-trip incl. gradient + garnish, lenient decode, preset/garnish resolution, press-effect name mapping, and the pure outline / garnish-ring geometry).
+- **Dogfooded in WordStorm:** its hand-assembled `GameButton` (a `Box` + `background` + a `drawWithCache` `roughRectPath` + `ogButton` + a bespoke `SlimeTrim` Canvas) collapsed to a thin adapter over `OGControl`, deleting ~90 lines of hand-rolled drawing — the library gap this feature was built to close.
+
+> **`OGFog` — drifting fog / smoke / mist / steam.** The library had snow and rain particles but no volumetric haze. `OGFog` fills a composable's bounds with a soft, drifting weather haze described entirely as data — a new `com.solidkey.painpoints.fx` member alongside `OGSlash` / `OGLightning` / `OGSpeedLines`, so this stays a **minor**.
+
+### Added
+- **`OGFog` / `OGFogSpec` / `OGFogView` — a data-defined weather haze.** `OGFogView(spec)` fills its bounds with soft, overlapping radial-gradient **puffs** that drift (linear) and wander (fractal `OGFxNoise`), overlapping into a cloudy mass. No per-pixel noise and no runtime shader — the noise is sampled once per puff, the puffs wrap **toroidally** for a seamless endless drift, and the whole thing is deterministic from a seed, so it clears the 60fps gate and is frame-identical on Android & iOS. Every field — `color`, `density`, `opacity`, `scale`, `driftX` / `driftY`, `turbulence`, `wanderSpeed`, `octaves`, `softness`, `seed` — is a plain settable knob; `density` and `opacity` are the two dials for "how thick / how visible."
+- **`OGFog` codec + presets + prompt.** `decodeSpec` / `encode` over the shared lenient `OGAiVector.json`, four tuned presets — `FOG`, `SMOKE` (rising, churny), `MIST` (a calm, low, *visible* cold bank), `STEAM` (fast wispy rising) — and `fogPrompt(instruction)` so a model can author a haze like any other pack.
+
+### Notes
+- Pure `commonMain`; no new dependency and no platform code. Covered by `OGFogTest` (presets + case-insensitive lookup, codec round-trip, lenient/partial decode, `sanitized()` clamping, and the deterministic/in-bounds/drifting puff geometry).
+- **Dogfooded in WordStorm:** a themed haze sits behind the board tiles — dusk **smoke** on Halloween, a cold **mist** in Winter — tuned so the letters stay readable.
+
+> **`OGLight` — data-defined light, shade, sheen & spot on any shape.** A flat fill reads as paper.
+> `OGLight` adds cheap, shape-aware lighting — a directional form-shade, a drop/contact shadow, a glossy
+> sheen sweep and a radial spotlight — each a serializable spec applied through a `Modifier`. A new
+> `com.solidkey.painpoints.light` package, purely additive, so this stays a **minor**.
+
+### Added
+- **`Modifier.ogLight` / `ogShadow` / `ogSheen` / `ogSpot` + their specs.** `ogLight(OGLightSpec)`
+  form-shades a shape from a light direction; `ogShadow(OGShadowSpec)` lays a soft drop / contact shadow;
+  `ogSheen(OGSheenSpec)` sweeps a gloss highlight across it; `ogSpot(OGSpotSpec)` adds a radial spotlight.
+  Each applies to **any** `Shape`, is pure `commonMain` with no runtime shader, and clears the 60fps gate.
+  Every spec is `@Serializable` with a JSON codec (`decodeLight` / `decodeShadow` / `decodeSheen` /
+  `decodeSpot` + `encode`) over the shared lenient `OGAiVector.json`, so a model can author lighting like
+  any other pack. Covered by `OGLightTest`.
+
+> **`OGRigSpec` — a serializable, authorable rig.** The clickable-joints rig (`OGRig`) owned the skinning
+> maths but had no way to **author, save or model-describe** its control points — every other pack has a
+> JSON codec; the rig did not. `OGRigSpec` is that codec: a list of named joints plus the bind/feel knobs,
+> resolving once to plain `OGJoint`s (no new skinning math, no per-frame cost). Purely additive.
+
+### Added
+- **`OGRigJointSpec` / `OGRigSpec` / `OGRigs` codec.** A joint is a stable `id` (what a code-driven pose
+  addresses today and a future `parent` hierarchy will reference tomorrow) with an explicit rest `(x, y)`
+  in normalized `0..1` scene space **or** a `region` label that snaps the rest to a labelled scene part's
+  centroid (so a rig can pin "the jaw" without a coordinate that drifts when the drawing changes).
+  `restJoints(scene)` resolves a spec to `OGJoint`s and `bind(scene)` hands them to the shipped `OGRig`
+  skinning engine; `OGRigs.decode` is tolerant of code fences / prose like the other codecs. Every field
+  but `id` is defaulted and unknown keys are ignored (the forward-compatible wire rule), so a later
+  hierarchy upgrade is purely additive and cannot break a rig authored today. Covered by `OGRigSpecTest`.
+
+### Changed
+- **`OGStageView` renders a scene region's glow & texture.** A region's `glow` (an additive halo, drawn
+  **behind** the fill) and procedural `texture` (fur / grass / grain, drawn **over** the fill and clipped
+  to the region) now paint in the stage scene renderer via the shipped `drawOGGlow` / `drawOGTexture`, so
+  a described figure can carry a soft glow and a surface texture end to end.
+
+### Notes
+- Pure `commonMain`; no new dependency and no platform code anywhere in this release. iOS klib compiles
+  and the full JVM suite is green, including the new `OGRigSpecTest`, `OGLightTest`, `OGSkinTest`,
+  `OGControlTest` and `OGFogTest` and the rig / idle / SVG / group-pivot regression tests.
+
 ## [1.46.0] — 2026-10-13
 
 > **Living-vector SVG, and a hardening pass.** Hand a model-drawn SVG to the stage and the figure starts *living* — no keyframes. `OGSvgScene` compiles a labelled SVG into the scene IR through the library's own SVG parser, and `OGSceneIdle` reads those labels to attach gentle idle motion: a body breathes, a tail sways, and the eyes blink — including the little white catchlight on the eye, which now closes *with* the eye instead of floating over a shut lid. Alongside the feature, this release is a focused quality pass (prompted by a full clean-code / performance / value review): the GIF exporter no longer risks an out-of-memory on a full-size movie, the stage player and the SVG colour path stop doing per-frame work they don't need, and several first-five-minutes API papercuts are gone. No public API is removed that was ever usable, so this stays a **minor**.

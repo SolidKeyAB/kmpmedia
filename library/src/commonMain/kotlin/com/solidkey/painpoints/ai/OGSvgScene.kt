@@ -71,19 +71,37 @@ object OGSvgScene {
         val tree = result.svgTree ?: return OGSceneSpec(version = 3)
         val samples = curveSamples.coerceIn(2, 64)
         val out = ArrayList<OGPlacedShapeSpec>()
-        walk(tree, null, vb, result.gradients, samples, out)
+        walk(tree, null, null, null, vb, result.gradients, samples, out)
         return OGSceneSpec(shapes = out, version = 3)
     }
 
     private fun walk(
         el: OGSVGTreeElement,
         groupLabel: String?,
+        groupMotion: OGRegionMotion?,
+        groupPivot: OGPointSpec?,
         vb: ViewBox,
         gradients: Map<String, OGSVGGradient>,
         samples: Int,
         out: MutableList<OGPlacedShapeSpec>,
     ) {
         val label = el.id?.takeIf { it.isNotBlank() } ?: groupLabel
+        // Pass 2: the model can DECLARE motion with data-motion="blink|breathe|sway|wave|bob|nod|pulse"
+        // (plus optional data-anchor / data-dur) on an element or a group. This is the one path that
+        // lifts the "only English ids animate" ceiling — a part tagged data-motion="blink" blinks whatever
+        // language it is labelled in. An element's own tag wins; otherwise it inherits the group's.
+        val ownMotion = motionFor(el)
+        val motion = ownMotion ?: groupMotion
+        // A GROUP (<g>) that DECLARES a motion makes its whole subtree move as ONE rigid unit: compute a
+        // single shared pivot (the group's combined-bbox anchor, in scene space) and hand it to every
+        // descendant, so a multi-shape limb rotates about one shoulder instead of each piece spinning
+        // about its own centre and shearing. A leaf with its OWN motion keeps its per-shape pivot; a child
+        // with no motion of its own inherits the enclosing group's shared pivot.
+        val pivot: OGPointSpec? = when {
+            ownMotion != null && el.children.isNotEmpty() -> sharedGroupPivot(el, ownMotion, vb, samples)
+            ownMotion != null -> null
+            else -> groupPivot
+        }
         val gradient = el.style.fillGradientId?.let { gradients[it] }?.toFillSpec()
         val solid = el.style.fill.resolve()
         val attrAlpha = (el.attributes.floatAttr("opacity")) * (el.attributes.floatAttr("fill-opacity"))
@@ -92,6 +110,7 @@ object OGSvgScene {
 
         if (hasPaint) {
             val fillHex = solid?.first ?: gradient?.stops?.firstOrNull()?.color ?: "#000000"
+            val emitMotion = if (pivot != null) motion?.copy(pivotAbs = pivot) else motion
             val rings = ArrayList<List<OGPointSpec>>()
             for (shape in el.shapes) rings += shapeToRings(shape, samples)
             val multi = rings.count { it.size >= 3 } > 1
@@ -105,10 +124,87 @@ object OGSvgScene {
                     fill = fillHex,
                     gradient = gradient,
                     opacity = if (paintAlpha < 0.999f) paintAlpha else null,
+                    motion = emitMotion,
                 )
             }
         }
-        for (child in el.children) walk(child, label, vb, gradients, samples, out)
+        for (child in el.children) walk(child, label, motion, pivot, vb, gradients, samples, out)
+    }
+
+    /** The ONE pivot a `<g data-motion=…>` group shares across its whole subtree, in normalized SCENE
+     *  space: the group's combined bounding box, sampled at the motion's [OGRegionMotion.anchor] fraction
+     *  (centre when none). Returns null for a group that resolves to fewer than two drawable shapes — one
+     *  shape already pivots correctly about its own box, so there is nothing to share. */
+    private fun sharedGroupPivot(
+        el: OGSVGTreeElement,
+        motion: OGRegionMotion,
+        vb: ViewBox,
+        samples: Int,
+    ): OGPointSpec? {
+        val rings = ArrayList<List<OGPointSpec>>()
+        collectRings(el, samples, rings)
+        val drawable = rings.filter { it.size >= 3 }
+        if (drawable.size < 2) return null  // one shape already pivots correctly about its own box
+        var minX = Float.POSITIVE_INFINITY; var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY; var maxY = Float.NEGATIVE_INFINITY
+        for (ring in drawable) for (p in ring) {
+            if (p.x < minX) minX = p.x
+            if (p.x > maxX) maxX = p.x
+            if (p.y < minY) minY = p.y
+            if (p.y > maxY) maxY = p.y
+        }
+        val a = motion.anchor ?: OGPointSpec(0.5f, 0.5f)
+        val rawX = minX + a.x * (maxX - minX)
+        val rawY = minY + a.y * (maxY - minY)
+        return OGPointSpec(
+            ((rawX - vb.minX) / vb.width).coerceIn(0f, 1f),
+            ((rawY - vb.minY) / vb.height).coerceIn(0f, 1f),
+        )
+    }
+
+    /** Every ring of every drawable shape in [el]'s subtree, in RAW svg coords (pre-normalization). */
+    private fun collectRings(el: OGSVGTreeElement, samples: Int, acc: MutableList<List<OGPointSpec>>) {
+        for (shape in el.shapes) acc += shapeToRings(shape, samples)
+        for (child in el.children) collectRings(child, samples, acc)
+    }
+
+    /** The [OGRegionMotion] a model DECLARED on [el] via `data-motion` (+ optional `data-anchor` /
+     *  `data-dur` overrides), or null when it carries no motion tag / an unknown keyword. The keyword
+     *  vocabulary is shared with [OGSceneIdle.motionNamed] so a tagged part and a recognised English
+     *  label animate identically. */
+    private fun motionFor(el: OGSVGTreeElement): OGRegionMotion? {
+        val name = el.attributes["data-motion"]?.takeIf { it.isNotBlank() } ?: return null
+        val base = OGSceneIdle.motionNamed(name) ?: return null
+        val anchor = parseAnchor(el.attributes["data-anchor"]) ?: base.anchor
+        val dur = el.attributes["data-dur"]?.trim()?.toFloatOrNull()?.coerceAtLeast(0.05f)
+        return base.copy(anchor = anchor, duration = dur ?: base.duration)
+    }
+
+    /** Resolve `data-anchor` — a named edge/corner (`top`/`bottom`/`base`/`left`/`right`/`center`/
+     *  `top-left`…) or a raw `"x,y"` fraction — into a pivot, or null if it names nothing usable. */
+    private fun parseAnchor(raw: String?): OGPointSpec? {
+        val v = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        return when (v) {
+            "top", "top-center", "top-centre" -> OGPointSpec(0.5f, 0f)
+            "bottom", "base", "bottom-center", "bottom-centre" -> OGPointSpec(0.5f, 1f)
+            "left" -> OGPointSpec(0f, 0.5f)
+            "right" -> OGPointSpec(1f, 0.5f)
+            "center", "centre", "middle" -> OGPointSpec(0.5f, 0.5f)
+            "top-left", "topleft" -> OGPointSpec(0f, 0f)
+            "top-right", "topright" -> OGPointSpec(1f, 0f)
+            "bottom-left", "bottomleft" -> OGPointSpec(0f, 1f)
+            "bottom-right", "bottomright" -> OGPointSpec(1f, 1f)
+            else -> {
+                val parts = v.split(",")
+                val x = parts.getOrNull(0)?.trim()?.toFloatOrNull()
+                val y = parts.getOrNull(1)?.trim()?.toFloatOrNull()
+                if (parts.size == 2 && x != null && y != null) {
+                    OGPointSpec(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+                } else {
+                    null
+                }
+            }
+        }
     }
 
     private fun labelFor(base: String?, index: Int, multi: Boolean): String? = when {

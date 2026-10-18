@@ -226,6 +226,63 @@ class OGRig private constructor(
         }
 
         /**
+         * SEMANTIC joints for [scene]: one pin at the centroid of each STRUCTURAL region, so a poke
+         * grabs a meaningful part (the arm, the head, the tail) instead of a blind grid cell. This is the
+         * bridge that makes a described / compiled illustration ([com.solidkey.painpoints.stage.OGStageSvg])
+         * directly pokeable — bind this, [bind] the rig, and every drawn part has a handle.
+         *
+         * Detail shapes are filtered out so fur tufts and catchlights don't crowd the rig: a region is
+         * kept only if its bounding-box area is at least [minAreaFraction] of the LARGEST region's. The
+         * survivors are taken largest-first up to [maxJoints], and any whose centroid is within
+         * [mergeRadius] of an already-kept pin is dropped (near-coincident parts share one handle). Falls
+         * back to the single biggest region's centroid, and to empty only for an empty scene.
+         */
+        fun sceneJoints(
+            scene: OGSceneSpec,
+            maxJoints: Int = 24,
+            minAreaFraction: Float = 0.01f,
+            mergeRadius: Float = 0.04f,
+        ): List<OGJoint> {
+            val centroids = ArrayList<OGPointSpec>()
+            val areas = ArrayList<Float>()
+            for (s in scene.shapes) {
+                val pts = s.points
+                if (pts.size < 3) continue
+                var minX = Float.POSITIVE_INFINITY; var minY = Float.POSITIVE_INFINITY
+                var maxX = Float.NEGATIVE_INFINITY; var maxY = Float.NEGATIVE_INFINITY
+                var sx = 0f; var sy = 0f; var n = 0
+                for (p in pts) {
+                    if (!p.x.isFinite() || !p.y.isFinite()) continue
+                    if (p.x < minX) minX = p.x
+                    if (p.x > maxX) maxX = p.x
+                    if (p.y < minY) minY = p.y
+                    if (p.y > maxY) maxY = p.y
+                    sx += p.x; sy += p.y; n++
+                }
+                if (n == 0) continue
+                centroids.add(OGPointSpec(sx / n, sy / n))
+                areas.add((maxX - minX).coerceAtLeast(0f) * (maxY - minY).coerceAtLeast(0f))
+            }
+            if (centroids.isEmpty()) return emptyList()
+            val largest = areas.max()
+            val threshold = largest * minAreaFraction.coerceIn(0f, 1f)
+            // indices largest-area first
+            val order = centroids.indices.sortedByDescending { areas[it] }
+            val cap = maxJoints.coerceAtLeast(1)
+            val r2 = mergeRadius.coerceAtLeast(0f).let { it * it }
+            val out = ArrayList<OGJoint>()
+            for (i in order) {
+                if (out.size >= cap) break
+                if (areas[i] < threshold) continue
+                val c = centroids[i]
+                val clash = out.any { val dx = it.rest.x - c.x; val dy = it.rest.y - c.y; dx * dx + dy * dy < r2 }
+                if (!clash) out.add(OGJoint(c))
+            }
+            if (out.isEmpty()) out.add(OGJoint(centroids[order.first()]))
+            return out
+        }
+
+        /**
          * A convenience [cols]×[rows] grid of joints spanning `[margin, 1-margin]` in both axes — the
          * generic "pin board" over a scene when you have no semantic landmarks. Row-major (top-left
          * first). For `cols=rows=1` returns a single centre pin.

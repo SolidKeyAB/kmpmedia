@@ -98,15 +98,38 @@ data class OGRegionMotion(
     val delay: Float = 0f,
     /** Normalized scene-space offset added to every vertex. */
     val translate: OGMotionOffset? = null,
-    /** Uniform scale about the centroid (`1` = unchanged). */
+    /** Scale about the pivot (`1` = unchanged). Drives BOTH axes when [scaleY] is absent (uniform, the
+     *  original behaviour); drives only the HORIZONTAL axis when [scaleY] is present. */
     val scale: OGMotionScalar? = null,
-    /** Rotation in degrees about the centroid. */
+    /** Independent VERTICAL scale about the pivot. When set, [scale] takes the horizontal axis and this
+     *  the vertical — the non-uniform squash/stretch an eyelid-blink (`scaleY 1→0`) or a breathing chest
+     *  needs. Absent → the motion is uniform via [scale]. */
+    val scaleY: OGMotionScalar? = null,
+    /** Rotation in degrees about the pivot. */
     val rotate: OGMotionScalar? = null,
     /** Whole-region alpha `0..1` (overrides the region's static opacity while animating). */
     val opacity: OGMotionScalar? = null,
+    /** The PIVOT for [scale]/[scaleY]/[rotate], as a fraction of the region's bounding box
+     *  (`(0,0)` = top-left, `(0.5,0.5)` = centre, `(1,1)` = bottom-right). `null` pivots about the region
+     *  CENTROID (the original behaviour). This is what makes a motion honest: an eyelid squashes to its
+     *  TOP edge (`(0.5,0)`), a tail wags about its body-near BASE, a chest breathes up from its seated
+     *  base (`(0.5,1)`) — instead of everything ballooning / shearing symmetrically about the middle. */
+    val anchor: OGPointSpec? = null,
+    /** An ABSOLUTE pivot in normalized SCENE space (`0..1`, NOT a fraction of this region's own box),
+     *  shared across the regions of a GROUP so they rotate/scale about ONE common point and move as a
+     *  rigid unit (a multi-shape limb waves from a single shoulder instead of each piece spinning about
+     *  its own centre and shearing apart). Baked by [com.solidkey.painpoints.ai.OGSvgScene] from a
+     *  `<g data-motion=…>` group's shared anchor; when set it OVERRIDES [anchor]. `null` → use [anchor]
+     *  (per-region box) or the centroid, exactly as before. */
+    val pivotAbs: OGPointSpec? = null,
 ) {
-    /** Clamp the timing knobs into a sane range. */
-    fun sanitized(): OGRegionMotion = copy(duration = duration.coerceAtLeast(1e-3f), delay = delay.coerceAtLeast(0f))
+    /** Clamp the timing knobs into a sane range (and the anchor/pivot fractions into their box). */
+    fun sanitized(): OGRegionMotion = copy(
+        duration = duration.coerceAtLeast(1e-3f),
+        delay = delay.coerceAtLeast(0f),
+        anchor = anchor?.let { OGPointSpec(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f)) },
+        pivotAbs = pivotAbs?.let { OGPointSpec(it.x.coerceIn(0f, 1f), it.y.coerceIn(0f, 1f)) },
+    )
 
     /** Raw timeline position `0..1` at time [t] seconds (before easing), honouring [mode] + [delay]. */
     fun rawPhase(t: Float): Float {
@@ -134,17 +157,42 @@ fun OGPlacedShapeSpec.animatedAt(t: Float): OGPlacedShapeSpec {
     if (points.isEmpty()) return this
     val p = m.phase(t)
     var pts = points
-    val sc = m.scale?.at(p)
+    val sx = m.scale?.at(p)
+    val syOverride = m.scaleY?.at(p)
     val rotDeg = m.rotate?.at(p)
-    if (sc != null || rotDeg != null) {
-        val cx = points.fold(0f) { a, q -> a + q.x } / points.size
-        val cy = points.fold(0f) { a, q -> a + q.y } / points.size
-        val s = sc ?: 1f
+    if (sx != null || syOverride != null || rotDeg != null) {
+        // Pivot: a GROUP's shared absolute pivot when baked (so a multi-shape part rotates rigidly about
+        // ONE point), else the region's own bbox-anchor when declared, else its centroid (the original).
+        val px: Float
+        val py: Float
+        val pivotAbs = m.pivotAbs
+        val anchor = m.anchor
+        if (pivotAbs != null) {
+            px = pivotAbs.x
+            py = pivotAbs.y
+        } else if (anchor != null) {
+            var minX = Float.POSITIVE_INFINITY; var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY; var maxY = Float.NEGATIVE_INFINITY
+            for (q in points) {
+                if (q.x < minX) minX = q.x
+                if (q.x > maxX) maxX = q.x
+                if (q.y < minY) minY = q.y
+                if (q.y > maxY) maxY = q.y
+            }
+            px = minX + anchor.x * (maxX - minX)
+            py = minY + anchor.y * (maxY - minY)
+        } else {
+            px = points.fold(0f) { a, q -> a + q.x } / points.size
+            py = points.fold(0f) { a, q -> a + q.y } / points.size
+        }
+        // scaleY present → non-uniform (scale drives X, scaleY drives Y); absent → uniform via scale.
+        val s = sx ?: 1f
+        val sY = syOverride ?: sx ?: 1f
         val rad = (rotDeg ?: 0f) * (PI_F / 180f)
         val cosA = cos(rad); val sinA = sin(rad)
         pts = pts.map { q ->
-            val dx = (q.x - cx) * s; val dy = (q.y - cy) * s
-            OGPointSpec(cx + dx * cosA - dy * sinA, cy + dx * sinA + dy * cosA)
+            val dx = (q.x - px) * s; val dy = (q.y - py) * sY
+            OGPointSpec(px + dx * cosA - dy * sinA, py + dx * sinA + dy * cosA)
         }
     }
     val tr = m.translate?.at(p)

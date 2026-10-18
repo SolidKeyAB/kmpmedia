@@ -64,6 +64,27 @@ class OGSceneLiveTest {
         close(end.points[0].x, 0.3f); close(end.points[0].y, 0.3f)
     }
 
+    @Test fun scaleAboutAnchorPinsThatEdge() {
+        // anchor bottom-left (0,1) → bbox pivot (minX, maxY) = (0.4, 0.6); a 2× scale holds that corner.
+        val s = OGPlacedShapeSpec(points = square(),
+            motion = OGRegionMotion(duration = 1f, mode = "once", easing = "linear",
+                scale = OGMotionScalar(1f, 2f), anchor = OGPointSpec(0f, 1f)))
+        val end = s.animatedAt(1f)
+        close(end.points[3].x, 0.4f); close(end.points[3].y, 0.6f)   // the pivot corner is unmoved
+        close(end.points[0].x, 0.4f); close(end.points[0].y, 0.2f)   // the opposite edge grows away from it
+    }
+
+    @Test fun scaleYSquashesVerticallyAboutTheTop() {
+        // scaleY only + anchor top-centre (0.5,0): width holds, height collapses toward the top edge.
+        val s = OGPlacedShapeSpec(points = square(),
+            motion = OGRegionMotion(duration = 1f, mode = "once", easing = "linear",
+                scaleY = OGMotionScalar(1f, 0.5f), anchor = OGPointSpec(0.5f, 0f)))
+        val end = s.animatedAt(1f)
+        close(end.points[0].x, 0.4f); close(end.points[0].y, 0.4f)   // top edge unmoved, X unchanged
+        close(end.points[3].x, 0.4f); close(end.points[3].y, 0.5f)   // bottom rises halfway toward the top
+        close(end.points[1].x, 0.6f)                                  // right edge keeps its width (X not scaled)
+    }
+
     @Test fun opacityChannelOverrides() {
         val s = OGPlacedShapeSpec(
             points = square(), opacity = 1f,
@@ -137,6 +158,7 @@ class OGSceneLiveTest {
                 OGPlacedShapeSpec(points = square(), label = "sun", fill = "#FFCC00",
                     motion = OGRegionMotion(duration = 6f, mode = "reverse", easing = "easeInOut",
                         translate = OGMotionOffset(OGPointSpec(0f, -0.1f), OGPointSpec(0.05f, 0.3f)),
+                        scaleY = OGMotionScalar(1f, 0.06f), anchor = OGPointSpec(0.5f, 0f),
                         opacity = OGMotionScalar(1f, 0.8f))),
             ),
             background = "#0A1024",
@@ -149,6 +171,8 @@ class OGSceneLiveTest {
         val rm = back.shapes[0].motion; assertNotNull(rm)
         assertEquals(6f, rm.duration); assertEquals("reverse", rm.mode)
         assertNotNull(rm.translate); close(rm.translate.to.y, 0.3f)
+        assertNotNull(rm.scaleY); close(rm.scaleY.to, 0.06f)
+        assertNotNull(rm.anchor); close(rm.anchor.y, 0f)
         assertNotNull(rm.opacity)
         val sm = back.motion; assertNotNull(sm)
         assertNotNull(sm.look); close(sm.look.to.temperature, -0.3f)

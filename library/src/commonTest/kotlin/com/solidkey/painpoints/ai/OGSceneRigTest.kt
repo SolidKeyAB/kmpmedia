@@ -18,6 +18,16 @@ class OGSceneRigTest {
     private fun tri(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, fill: String? = null, label: String? = null) =
         OGPlacedShapeSpec(listOf(OGPointSpec(ax, ay), OGPointSpec(bx, by), OGPointSpec(cx, cy)), label = label, fill = fill)
 
+    /** An axis-aligned rectangle region (centroid = its centre, bbox area = w*h). */
+    private fun rect(x: Float, y: Float, w: Float, h: Float, label: String? = null) =
+        OGPlacedShapeSpec(
+            listOf(OGPointSpec(x, y), OGPointSpec(x + w, y), OGPointSpec(x + w, y + h), OGPointSpec(x, y + h)),
+            label = label,
+        )
+
+    private fun near(j: List<OGJoint>, x: Float, y: Float, eps: Float = 1e-3f) =
+        j.any { abs(it.rest.x - x) < eps && abs(it.rest.y - y) < eps }
+
     /** A grid mesh of `cols*rows` cells, each split into two triangles → `cols*rows*6` vertices. */
     private fun gridMesh(cols: Int, rows: Int): OGSceneSpec {
         val shapes = ArrayList<OGPlacedShapeSpec>(cols * rows * 2)
@@ -176,6 +186,56 @@ class OGSceneRigTest {
         for (jt in OGRig.gridJoints(5, 5, margin = 0.1f)) {
             assertTrue(jt.rest.x in 0.099f..0.901f && jt.rest.y in 0.099f..0.901f) // epsilon for 0.1+0.8 float rounding
         }
+    }
+
+    // --- semantic joints: turn a compiled scene's parts into grab handles -------------------------
+
+    @Test fun sceneJointsPinMajorPartsAndSkipDetail() {
+        val scene = OGSceneSpec(
+            listOf(
+                rect(0.20f, 0.20f, 0.60f, 0.60f, "body"),   // area 0.36 (the biggest)
+                rect(0.05f, 0.40f, 0.12f, 0.12f, "arm"),    // area 0.0144 ≈ 4% of body → kept
+                rect(0.50f, 0.50f, 0.01f, 0.01f, "speck"),  // area 1e-4 ≈ 0.03% → dropped as detail
+            ),
+        )
+        val joints = OGRig.sceneJoints(scene)
+        assertEquals(2, joints.size, "major parts pinned, tiny detail skipped: ${joints.map { it.rest }}")
+        assertTrue(near(joints, 0.5f, 0.5f), "a pin at the body centroid")
+        assertTrue(near(joints, 0.11f, 0.46f), "a pin at the arm centroid")
+    }
+
+    @Test fun sceneJointsDedupCoincidentAndCap() {
+        // Five stacked near-coincident big layers collapse to a single handle (within mergeRadius).
+        val stacked = (0 until 5).map { rect(0.30f + it * 0.005f, 0.30f, 0.40f, 0.40f, "layer$it") }
+        assertEquals(1, OGRig.sceneJoints(OGSceneSpec(stacked)).size)
+
+        // Thirty well-separated equal parts, capped to 8.
+        val many = ArrayList<OGPlacedShapeSpec>()
+        for (gx in 0 until 6) for (gy in 0 until 5) many.add(rect(0.02f + gx * 0.16f, 0.02f + gy * 0.19f, 0.10f, 0.10f))
+        assertEquals(8, OGRig.sceneJoints(OGSceneSpec(many), maxJoints = 8).size)
+    }
+
+    @Test fun sceneJointsEmptySceneIsEmpty() {
+        assertTrue(OGRig.sceneJoints(OGSceneSpec(emptyList())).isEmpty())
+    }
+
+    @Test fun sceneJointsBindIntoADeformableRig() {
+        val scene = OGSceneSpec(
+            listOf(rect(0.20f, 0.20f, 0.60f, 0.60f, "body"), rect(0.05f, 0.40f, 0.12f, 0.12f, "arm")),
+        )
+        val joints = OGRig.sceneJoints(scene)
+        val rig = OGRig.bind(scene, joints, nearest = 2, falloff = 3f)
+        val armPin = rig.nearestJoint(joints, OGPointSpec(0.11f, 0.46f), grabRadius = 0.1f)
+        assertTrue(armPin >= 0, "the arm has a grab handle")
+
+        val dragged = joints.toMutableList().also { it[armPin] = joints[armPin].draggedTo(OGPointSpec(0.11f, 0.30f)) }
+        val out = rig.deformScene(scene, dragged)
+        fun disp(a: OGPlacedShapeSpec, b: OGPlacedShapeSpec) =
+            a.points.zip(b.points).sumOf { (p, q) -> (abs(p.x - q.x) + abs(p.y - q.y)).toDouble() }
+        assertTrue(
+            disp(scene.shapes[1], out.shapes[1]) > disp(scene.shapes[0], out.shapes[0]),
+            "dragging the arm's pin deforms the arm more than the body",
+        )
     }
 
     // --- perf sanity: a ~20k-vertex mesh deforms cleanly, many times -------------------------------

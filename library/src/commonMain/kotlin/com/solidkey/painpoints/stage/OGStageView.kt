@@ -22,11 +22,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import com.solidkey.painpoints.ai.OGPlacedShapeSpec
 import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.ai.animatedAt
+import com.solidkey.painpoints.ai.drawOGGlow
+import com.solidkey.painpoints.ai.drawOGTexture
 import com.solidkey.painpoints.ai.expanded
 import com.solidkey.painpoints.ai.isLive
 import com.solidkey.painpoints.ai.toSpecColor
@@ -281,12 +284,13 @@ private fun SceneLayerCanvas(scene: OGSceneSpec, timeMs: Long, modifier: Modifie
         if (sceneBg != null) drawRect(sceneBg)
         val shapes = if (live) expanded.shapes.map { it.animatedAt(tSec) } else expanded.shapes
         val path = Path()
-        for (s in shapes) drawRegion(path, s, w, h)
+        for (s in shapes) drawOGSceneRegion(path, s, w, h)
     }
 }
 
-/** Fill one region: build its polygon path in pixel space and paint it with its gradient or fill. */
-private fun DrawScope.drawRegion(path: Path, s: OGPlacedShapeSpec, w: Float, h: Float) {
+/** Fill one region: build its polygon path in pixel space and paint it with its gradient or fill.
+ *  Shared by the stage player and the poke-to-deform view ([OGSceneRigView]) so both paint identically. */
+internal fun DrawScope.drawOGSceneRegion(path: Path, s: OGPlacedShapeSpec, w: Float, h: Float) {
     val pts = s.points
     if (pts.size < 3) return
     path.reset()
@@ -305,6 +309,8 @@ private fun DrawScope.drawRegion(path: Path, s: OGPlacedShapeSpec, w: Float, h: 
     }
     path.close()
     val alpha = (s.opacity ?: 1f).coerceIn(0f, 1f)
+    // Additive glow halo sits BEHIND the fill.
+    s.glow?.let { drawOGGlow(path, it) }
     val g = s.gradient?.sanitized()
     if (g != null && g.isRenderable) {
         val brush = g.toBrush(minX, minY, (maxX - minX).coerceAtLeast(1e-3f), (maxY - minY).coerceAtLeast(1e-3f))
@@ -312,5 +318,11 @@ private fun DrawScope.drawRegion(path: Path, s: OGPlacedShapeSpec, w: Float, h: 
     } else {
         val col = s.fill?.toSpecColor() ?: Color.Transparent
         if (col.alpha > 0f) drawPath(path, col, alpha = alpha)
+    }
+    // Procedural texture (fur / grass / grain) sits OVER the fill, clipped to the region.
+    s.texture?.let { tex ->
+        clipPath(path) {
+            drawOGTexture(tex, minX, minY, (maxX - minX).coerceAtLeast(1e-3f), (maxY - minY).coerceAtLeast(1e-3f))
+        }
     }
 }

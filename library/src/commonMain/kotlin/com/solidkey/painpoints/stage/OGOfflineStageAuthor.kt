@@ -7,6 +7,7 @@ import com.solidkey.painpoints.ai.OGMotionScalar
 import com.solidkey.painpoints.ai.OGPlacedShapeSpec
 import com.solidkey.painpoints.ai.OGPointSpec
 import com.solidkey.painpoints.ai.OGRegionMotion
+import com.solidkey.painpoints.ai.OGSceneIdle
 import com.solidkey.painpoints.ai.OGSceneMotion
 import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.ai.OGStopSpec
@@ -43,6 +44,9 @@ public class OGOfflineStageAuthor(
     private val height: Int = 900,
     private val durationMs: Long = 5000L,
     private val fps: Int = 30,
+    /** The rig-recipe catalog used to draw a recognised subject. Pass your own (e.g.
+     *  `OGRigRecipes.builtIns + myRecipe`) to teach the offline floor new kinds — the extendable seam. */
+    private val recipes: List<OGRigRecipe> = OGRigRecipes.builtIns,
 ) : OGStageAuthor {
 
     override suspend fun author(instruction: String): OGStage = direct(instruction)
@@ -74,6 +78,11 @@ public class OGOfflineStageAuthor(
 
         // 3) Optional action-FX beat (a storm's bolt, a rush's speed-lines).
         fxFor(text, p, seed)?.let { layers += it }
+
+        // 3b) A recognisable SUBJECT (a cat, a person, a flower, a pawn…) → assemble a living figure
+        //     from its rig recipe and stand it in front of the backdrop. Deterministic + network-free;
+        //     when nothing matches we simply fall through to mood + title as before.
+        subjectLayer(text)?.let { layers += it }
 
         // 4) Title card — fades + settles in, holds, eases out at the end.
         layers += titleLayer(instruction, text, p)
@@ -297,6 +306,22 @@ public class OGOfflineStageAuthor(
             scale = OGStages.eased(OGEasing.EASE_OUT, 0L to 1.2f, 900L to 1f),
         )
         else -> null
+    }
+
+    // ── Subject figure (rig recipe) ───────────────────────────────────────────────────────────────
+
+    /** If the words name a kind we have a recipe for, assemble a living figure (idle-animated by
+     *  [OGSceneIdle]) and stand it centre-frame in front of the backdrop; else null (→ pure atmosphere). */
+    private fun subjectLayer(t: String): OGStageLayer? {
+        val recipe = OGRigRecipes.select(t, recipes) ?: return null
+        val figure = OGSceneIdle.animate(recipe.assemble(aspect = width.toFloat() / height))
+        if (figure.shapes.isEmpty()) return null
+        return OGStages.scene(
+            id = "subject",
+            scene = figure,
+            opacity = OGStages.eased(OGEasing.EASE_OUT, 0L to 0f, 450L to 1f),
+            scale = OGStages.eased(OGEasing.EASE_OUT, 0L to 0.96f, 700L to 1f),
+        )
     }
 
     // ── Title card ────────────────────────────────────────────────────────────────────────────────

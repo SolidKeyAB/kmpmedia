@@ -1,5 +1,7 @@
 package com.solidkey.painpoints.stage
 
+import com.solidkey.painpoints.ai.OGAiCapability
+
 /**
  * The seam that turns a plain-language description into a playable [OGStage] movie — the app side of
  * KMPMedia's **"describe → movie"** loop.
@@ -76,5 +78,21 @@ public object OGStageAuthoring {
     ): OGStageAuthor = OGStageAuthor { instruction ->
         val fromModel = runCatching { fromReply(model.complete(promptFor(instruction))) }.getOrNull()
         fromModel ?: fallback.author(instruction)
+    }
+
+    /**
+     * Describe→movie as an [OGAiCapability] — the first citizen of the capability-manifest mechanism
+     * (see [com.solidkey.painpoints.ai.OGAiManifest]). An app lists this in its manifest; the user's AI
+     * reads it and answers with an `<svg>` or stage JSON, which [fromReply] decodes. `promptFor`/`decode`
+     * reuse the existing contract verbatim, so nothing is duplicated.
+     */
+    public val illustrate: OGAiCapability<String, OGStage> = object : OGAiCapability<String, OGStage> {
+        override val id: String = "illustrate"
+        override val title: String = "Living illustration"
+        override val description: String =
+            "Author a short living vector 'movie' (an OGStage) of the described subject."
+        override val outputFormat: String = "one <svg> document, or an OGStage JSON object"
+        override fun promptFor(input: String): String = OGStageAuthoring.promptFor(input)
+        override fun decode(reply: String): OGStage? = OGStageAuthoring.fromReply(reply)
     }
 }

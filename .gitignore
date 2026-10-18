@@ -14,5 +14,13 @@ xcuserdata
 #Local MCP / agent-channel config (holds Firebase creds & UIDs — never commit)
 .mcp.json
 
-# nexum: phone file-drop scratch (managed, regenerated) — never commit
+# agent file-drop scratch (managed, regenerated) — never commit
 .nexum-shared/
+
+# local agent tooling — MCP configs may carry an injected token — never commit
+.gemini/
+.agents/
+
+# local agent tooling — managed generated files (self-healed each prep) — never commit
+GEMINI.md
+.geminiignore
