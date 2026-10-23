@@ -516,12 +516,43 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
   else ta.style.display='none'; };
 
-/* ---------- nexum payload: rig + the layer images, for the app host to bake ---------- */
+/* ---------- nexum payload: an OGCutoutRig + the layer images, for the app host to bake ----------
+   The library's OGStageLayer rotates about the layer CENTRE, so each mover frame is drawn full-canvas
+   with its JOINT shifted to the centre — then the bake rotates about centre (= the joint) and offsets
+   x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
+function fullCanvasDataURL(maskData, offsetX, offsetY, punchMasks){
+  const W=S.iw,H=S.ih, sd=S.srcData.data, md=maskData.data;
+  const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const octx=oc.getContext('2d');
+  const out=octx.createImageData(W,H); const od=out.data;
+  for(let dy=0;dy<H;dy++)for(let dx=0;dx<W;dx++){
+    const sx=dx-offsetX, sy=dy-offsetY; if(sx<0||sy<0||sx>=W||sy>=H) continue;
+    const si=(sy*W+sx)*4; let a=md[si+3]/255; if(!a) continue;
+    if(punchMasks) for(const mv of punchMasks) a*=(1-mv[si+3]/255);
+    const oi=(dy*W+dx)*4; od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+  }
+  octx.putImageData(out,0,0); return oc.toDataURL('image/png');
+}
 async function buildNexumPayload(){
-  const {files, jsonStr}=await buildExport(); const images={};
-  for(const f of files){ if(f.name.endsWith('.png')){ const b=new Blob([f.data],{type:'image/png'});
-    images[f.name]=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b);}); } }
-  return { kind:'og-rig-payload', v:1, rig:JSON.parse(jsonStr), images };
+  if(!S.srcData) return null; const W=S.iw,H=S.ih;
+  const punchMasks=[]; // movers (with punch on) to cut out of the base
+  for(const l of S.layers){ if(l.role==='mover' && l.punch){ const md=l.mctx.getImageData(0,0,W,H);
+    if(bboxOf(md)) punchMasks.push(md.data); } }
+  const images={}, rigLayers=[];
+  for(const l of S.layers){ const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box) continue;
+    const name=sanitize(l.name);
+    if(l.role==='base'){
+      images[name]=fullCanvasDataURL(md, 0, 0, punchMasks);
+      rigLayers.push({ id:name, resource:name, role:'base', pivotX:0.5, pivotY:0.5 });
+    } else {
+      const pv=l.pivot || {x:box.x+box.w/2, y:box.y+box.h/2};
+      const offX=Math.round(W/2 - pv.x), offY=Math.round(H/2 - pv.y);
+      images[name]=fullCanvasDataURL(md, offX, offY, null);
+      rigLayers.push({ id:name, resource:name, role:'mover',
+        pivotX:+(pv.x/W).toFixed(4), pivotY:+(pv.y/H).toFixed(4), swingDeg:10 });
+    }
+  }
+  const rig={ width:W, height:H, durationMs:2600, fps:60, layers:rigLayers };
+  return { kind:'og-rig-payload', v:1, rig, images };
 }
 // Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
 async function sendToNexum(){ if(!S.img){toast('Load an image first');return;}
