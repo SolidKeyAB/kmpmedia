@@ -183,6 +183,10 @@
     <div class="group" id="faceGroup" style="display:none">
       <h2>Expressions</h2>
       <div class="row" id="exprChips"></div>
+      <div class="row" id="facsRow" style="margin-top:6px; align-items:center; gap:8px;">
+        <button class="sm go" id="facsAuto" title="Auto-pose the whole face for this expression using FACS action units — a believable starting face you then tweak">✨ FACS auto-pose</button>
+        <span style="font-size:11px;color:var(--dim)">whole face, one tap · MLS-rigid mouth curl</span>
+      </div>
       <div id="exprPose"></div>
       <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
         <span style="font-size:11px;color:var(--dim)">Edit:</span>
@@ -201,7 +205,7 @@
       <div class="row" style="margin-top:8px;">
         <button class="sm go" id="previewExpr">▶ Preview expressions</button>
       </div>
-      <p class="hint">Pick an expression, then pose it. <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>punch</b> so a feature's old spot doesn't ghost when it moves.</p>
+      <p class="hint">Pick an expression, then tap <b>✨ FACS auto-pose</b> for a believable whole-face start (needs features named brow / eye / mouth), and tweak from there. Or pose by hand: <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>punch</b> so a feature's old spot doesn't ghost when it moves.</p>
     </div>
 
     <!-- Export -->
@@ -883,7 +887,7 @@ function poseOf(l, exprId){
   if(exprId==='neutral' || !l.poses) return d;
   const p=l.poses[exprId]; if(!p) return d;
   const s=(p.scale==null?1:p.scale);   // migrate older uniform `scale` → sx/sy
-  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy), warp:(p.warp||null) };
+  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy), warp:(p.warp||null), mls:(p.mls||null) };
 }
 // Get/create the stored pose object for the current expression, migrating a legacy `scale` to sx/sy.
 function ensurePose(l, exprId){
@@ -946,6 +950,39 @@ function opDisp(op, x, y){
   return [ (op.dx||0)*g, (op.dy||0)*g ];
 }
 function fieldDisp(ops, x, y){ let ax=0, ay=0; for(let i=0;i<ops.length;i++){ const d=opDisp(ops[i],x,y); ax+=d[0]; ay+=d[1]; } return [ax,ay]; }
+/* ---- MLS (Moving Least Squares) RIGID deformation — Schaefer, McPhail & Warren, SIGGRAPH 2006.
+   Fixed box-perimeter anchors pin the feature silhouette; the pose's `mls` handles (rest point +
+   pull) drag the interior. Each mesh node is mapped by a weighted RIGID (rotation+translation,
+   no shear) best-fit of ALL control points → a smooth, non-collapsing warp. Identity when every
+   handle rests (q==p). Handles live in REST image space {px,py}+pull{dx,dy}; affine applies first. */
+const MLS_ALPHA=1.2;              // weight falloff exponent: w_i = 1/|p_i - v|^(2·alpha)
+function mlsRigid(P, Q, vx, vy){
+  const n=P.length; if(!n) return [vx,vy];
+  let sw=0, psx=0,psy=0, qsx=0,qsy=0; const w=new Array(n);
+  for(let i=0;i<n;i++){ const dx=P[i][0]-vx, dy=P[i][1]-vy, d2=dx*dx+dy*dy;
+    if(d2<1e-8) return [Q[i][0],Q[i][1]];                   // v sits on a control point → exact
+    const wi=1/Math.pow(d2,MLS_ALPHA); w[i]=wi; sw+=wi;
+    psx+=wi*P[i][0]; psy+=wi*P[i][1]; qsx+=wi*Q[i][0]; qsy+=wi*Q[i][1]; }
+  const pX=psx/sw, pY=psy/sw, qX=qsx/sw, qY=qsy/sw, rx=vx-pX, ry=vy-pY;
+  let Fx=0, Fy=0;
+  for(let i=0;i<n;i++){ const ax=P[i][0]-pX, ay=P[i][1]-pY, bx=Q[i][0]-qX, by=Q[i][1]-qY;
+    const d=ax*rx+ay*ry, e=ax*ry-ay*rx;                     // phat·r , cross(phat,r)
+    Fx+=w[i]*(bx*d - by*e); Fy+=w[i]*(bx*e + by*d); }       // qhat · w·[[d,e],[-e,d]]
+  const fl=Math.hypot(Fx,Fy);
+  if(fl<1e-8) return [vx+(qX-pX), vy+(qY-pY)];               // degenerate (all phat≈0) → pure translation
+  const rl=Math.hypot(rx,ry); return [qX+Fx/fl*rl, qY+Fy/fl*rl];
+}
+// Build MLS control points (DISPLAYED space) for a feature: fixed perimeter anchors + the pull handles.
+function mlsControls(pose, l){
+  const b=featureBox(l), c=featureCenter(l), EXP=0.18, P=[], Q=[];
+  const xs=[b.x-b.w*EXP, b.x+b.w*0.5, b.x+b.w+b.w*EXP], ys=[b.y-b.h*EXP, b.y+b.h*0.5, b.y+b.h+b.h*EXP];
+  for(const gx of xs) for(const gy of ys){
+    if(gx===xs[1] && gy===ys[1]) continue;                  // skip centre — let handles own the interior
+    const d=affinePt({x:gx,y:gy},pose,c); P.push([d.x,d.y]); Q.push([d.x,d.y]); }
+  for(const h of pose.mls){ const d=affinePt({x:h.px,y:h.py},pose,c);
+    P.push([d.x,d.y]); Q.push([d.x+(h.dx||0), d.y+(h.dy||0)]); }
+  return {P,Q};
+}
 // draw source triangle s[0..2] (image coords in `cut`) onto dest triangle d[0..2]; tiny outward pad kills seams
 function texTri(img, s, d){
   const cx=(d[0].x+d[1].x+d[2].x)/3, cy=(d[0].y+d[1].y+d[2].y)/3, PAD=0.6;
@@ -960,16 +997,21 @@ function texTri(img, s, d){
 }
 // render a feature's cut: affine box pose, then warp ops via a fine mesh. No ops → fast direct affine draw.
 function drawWarpedFeature(cut, pose, c, l){
-  const ops=pose.warp;
-  if(!ops || !ops.length){
+  const ops=pose.warp, hasField=!!(ops&&ops.length);
+  const hasMls=!!(pose.mls && pose.mls.length && pose.mls.some(h=>h.dx||h.dy));
+  if(!hasField && !hasMls){
     ctx.save(); ctx.translate(pose.dx,pose.dy);
     ctx.translate(c.x,c.y); ctx.rotate(pose.rot*Math.PI/180); ctx.scale(pose.sx,pose.sy); ctx.translate(-c.x,-c.y);
     ctx.drawImage(cut,0,0); ctx.restore(); return;
   }
+  const ctrl=hasMls?mlsControls(pose,l):null;
   const b=featureBox(l), N=WARP_MESH, NC=N+1, id=(i,j)=>j*NC+i, V=[];
   for(let j=0;j<=N;j++) for(let i=0;i<=N;i++){
-    const rx=b.x+b.w*i/N, ry=b.y+b.h*j/N, p=affinePt({x:rx,y:ry},pose,c), f=fieldDisp(ops,p.x,p.y);
-    V.push({ s:{x:rx,y:ry}, d:{x:p.x+f[0], y:p.y+f[1]} });
+    const rx=b.x+b.w*i/N, ry=b.y+b.h*j/N, p=affinePt({x:rx,y:ry},pose,c);
+    let nx=p.x, ny=p.y;
+    if(hasMls){ const m=mlsRigid(ctrl.P, ctrl.Q, nx, ny); nx=m[0]; ny=m[1]; }  // rigid warp from anchors+handles
+    if(hasField){ const f=fieldDisp(ops,p.x,p.y); nx+=f[0]; ny+=f[1]; }        // region/point ops compose on top
+    V.push({ s:{x:rx,y:ry}, d:{x:nx, y:ny} });
   }
   for(let j=0;j<N;j++) for(let i=0;i<N;i++){
     const a=V[id(i,j)], b2=V[id(i+1,j)], c2=V[id(i,j+1)], d2=V[id(i+1,j+1)];
@@ -999,6 +1041,11 @@ function lerpPose(a,b,f){ const o={ dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f
   if(wa||wb){ o.warp=[];
     if(wa) for(const op of wa) o.warp.push(scaleOp(op, 1-f));
     if(wb) for(const op of wb) o.warp.push(scaleOp(op, f)); }
+  // MLS handles cross-fade by scaling their pull (rest point fixed) — smooth morph in/out
+  const ma=a.mls&&a.mls.length?a.mls:null, mb=b.mls&&b.mls.length?b.mls:null;
+  if(ma||mb){ o.mls=[];
+    if(ma) for(const h of ma) o.mls.push({px:h.px, py:h.py, dx:(h.dx||0)*(1-f), dy:(h.dy||0)*(1-f)});
+    if(mb) for(const h of mb) o.mls.push({px:h.px, py:h.py, dx:(h.dx||0)*f, dy:(h.dy||0)*f}); }
   return o; }
 // a copy of an operator at reduced strength (f in 0..1) — used only for morph-preview cross-fades
 function scaleOp(op, f){ if(op.t==='rgn') return { t:'rgn', cx:op.cx, cy:op.cy, r:op.r, feather:op.feather,
@@ -1024,6 +1071,15 @@ function renderFace(W,H){
   // Skipped while morph-previewing or on the neutral/base face.
   if(!S.exprPreview && S.expr!=='neutral'){ const l=activeLayer();
     if(l && l.role!=='base' && l.visible){ const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      // FACS / MLS-rigid handles (rest → pulled), pink so they read apart from the teal warp ops
+      const pml=(l.poses[S.expr]&&l.poses[S.expr].mls)||null;
+      if(pml && pml.length){ const pp=poseOf(l,S.expr), cc=featureCenter(l);
+        for(const h of pml){ const r0=affinePt({x:h.px,y:h.py},pp,cc);
+          const [rx,ry]=sc(r0.x,r0.y), [hx,hy]=sc(r0.x+(h.dx||0), r0.y+(h.dy||0));
+          ctx.strokeStyle='rgba(255,138,196,.55)'; ctx.lineWidth=1.4;
+          ctx.beginPath(); ctx.moveTo(rx,ry); ctx.lineTo(hx,hy); ctx.stroke();
+          ctx.fillStyle='rgba(255,138,196,.5)'; ctx.beginPath(); ctx.arc(rx,ry,2.5,0,7); ctx.fill();
+          ctx.fillStyle='#ff8ac4'; ctx.beginPath(); ctx.arc(hx,hy,4,0,7); ctx.fill(); } }
       if(S.faceWarp){                                   // warp overlay: region circles + point pins
         const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
         for(const op of ops){ const seld=(op===S.warpSel);
@@ -1232,24 +1288,84 @@ function applyMode(){
     renderWarpPanel(); }
   draw();
 }
+/* ---- FACS auto-pose: the SEMANTIC driver. Each expression = a recipe of facial Action Units
+   (Ekman). We detect each feature's role from its layer NAME (brow / eye / mouth ± left/right),
+   then emit a believable per-feature pose scaled to that feature's own box — brows do the AU work
+   via rotate/shift, the mouth curls via two MLS-rigid handles at its corners. One tap poses the
+   whole face as a STARTING point; she then tweaks with Box / Warp. Unrecognised features untouched. */
+function facsRole(name){
+  const s=(name||'').toLowerCase();
+  const side = /(^|[_\- ])(l|left|sol)([_\- ]|\d|$)/.test(s) ? 'l'
+             : /(^|[_\- ])(r|right|sag|sağ)([_\- ]|\d|$)/.test(s) ? 'r' : '';
+  if(/brow|eyebrow|kas|kaş/.test(s))                    return {part:'brow', side};
+  if(/eye|göz|goz|lid|lash/.test(s))                    return {part:'eye',  side};
+  if(/mouth|lip|ağız|agiz|dudak|teeth|tongue/.test(s))  return {part:'mouth',side};
+  return {part:'', side};
+}
+// A believable pose for ONE feature under one expression — moves scaled to the feature's own box.
+function facsPose(l, exprId){
+  const r=facsRole(l.name); if(!r.part || exprId==='neutral') return null;
+  const b=featureBox(l), W=b.w, H=b.h, m=(r.side==='r')?-1:1;   // right-side features mirror horizontally
+  const pose={dx:0,dy:0,rot:0,sx:1,sy:1};
+  // mouth corner handles (REST space): up>0 ⇒ corners rise (smile), up<0 ⇒ corners drop (frown)
+  const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
+                      {px:b.x+0.90*W, py:b.y+0.55*H, dx:+0.03*W, dy:-up*0.45*H} ];
+  if(exprId==='happy'){            // AU6 cheek-raise + AU12 lip-corner pull
+    if(r.part==='mouth'){ pose.sx=1.06; pose.mls=corners(+1.0); }
+    else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
+    else if(r.part==='brow'){ pose.dy=-0.25*H; }
+  } else if(exprId==='sad'){       // AU1 inner-brow-up + AU4 + AU15 lip-corner depress
+    if(r.part==='mouth'){ pose.sx=0.96; pose.mls=corners(-0.7); }
+    else if(r.part==='brow'){ pose.rot=-10*m; pose.dy=-0.15*H; }   // inner end up, outer down
+    else if(r.part==='eye'){ pose.sy=0.95; pose.dy=+0.04*H; }
+  } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU5/7 + AU23 lip-tighten
+    if(r.part==='brow'){ pose.rot=+12*m; pose.dy=+0.35*H; pose.dx=+0.10*W*m; }  // inner down & inward
+    else if(r.part==='eye'){ pose.sy=0.85; pose.dy=+0.04*H; }
+    else if(r.part==='mouth'){ pose.sx=0.92; pose.mls=corners(-0.4); }
+  } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
+    if(r.part==='brow'){ pose.dy=-0.70*H; }
+    else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
+    else if(r.part==='mouth'){ pose.sx=0.90; pose.sy=1.40; pose.dy=+0.10*H; }
+  } else return null;
+  return pose;
+}
+// Apply FACS to the WHOLE face for the current expression (one undo step per feature).
+function applyFacs(){
+  if(S.mode!=='face'){ return; }
+  if(S.expr==='neutral'){ toast('Pick an expression (Happy / Sad / Angry / Shocked) first'); return; }
+  let n=0;
+  for(const l of S.layers){ if(l.role==='base' || !l.visible) continue;
+    const fp=facsPose(l, S.expr); if(!fp) continue;          // unrecognised feature → leave as-is
+    pushPoseUndo(l, S.expr);
+    const p=ensurePose(l, S.expr);
+    p.dx=Math.round(fp.dx); p.dy=Math.round(fp.dy); p.rot=fp.rot; p.sx=fp.sx; p.sy=fp.sy;
+    if(fp.mls) p.mls=fp.mls; else delete p.mls;              // keep her manual region/point warp (p.warp)
+    n++; }
+  renderExprPose(); renderWarpPanel(); draw(); markDirty();
+  toast(n ? ('FACS → posed '+n+' feature'+(n>1?'s':'')+' for '+S.expr+'. Tweak with Box / Warp, ↩︎ to undo.')
+          : 'No recognisable features — name layers brow / eye / mouth, then retry');
+}
 // the pose rows for happy/sad/angry/shocked, normalized (dx/W, dy/H), for export
 function collectExpressions(W,H){
   const out={};
   for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
     for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
       const q=poseOf(l, ex.id);   // normalized (handles legacy `scale` → sx/sy)
-      const hasWarp=q.warp && q.warp.length;
-      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1||hasWarp){
+      const hasWarp=q.warp && q.warp.length, hasMls=q.mls && q.mls.length;
+      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1||hasWarp||hasMls){
         const e={ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) };
         if(hasWarp) e.warp=q.warp.map(op=> op.t==='rgn'   // localized operators, coords normalized
           ? {t:'rgn', cx:f3(op.cx/W), cy:f3(op.cy/H), r:f3(op.r/W), feather:f3((op.feather||0)/W), scale:f3(op.scale==null?1:op.scale), rot:op.rot||0}
           : {t:'pin', ax:f3(op.ax/W), ay:f3(op.ay/H), dx:f3((op.dx||0)/W), dy:f3((op.dy||0)/H), r:f3(op.r/W)});
+        if(hasMls) e.mls=q.mls.map(h=>   // MLS-rigid handles: rest point + pull, coords normalized
+          ({px:f3(h.px/W), py:f3(h.py/H), dx:f3((h.dx||0)/W), dy:f3((h.dy||0)/H)}));
         list.push(e); } }
     if(list.length) out[ex.id]=list; }
   return out;
 }
 document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
 document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
+document.getElementById('facsAuto').onclick=applyFacs;   // FACS action-unit auto-pose (whole face)
 // Face edit sub-mode: ▦ Box (affine whole part) ↔ 🫠 Warp an area (local operators)
 document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
   S.faceWarp = b.dataset.edit==='warp';
@@ -1272,7 +1388,8 @@ resizeCanvas();
 applyMode();
 // debug hook for automated verification
 window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
-  draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp };
+  draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
+  mlsRigid, mlsControls, facsPose, facsRole, applyFacs };
 </script>
 </body>
 </html>
