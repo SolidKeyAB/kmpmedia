@@ -106,8 +106,18 @@
   </div>
 
   <aside class="side">
-    <!-- Tools -->
+    <!-- Mode -->
     <div class="group">
+      <h2>What are you making?</h2>
+      <div class="row" id="modeSw">
+        <button class="sm on" data-mode="rig">🧍 Puppet rig</button>
+        <button class="sm" data-mode="face">😀 Face expressions</button>
+      </div>
+      <p class="hint"><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut a face's features (brows, eyes, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them. Cut in Puppet-rig mode, then switch here to pose the faces.</p>
+    </div>
+
+    <!-- Tools -->
+    <div class="group" id="toolsGroup">
       <h2>Tool</h2>
       <div class="row" id="tools">
         <button data-tool="wand"  class="on">🪄 Wand</button>
@@ -130,7 +140,7 @@
     </div>
 
     <!-- Selection ops -->
-    <div class="group">
+    <div class="group" id="cleanupGroup">
       <h2>Clean up the selection</h2>
       <div class="row">
         <button class="sm" id="knock">⬜→✂ Knock out white</button>
@@ -163,10 +173,21 @@
     </div>
 
     <!-- Motion -->
-    <div class="group">
+    <div class="group" id="motionGroup">
       <h2>Motion (selected mover)</h2>
       <div id="motion"></div>
       <p class="hint"><b>Angle</b> = how far it swings, <b>Speed</b> = how fast. <b>Tuck to body</b> nudges the part a few px toward the torso so the empty cut area (e.g. behind the right hand) stays hidden. Changes show live in ▶ Preview.</p>
+    </div>
+
+    <!-- Face expressions -->
+    <div class="group" id="faceGroup" style="display:none">
+      <h2>Expressions</h2>
+      <div class="row" id="exprChips"></div>
+      <div id="exprPose"></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="sm go" id="previewExpr">▶ Preview expressions</button>
+      </div>
+      <p class="hint">Pick an expression, then <b>drag a feature on the canvas</b> (or use the nudges / Rotate / Scale below) to pose it — e.g. brows <b>down&amp;in</b> = angry, brows <b>up</b> + mouth open = shocked. <b>Neutral</b> is the resting face. ▶ Preview morphs through them all. Tip: tick <b>punch</b> on each feature so its old spot doesn't ghost when it moves.</p>
     </div>
 
     <!-- Export -->
@@ -205,7 +226,17 @@ const S = {
   lasso:null,                           // in-progress lasso points (image coords)
   pointers:new Map(), pinch:null, lastPan:null, cursor:null,
   preview:false, previewT:0,            // live assembled-motion preview
+  mode:'rig',                           // 'rig' = cut + swing puppet; 'face' = expression authoring
+  expr:'neutral',                       // the expression being posed / shown
+  exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
+  faceDrag:null,                        // in-progress feature drag in face mode
 };
+// The fixed expression set (neutral is the base/identity). Each is a named POSE: per-feature offset,
+// rotate and scale relative to neutral — brows + eyelids + mouth carry the emotion.
+const EXPRS = [
+  {id:'neutral', label:'😐 Neutral'}, {id:'happy', label:'😄 Happy'}, {id:'sad', label:'😢 Sad'},
+  {id:'angry', label:'😠 Angry'},     {id:'shocked', label:'😲 Shocked'},
+];
 let nextId = 1;
 
 /* ---------- utilities ---------- */
@@ -221,7 +252,8 @@ function makeLayer(name, role){
   const color = PALETTE[S.layers.length % PALETTE.length];
   return { id:nextId++, name, role:role||'mover', punch:role!=='base', visible:true, color,
            mc, mctx:mc.getContext('2d', {willReadFrequently:true}), pivot:null,
-           swingDeg:10, speed:1, tuckX:0, tuckY:0 };   // per-mover motion: angle, speed, inward-tuck (px)
+           swingDeg:10, speed:1, tuckX:0, tuckY:0,   // per-mover motion: angle, speed, inward-tuck (px)
+           poses:{} };   // per-expression pose {dx,dy,rot,scale} keyed by expression id (face mode)
 }
 function activeLayer(){ return S.layers[S.active] || null; }
 function renderLayerList(){
@@ -252,6 +284,7 @@ function renderLayerList(){
     box.appendChild(row);
   }
   renderMotion();
+  if(typeof renderExprPose==='function') renderExprPose();
 }
 // front/back z-order: dir +1 = toward front (higher index = drawn later = on top)
 function moveLayer(i, dir){ const j=i+dir; if(j<0||j>=S.layers.length) return;
@@ -321,9 +354,11 @@ function serializeProject(){
   return { kind:'og-cutter-project', v:1, savedAt:new Date().toISOString(),
     iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId,
     image:S.src.toDataURL('image/png'),
+    mode:S.mode, expr:S.expr,
     layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch,
       visible:l.visible, color:l.color, pivot:l.pivot||null,
       swingDeg:l.swingDeg??10, speed:l.speed??1, tuckX:l.tuckX||0, tuckY:l.tuckY||0,
+      poses:l.poses||{},
       mask:l.mc.toDataURL('image/png') })) };
 }
 function saveProject(){
@@ -350,7 +385,8 @@ function restoreProject(proj, quiet){
     let pending=pls.length;
     const finish=()=>{ document.getElementById('dims').textContent=`${S.iw}×${S.ih}`;
       document.getElementById('empty').style.display='none';
-      fitView(); renderLayerList(); draw(); markDirty();
+      S.mode=proj.mode||'rig'; S.expr=proj.expr||'neutral';
+      fitView(); renderLayerList(); applyMode(); draw(); markDirty();
       if(!quiet) toast('Project opened — pick up where you left off'); };
     if(!pls.length){ finish(); return; }
     pls.forEach((pl,idx)=>{
@@ -359,7 +395,8 @@ function restoreProject(proj, quiet){
       const L={ id:pl.id||(idx+1), name:pl.name||('layer'+(idx+1)), role:pl.role||'mover',
         punch:pl.punch!==undefined?pl.punch:(pl.role!=='base'), visible:pl.visible!==false,
         color:pl.color||PALETTE[idx%PALETTE.length], mc, mctx, pivot:pl.pivot||null,
-        swingDeg:pl.swingDeg??10, speed:pl.speed??1, tuckX:pl.tuckX||0, tuckY:pl.tuckY||0 };
+        swingDeg:pl.swingDeg??10, speed:pl.speed??1, tuckX:pl.tuckX||0, tuckY:pl.tuckY||0,
+        poses:pl.poses||{} };
       S.layers[idx]=L;
       if(pl.mask){ const mi=new Image();
         mi.onload=()=>{ mctx.drawImage(mi,0,0); if(--pending===0) finish(); };
@@ -452,6 +489,7 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   if(!S.img) return;
   if(S.preview){ renderPreview(W,H); return; }
+  if(S.mode==='face'){ renderFace(W,H); return; }
   const v=S.view;
   ctx.save();
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
@@ -588,6 +626,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     S.pinch={ d:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),
       mid:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}, zoom:S.view.zoom, vx:S.view.x, vy:S.view.y }; return; }
   if(S.preview) return;                 // preview is play-only; single-finger does nothing
+  if(S.mode==='face'){ faceDown(evPos(e)); return; }   // drag a feature to pose the current expression
   const sp=evPos(e); const ip=s2i(sp.x,sp.y);
   if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); markDirty(); } return; }
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
@@ -608,6 +647,7 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
     S.view.y = mid.y - (S.pinch.mid.y - S.pinch.vy)*(nz/S.pinch.zoom);
     draw(); return; }
   if(S.preview) return;
+  if(S.mode==='face'){ if(S.faceDrag) faceMove(sp); return; }
   if(!drawing){ if(S.tool==='brush'||S.tool==='erase')draw(); return; }
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
@@ -621,6 +661,7 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
 function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
+  if(S.faceDrag){ S.faceDrag=null; markDirty(); }
   drawing=false; lastImg=null; }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
@@ -676,6 +717,7 @@ async function buildExport(){
       x:f3(pv.x/W), y:f3(pv.y/H), size:f3(box.w/W), rot:0,
       pivX:f3((pv.x-box.x)/box.w), pivY:f3((pv.y-box.y)/box.h) };
   }
+  const exprs=collectExpressions(W,H); if(Object.keys(exprs).length) rig.expressions=exprs;
   const jsonStr=JSON.stringify(rig,null,2);
   files.push({name:'rig.json', data:new TextEncoder().encode(jsonStr)});
   return {files, jsonStr};
@@ -730,6 +772,7 @@ async function buildNexumPayload(){
     }
   }
   const rig={ width:W, height:H, durationMs:2600, fps:60, layers:rigLayers };
+  const exprs=collectExpressions(W,H); if(Object.keys(exprs).length) rig.expressions=exprs;
   return { kind:'og-rig-payload', v:1, rig, images };
 }
 // Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
@@ -782,11 +825,152 @@ function zipStore(files){
   out.set(end,p); return out;
 }
 
+/* ================= FACE EXPRESSIONS =================
+   The same cut layers, but each feature (brow / eye / mouth…) carries a per-expression POSE
+   {dx,dy,rot,scale} relative to neutral. The base face stays put; features nudge/rotate/scale to
+   read as happy / sad / angry / shocked. We composite the assembled face live and can morph through
+   the whole set. Authoring is here; the exported rig.expressions is what the app will later play. */
+function poseOf(l, exprId){
+  const d={dx:0,dy:0,rot:0,scale:1};
+  if(exprId==='neutral' || !l.poses) return d;
+  const p=l.poses[exprId]; if(!p) return d;
+  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, scale:(p.scale==null?1:p.scale) };
+}
+// Rotate/scale pivot for a feature = its pinned joint if set, else the centre of its cut shape (cached).
+function featureCenter(l){
+  if(l._ctr) return l._ctr;
+  if(l.pivot){ return (l._ctr={x:l.pivot.x,y:l.pivot.y}); }
+  const box=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih));
+  return (l._ctr = box ? {x:box.x+box.w/2, y:box.y+box.h/2} : {x:S.iw/2,y:S.ih/2});
+}
+function lerpPose(a,b,f){ return { dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
+  rot:a.rot+(b.rot-a.rot)*f, scale:a.scale+(b.scale-a.scale)*f }; }
+function easeHold(f){ const t=Math.min(1,Math.max(0,(f-0.18)/0.64)); return t*t*(3-2*t); } // hold each face, smooth between
+function currentPoseFor(l){
+  if(!S.exprPreview) return poseOf(l, S.expr);
+  const n=EXPRS.length, seg=1.1, phase=S.exprT/seg;
+  const i=Math.floor(phase)%n, frac=easeHold(phase-Math.floor(phase));
+  return lerpPose(poseOf(l,EXPRS[i].id), poseOf(l,EXPRS[(i+1)%n].id), frac);
+}
+function renderFace(W,H){
+  ctx.fillStyle='#0f1326'; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.translate(S.view.x,S.view.y); ctx.scale(S.view.zoom,S.view.zoom); ctx.imageSmoothingEnabled=true;
+  for(const l of S.layers){ if(!l.visible) continue; const cut=buildCut(l); if(!cut) continue;
+    if(l.role==='base'){ ctx.drawImage(cut,0,0); continue; }
+    const p=currentPoseFor(l), c=featureCenter(l);
+    ctx.save();
+    ctx.translate(p.dx,p.dy);
+    ctx.translate(c.x,c.y); ctx.rotate(p.rot*Math.PI/180); ctx.scale(p.scale,p.scale); ctx.translate(-c.x,-c.y);
+    ctx.drawImage(cut,0,0); ctx.restore();
+  }
+  ctx.restore();
+  // outline the selected feature so it's clear what a drag moves (skip while morph-previewing)
+  if(!S.exprPreview){ const l=activeLayer();
+    if(l && l.role!=='base'){ const box=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih));
+      if(box){ const p=poseOf(l,S.expr), v=S.view;
+        ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+        ctx.strokeRect(v.x+(box.x+p.dx)*v.zoom, v.y+(box.y+p.dy)*v.zoom, box.w*v.zoom, box.h*v.zoom);
+        ctx.setLineDash([]); } } }
+  ctx.fillStyle='#ffd166'; ctx.font='14px sans-serif';
+  const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
+  ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
+    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)':'  — drag a feature to pose it')), 12, H-14);
+}
+function faceDown(sp){
+  const ip=s2i(sp.x,sp.y);
+  // select the topmost feature under the finger (accounting for its current-expression offset)
+  let hit=-1;
+  for(let i=S.layers.length-1;i>=0;i--){ const l=S.layers[i]; if(!l.visible||l.role==='base') continue;
+    const p=poseOf(l,S.expr); const x=Math.round(ip.x-p.dx), y=Math.round(ip.y-p.dy);
+    if(x<0||y<0||x>=S.iw||y>=S.ih) continue;
+    if(l.mctx.getImageData(x,y,1,1).data[3]>8){ hit=i; break; } }
+  if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
+  const l=activeLayer();
+  if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick Happy / Sad / Angry / Shocked to pose'); }
+  else if(l && l.role!=='base'){ S.faceDrag={ ip, start:poseOf(l,S.expr) }; }
+  else S.faceDrag=null;
+  draw();
+}
+function faceMove(sp){
+  const l=activeLayer(); if(!l||!S.faceDrag) return;
+  const ip=s2i(sp.x,sp.y);
+  const pose=l.poses[S.expr]||(l.poses[S.expr]={dx:0,dy:0,rot:0,scale:1});
+  pose.dx=Math.round(S.faceDrag.start.dx+(ip.x-S.faceDrag.ip.x));
+  pose.dy=Math.round(S.faceDrag.start.dy+(ip.y-S.faceDrag.ip.y));
+  renderExprPose(); draw();
+}
+function renderExprChips(){
+  const box=document.getElementById('exprChips'); if(!box) return; box.innerHTML='';
+  EXPRS.forEach(ex=>{ const b=document.createElement('button'); b.className='sm'+(ex.id===S.expr?' on':'');
+    b.textContent=ex.label; b.onclick=()=>{ S.expr=ex.id; renderExprChips(); renderExprPose(); draw(); markDirty(); };
+    box.appendChild(b); });
+}
+function renderExprPose(){
+  const box=document.getElementById('exprPose'); if(!box) return;
+  if(S.mode!=='face'){ box.innerHTML=''; return; }
+  if(S.expr==='neutral'){ box.innerHTML='<p class="hint"><b>Neutral</b> is the resting face — pick Happy / Sad / Angry / Shocked above, then pose each feature.</p>'; return; }
+  const l=activeLayer();
+  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Select a <b>feature</b> (a mover: brow / eye / mouth) in the Layers list — or tap it on the canvas — then drag it or use the controls below.</p>'; return; }
+  const p=poseOf(l,S.expr);
+  box.innerHTML=`
+    <div class="mrow"><label>${l.name} · move</label>
+      <span class="nudge"><button class="mini pL">◀</button><button class="mini pU">▲</button><button class="mini pD">▼</button><button class="mini pR">▶</button></span>
+      <button class="mini pRst" title="reset this feature to neutral">⟲</button><span class="mval pOff">${p.dx|0},${p.dy|0}</span></div>
+    <div class="mrow"><label>Rotate</label><input type="range" class="pRot" min="-45" max="45" step="1" value="${p.rot}"><span class="mval">${p.rot|0}°</span></div>
+    <div class="mrow"><label>Scale</label><input type="range" class="pScl" min="0.5" max="1.6" step="0.05" value="${p.scale}"><span class="mval">${(+p.scale).toFixed(2)}×</span></div>`;
+  const getp=()=> l.poses[S.expr]||(l.poses[S.expr]={dx:0,dy:0,rot:0,scale:1});
+  const upd=()=>{ box.querySelector('.pOff').textContent=`${(l.poses[S.expr]?.dx||0)|0},${(l.poses[S.expr]?.dy||0)|0}`; draw(); markDirty(); };
+  const STEP=6;
+  box.querySelector('.pL').onclick=()=>{ getp().dx-=STEP; upd(); };
+  box.querySelector('.pR').onclick=()=>{ getp().dx+=STEP; upd(); };
+  box.querySelector('.pU').onclick=()=>{ getp().dy-=STEP; upd(); };
+  box.querySelector('.pD').onclick=()=>{ getp().dy+=STEP; upd(); };
+  box.querySelector('.pRst').onclick=()=>{ if(l.poses) delete l.poses[S.expr]; renderExprPose(); draw(); markDirty(); };
+  box.querySelector('.pRot').oninput=e=>{ getp().rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
+  box.querySelector('.pScl').oninput=e=>{ getp().scale=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+}
+let exprRAF=0, exprStart=0;
+function setExprPreview(on){
+  S.exprPreview=on; const btn=document.getElementById('previewExpr');
+  if(on){ if(!S.img){ toast('Cut a face first'); S.exprPreview=false; return; }
+    S.layers.forEach(l=>{ l._cut=null; });
+    if(btn){ btn.classList.add('on'); btn.textContent='■ Stop preview'; }
+    exprStart=0; const loop=(ts)=>{ if(!S.exprPreview) return; if(!exprStart) exprStart=ts;
+      S.exprT=(ts-exprStart)/1000; draw(); exprRAF=requestAnimationFrame(loop); };
+    exprRAF=requestAnimationFrame(loop); toast('Morphing through the expressions…');
+  } else { if(exprRAF) cancelAnimationFrame(exprRAF); exprRAF=0;
+    if(btn){ btn.classList.remove('on'); btn.textContent='▶ Preview expressions'; } draw(); }
+}
+function applyMode(){
+  const face=S.mode==='face';
+  document.querySelectorAll('#modeSw button').forEach(b=>b.classList.toggle('on', b.dataset.mode===S.mode));
+  const show=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display=on?'':'none'; };
+  show('toolsGroup', !face); show('cleanupGroup', !face); show('motionGroup', !face); show('faceGroup', face);
+  if(S.preview) setPreview(false);
+  if(!face && S.exprPreview) setExprPreview(false);
+  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; });   // rebuild cut images / centres for the new view
+  if(face){ renderExprChips(); renderExprPose(); }
+  draw();
+}
+// the pose rows for happy/sad/angry/shocked, normalized (dx/W, dy/H), for export
+function collectExpressions(W,H){
+  const out={};
+  for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
+    for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
+      const dx=p.dx||0, dy=p.dy||0, rot=p.rot||0, scale=(p.scale==null?1:p.scale);
+      if(dx||dy||rot||scale!==1) list.push({ id:sanitize(l.name), dx:f3(dx/W), dy:f3(dy/H), rot, scale:f3(scale) }); }
+    if(list.length) out[ex.id]=list; }
+  return out;
+}
+document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
+document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
+
 /* ---------- boot ---------- */
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+applyMode();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore };
+window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS };
 </script>
 </body>
 </html>
