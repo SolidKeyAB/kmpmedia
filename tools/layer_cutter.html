@@ -187,17 +187,21 @@
       <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
         <span style="font-size:11px;color:var(--dim)">Edit:</span>
         <button class="sm on" data-edit="box">▦ Box (whole part)</button>
-        <button class="sm" data-edit="warp">🫳 Warp a point</button>
+        <button class="sm" data-edit="warp">🫠 Warp an area</button>
       </div>
-      <div class="mrow" id="warpRadRow" style="display:none">
-        <label>Warp radius</label>
-        <input type="range" id="warpRad" min="15" max="220" step="5" value="60"><span class="mval" id="warpRadVal">60</span>
-        <button class="mini" id="warpReset" title="reset the warp on this feature">⟲</button>
+      <div id="warpTools" style="display:none; margin-top:6px;">
+        <div class="row" style="align-items:center; gap:8px;">
+          <span style="font-size:11px;color:var(--dim)">Tool:</span>
+          <button class="sm on" data-warptool="region">⭕ Region</button>
+          <button class="sm" data-warptool="point">📍 Point</button>
+          <button class="mini" id="warpClear" title="remove all warp on this feature" style="margin-left:auto">⟲ clear</button>
+        </div>
+        <div id="warpPanel"></div>
       </div>
       <div class="row" style="margin-top:8px;">
         <button class="sm go" id="previewExpr">▶ Preview expressions</button>
       </div>
-      <p class="hint">Pick an expression, then pose it. <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫳 Warp a point</b> drops a grid on the part — <b>drag any point</b> to stretch just there (small <b>radius</b> = one point; bigger = pull a wider area, e.g. the eye). <b>Neutral</b> is the resting face. ▶ Preview morphs through them all. Tip: tick <b>punch</b> so a feature's old spot doesn't ghost when it moves.</p>
+      <p class="hint">Pick an expression, then pose it. <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>punch</b> so a feature's old spot doesn't ghost when it moves.</p>
     </div>
 
     <!-- Export -->
@@ -240,12 +244,14 @@ const S = {
   expr:'neutral',                       // the expression being posed / shown
   exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
   faceDrag:null,                        // in-progress feature drag in face mode
-  faceWarp:false,                       // face edit sub-mode: false = affine box, true = local mesh warp
-  warpRadius:60,                        // warp point influence radius (image px): small = stretch one point, big = move/scale an area
-  warpDrag:null,                        // in-progress warp-node drag
+  faceWarp:false,                       // face edit sub-mode: false = affine box, true = local warp
+  warpTool:'region',                    // 'region' = circle zoom/rotate an area · 'point' = pull a spot
+  warpRadius:60,                        // default reach (image px) for a new point / region feather
+  warpSel:null,                         // the currently selected warp operator (for the side panel)
+  warpDrag:null,                        // in-progress warp gesture {op, mode, ...}
 };
-// A warp mesh is a WARP_COLS×WARP_ROWS grid of cells (so (COLS+1)×(ROWS+1) nodes) over a feature's box.
-const WARP_COLS=4, WARP_ROWS=4;
+const WARP_COLS=4, WARP_ROWS=4;         // legacy 5×5 grid — only used to migrate old grid-warps to points
+const WARP_MESH=10;                     // render mesh density (cells per side) for a warped feature
 // The fixed expression set (neutral is the base/identity). Each is a named POSE: per-feature offset,
 // rotate and scale relative to neutral — brows + eyelids + mouth carry the emotion.
 const EXPRS = [
@@ -287,7 +293,7 @@ function renderLayerList(){
       <button class="mini dn" title="send back (toward back)" ${i===0?'disabled':''}>▼</button>
       <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
       <button class="mini del danger" title="delete">🗑</button>`;
-    row.onclick=(e)=>{ if(e.target.closest('input,select,button'))return; S.active=i; renderLayerList(); draw(); };
+    row.onclick=(e)=>{ if(e.target.closest('input,select,button'))return; S.active=i; S.warpSel=null; renderLayerList(); draw(); };
     row.querySelector('.nm').onchange=e=>{ l.name=e.target.value; markDirty(); };
     row.querySelector('.role').onchange=e=>{ l.role=e.target.value; l.punch=(l.role!=='base'); renderLayerList(); markDirty(); };
     row.querySelector('.pn').onchange=e=>{ l.punch=e.target.checked; markDirty(); };
@@ -300,6 +306,7 @@ function renderLayerList(){
   }
   renderMotion();
   if(typeof renderExprPose==='function') renderExprPose();
+  if(typeof renderWarpPanel==='function') renderWarpPanel();
 }
 // front/back z-order: dir +1 = toward front (higher index = drawn later = on top)
 function moveLayer(i, dir){ const j=i+dir; if(j<0||j>=S.layers.length) return;
@@ -531,16 +538,27 @@ function draw(){
     ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,S.brush*v.zoom/2,0,7); ctx.stroke(); }
 }
 
-/* ---------- mask editing (canvas-op based) ---------- */
-function snap(l){ return {id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
-function pushUndo(){ const l=activeLayer(); if(!l)return;
-  S.undo.push(snap(l)); if(S.undo.length>40) S.undo.shift();
-  S.redo.length=0; markDirty(); }       // a new action forks history → clear redo (+ autosave)
+/* ---------- history: one timeline covering BOTH mask edits and expression poses ----------
+   Entry is either {k:'mask', id, data} or {k:'pose', id, expr, pose} (pose = pre-change clone | null). */
+function snap(l){ return {k:'mask', id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
+function clonePose(p){ return p ? JSON.parse(JSON.stringify(p)) : null; }
+function snapPose(l, expr){ return {k:'pose', id:l.id, expr, pose:clonePose(l.poses&&l.poses[expr])}; }
+function pushHist(entry){ S.undo.push(entry); if(S.undo.length>60) S.undo.shift(); S.redo.length=0; markDirty(); }
+function pushUndo(){ const l=activeLayer(); if(!l)return; pushHist(snap(l)); }   // mask edit (brush/wand/…)
+function pushPoseUndo(l, expr){ if(l) pushHist(snapPose(l, expr)); }             // expression/warp edit
 function restoreFrom(fromStack, toStack, verb){
   const u=fromStack.pop(); if(!u){ toast('Nothing to '+verb); return; }
   const l=S.layers.find(x=>x.id===u.id); if(!l){ toast('Layer gone'); return; }
-  toStack.push(snap(l));                // save current so the inverse can bring it back
-  l.mctx.putImageData(u.data,0,0); S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
+  if(u.k==='pose'){
+    toStack.push(snapPose(l, u.expr));                     // save current pose so the inverse restores it
+    if(u.pose) l.poses[u.expr]=clonePose(u.pose); else if(l.poses) delete l.poses[u.expr];
+    S.active=S.layers.indexOf(l); S.warpSel=null; S.warpDrag=null; S.faceDrag=null;
+    if(u.expr!==S.expr){ S.expr=u.expr; if(typeof renderExprChips==='function') renderExprChips(); }
+    l._cut=null; renderLayerList(); if(typeof renderExprPose==='function') renderExprPose();
+    if(typeof renderWarpPanel==='function') renderWarpPanel(); draw(); toast(verb==='undo'?'Undo':'Redo'); return;
+  }
+  toStack.push(snap(l));                                   // save current mask so the inverse restores it
+  l.mctx.putImageData(u.data,0,0); l._cut=null; S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
 }
 function doUndo(){ restoreFrom(S.undo, S.redo, 'undo'); }
 function doRedo(){ restoreFrom(S.redo, S.undo, 'redo'); }
@@ -677,7 +695,13 @@ function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
   if(S.faceDrag){ S.faceDrag=null; markDirty(); }
-  if(S.warpDrag){ S.warpDrag=null; markDirty(); }
+  if(S.warpDrag){ const wd=S.warpDrag; S.warpDrag=null;
+    if(wd.mode==='draw' && wd.op && wd.op.r<5){                 // a tiny region = an accidental tap → drop it
+      const ops=wd.layer.poses[S.expr]&&wd.layer.poses[S.expr].warp; const i=ops?ops.indexOf(wd.op):-1;
+      if(i>=0){ ops.splice(i,1); if(S.warpSel===wd.op) S.warpSel=null; }
+      S.undo.pop(); renderWarpPanel(); draw();                  // undo the snapshot we took for the create
+    } else markDirty();
+  }
   drawing=false; lastImg=null; }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
@@ -882,29 +906,40 @@ function hitHandle(l, sp){ const hs=partHandles(l), v=S.view;
     if(Math.hypot(sp.x-(v.x+ix*v.zoom), sp.y-(v.y+iy*v.zoom))<=12) return k; }
   return null;
 }
-/* ---- local mesh warp: deform POINTS / sub-regions of one feature (not the whole part) ----
-   A feature carries, per expression, an optional pose.warp = array of per-node {x,y} displacements
-   (image px) over a fixed grid of its box. Rendering maps the feature's cut from the rest grid to
-   restNode→affine(restNode)+warp[node] via per-triangle texture mapping, so the warp composes with
-   the affine box. Dragging a node pushes it + its neighbours (smooth falloff over warpRadius). */
-function warpRestNodes(l){
+/* ---- local warp: deform a sub-AREA or a POINT of one feature (not the whole part) ----
+   A feature carries, per expression, pose.warp = a list of OPERATORS; their displacement fields sum
+   and compose on top of the affine box pose:
+     {t:'rgn', cx,cy, r, feather, scale, rot}   a circle: zoom/rotate the content inside, feathered to 0 by r+feather
+     {t:'pin', ax,ay, dx,dy, r}                 a point at (ax,ay) pulled by (dx,dy), radial falloff r
+   Operator coords live in the DISPLAYED (posed) image space — what she sees. Rendering displaces a fine
+   mesh over the feature box by the field, then per-triangle texture-maps the cut. All px while authoring;
+   export normalizes. A plain affine draw is used when there are no operators. */
+function warpRestNodes(l){            // 5×5 grid — only used to migrate the old grid-warp format to points
   if(l._rest) return l._rest;
   const b=featureBox(l), nodes=[];
   for(let j=0;j<=WARP_ROWS;j++) for(let i=0;i<=WARP_COLS;i++)
     nodes.push({x:b.x+b.w*i/WARP_COLS, y:b.y+b.h*j/WARP_ROWS});
   return (l._rest=nodes);
 }
-function ensureWarp(l, exprId){ const p=ensurePose(l,exprId);
-  if(!p.warp){ const N=(WARP_COLS+1)*(WARP_ROWS+1); p.warp=[]; for(let k=0;k<N;k++) p.warp.push({x:0,y:0}); }
-  return p.warp; }
 // map an image-space point through the feature's affine pose (same order as renderFace: scale→rotate→+d)
 function affinePt(p, pose, c){
   const x=(p.x-c.x)*pose.sx, y=(p.y-c.y)*pose.sy, a=pose.rot*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
   return { x:c.x + (x*cs - y*sn) + pose.dx, y:c.y + (x*sn + y*cs) + pose.dy };
 }
-// posed position of every grid node = affine(rest) + warp displacement
-function posedNodes(l, pose, c){ const rest=warpRestNodes(l), w=pose.warp;
-  return rest.map((p,i)=>{ const a=affinePt(p,pose,c); if(w&&w[i]){ a.x+=w[i].x; a.y+=w[i].y; } return a; }); }
+function bump(t){ if(t>=1) return 0; const u=1-t*t; return u*u; }   // 1 at centre → 0 at edge, smooth
+// displacement contributed by ONE operator at (image) point (x,y)
+function opDisp(op, x, y){
+  if(op.t==='rgn'){
+    const dx=x-op.cx, dy=y-op.cy, d=Math.hypot(dx,dy), inner=op.r, outer=op.r+(op.feather||0);
+    let w; if(d<=inner) w=1; else if(d>=outer) return [0,0]; else w=bump((d-inner)/Math.max(1,outer-inner));
+    const s=(op.scale==null?1:op.scale), a=(op.rot||0)*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+    const rx=dx*s*cs - dy*s*sn, ry=dx*s*sn + dy*s*cs;
+    return [ (op.cx+rx-x)*w, (op.cy+ry-y)*w ];
+  }
+  const g=bump(Math.hypot(x-op.ax, y-op.ay)/Math.max(1,op.r));
+  return [ (op.dx||0)*g, (op.dy||0)*g ];
+}
+function fieldDisp(ops, x, y){ let ax=0, ay=0; for(let i=0;i<ops.length;i++){ const d=opDisp(ops[i],x,y); ax+=d[0]; ay+=d[1]; } return [ax,ay]; }
 // draw source triangle s[0..2] (image coords in `cut`) onto dest triangle d[0..2]; tiny outward pad kills seams
 function texTri(img, s, d){
   const cx=(d[0].x+d[1].x+d[2].x)/3, cy=(d[0].y+d[1].y+d[2].y)/3, PAD=0.6;
@@ -917,26 +952,52 @@ function texTri(img, s, d){
     const e=u0-a*x0-c*y0, f=v0-b*x0-dC*y0; ctx.transform(a,b,c,dC,e,f); ctx.drawImage(img,0,0); }
   ctx.restore();
 }
-// render a feature's cut warped by (affine pose + mesh). Identical to a plain affine draw when warp is empty.
+// render a feature's cut: affine box pose, then warp ops via a fine mesh. No ops → fast direct affine draw.
 function drawWarpedFeature(cut, pose, c, l){
-  const rest=warpRestNodes(l), dst=posedNodes(l,pose,c), NC=WARP_COLS+1, id=(i,j)=>j*NC+i;
-  for(let j=0;j<WARP_ROWS;j++) for(let i=0;i<WARP_COLS;i++){
-    const a=id(i,j), b=id(i+1,j), c2=id(i,j+1), d2=id(i+1,j+1);
-    texTri(cut, [rest[a],rest[b],rest[d2]], [dst[a],dst[b],dst[d2]]);
-    texTri(cut, [rest[a],rest[d2],rest[c2]], [dst[a],dst[d2],dst[c2]]);
+  const ops=pose.warp;
+  if(!ops || !ops.length){
+    ctx.save(); ctx.translate(pose.dx,pose.dy);
+    ctx.translate(c.x,c.y); ctx.rotate(pose.rot*Math.PI/180); ctx.scale(pose.sx,pose.sy); ctx.translate(-c.x,-c.y);
+    ctx.drawImage(cut,0,0); ctx.restore(); return;
+  }
+  const b=featureBox(l), N=WARP_MESH, NC=N+1, id=(i,j)=>j*NC+i, V=[];
+  for(let j=0;j<=N;j++) for(let i=0;i<=N;i++){
+    const rx=b.x+b.w*i/N, ry=b.y+b.h*j/N, p=affinePt({x:rx,y:ry},pose,c), f=fieldDisp(ops,p.x,p.y);
+    V.push({ s:{x:rx,y:ry}, d:{x:p.x+f[0], y:p.y+f[1]} });
+  }
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const a=V[id(i,j)], b2=V[id(i+1,j)], c2=V[id(i,j+1)], d2=V[id(i+1,j+1)];
+    texTri(cut, [a.s,b2.s,d2.s], [a.d,b2.d,d2.d]);
+    texTri(cut, [a.s,d2.s,c2.s], [a.d,d2.d,c2.d]);
   }
 }
-function hitWarpNode(l, sp){ const pose=poseOf(l,S.expr), c=featureCenter(l), dst=posedNodes(l,pose,c), v=S.view;
-  let best=-1, bd=18*18;
-  for(let n=0;n<dst.length;n++){ const dx=sp.x-(v.x+dst[n].x*v.zoom), dy=sp.y-(v.y+dst[n].y*v.zoom); const d=dx*dx+dy*dy;
-    if(d<bd){ bd=d; best=n; } }
-  return best; }
+// an operator's grab handle in displayed image space (pin → its pulled tip; region → its centre)
+function opHandle(op){ return op.t==='rgn' ? {x:op.cx, y:op.cy} : {x:op.ax+(op.dx||0), y:op.ay+(op.dy||0)}; }
+// topmost operator whose handle (or region ring) is under the finger (screen pos sp); -1 if none
+function hitWarpOp(l, sp){ const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[], v=S.view;
+  for(let i=ops.length-1;i>=0;i--){ const h=opHandle(ops[i]);
+    if(Math.hypot(sp.x-(v.x+h.x*v.zoom), sp.y-(v.y+h.y*v.zoom))<=16) return i; }
+  return -1; }
+// migrate a feature's legacy grid-warp ({x,y}[] over the 5×5 grid) → point operators
+function migrateWarp(l, exprId){ const p=l.poses&&l.poses[exprId]; if(!p||!p.warp||!p.warp.length) return;
+  if(p.warp[0] && p.warp[0].t) return;                 // already operators
+  const rest=warpRestNodes(l), b=featureBox(l), r=Math.max(30, Math.min(b.w,b.h)/2), ops=[];
+  p.warp.forEach((d,i)=>{ if(d && (d.x||d.y) && rest[i]) ops.push({t:'pin', ax:rest[i].x, ay:rest[i].y, dx:d.x, dy:d.y, r}); });
+  p.warp = ops;
+}
+function migrateAllWarp(){ for(const l of S.layers){ if(!l.poses) continue; for(const id in l.poses) migrateWarp(l, id); } }
 function lerpPose(a,b,f){ const o={ dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
   rot:a.rot+(b.rot-a.rot)*f, sx:a.sx+(b.sx-a.sx)*f, sy:a.sy+(b.sy-a.sy)*f };
-  if(a.warp||b.warp){ const N=(WARP_COLS+1)*(WARP_ROWS+1); o.warp=[];
-    for(let k=0;k<N;k++){ const wa=(a.warp&&a.warp[k])||{x:0,y:0}, wb=(b.warp&&b.warp[k])||{x:0,y:0};
-      o.warp.push({x:wa.x+(wb.x-wa.x)*f, y:wa.y+(wb.y-wa.y)*f}); } }
+  // warp operator lists aren't linearly blendable → cross-fade their effect by scaling op strength
+  const wa=a.warp&&a.warp.length?a.warp:null, wb=b.warp&&b.warp.length?b.warp:null;
+  if(wa||wb){ o.warp=[];
+    if(wa) for(const op of wa) o.warp.push(scaleOp(op, 1-f));
+    if(wb) for(const op of wb) o.warp.push(scaleOp(op, f)); }
   return o; }
+// a copy of an operator at reduced strength (f in 0..1) — used only for morph-preview cross-fades
+function scaleOp(op, f){ if(op.t==='rgn') return { t:'rgn', cx:op.cx, cy:op.cy, r:op.r, feather:op.feather,
+    scale:1+((op.scale==null?1:op.scale)-1)*f, rot:(op.rot||0)*f };
+  return { t:'pin', ax:op.ax, ay:op.ay, dx:(op.dx||0)*f, dy:(op.dy||0)*f, r:op.r }; }
 function easeHold(f){ const t=Math.min(1,Math.max(0,(f-0.18)/0.64)); return t*t*(3-2*t); } // hold each face, smooth between
 function currentPoseFor(l){
   if(!S.exprPreview) return poseOf(l, S.expr);
@@ -953,17 +1014,29 @@ function renderFace(W,H){
     drawWarpedFeature(cut, p, c, l);
   }
   ctx.restore();
-  // the selected feature's TRANSFORM BOX + handles (corners = zoom, sides = stretch W, top/bottom = stretch H,
-  // drag the middle = move). Skipped while morph-previewing or on the neutral/base face.
+  // overlay for the selected feature — warp operators (circles / points) or the affine transform box.
+  // Skipped while morph-previewing or on the neutral/base face.
   if(!S.exprPreview && S.expr!=='neutral'){ const l=activeLayer();
     if(l && l.role!=='base' && l.visible){ const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
-      if(S.faceWarp){                                   // mesh-warp overlay: draggable grid of points
-        const pose=poseOf(l,S.expr), c=featureCenter(l), dst=posedNodes(l,pose,c), NC=WARP_COLS+1;
-        ctx.strokeStyle='rgba(90,209,196,.45)'; ctx.lineWidth=1;
-        for(let j=0;j<=WARP_ROWS;j++){ ctx.beginPath(); for(let i=0;i<=NC-1;i++){ const [x,y]=sc(dst[j*NC+i].x,dst[j*NC+i].y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); }
-        for(let i=0;i<=WARP_COLS;i++){ ctx.beginPath(); for(let j=0;j<=WARP_ROWS;j++){ const [x,y]=sc(dst[j*NC+i].x,dst[j*NC+i].y); j?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); }
-        for(let n=0;n<dst.length;n++){ const [x,y]=sc(dst[n].x,dst[n].y); const grabbed=S.warpDrag&&S.warpDrag.node===n;
-          ctx.fillStyle=grabbed?'#ffd166':'#5ad1c4'; ctx.beginPath(); ctx.arc(x,y,grabbed?6:3.5,0,7); ctx.fill(); }
+      if(S.faceWarp){                                   // warp overlay: region circles + point pins
+        const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+        for(const op of ops){ const seld=(op===S.warpSel);
+          if(op.t==='rgn'){
+            const [cx,cy]=sc(op.cx,op.cy); ctx.lineWidth=seld?2:1.4;
+            ctx.strokeStyle=seld?'#ffd166':'#5ad1c4'; ctx.setLineDash([5,4]);
+            ctx.beginPath(); ctx.arc(cx,cy,op.r*v.zoom,0,7); ctx.stroke();
+            if(op.feather){ ctx.setLineDash([2,4]); ctx.strokeStyle='rgba(90,209,196,.35)';
+              ctx.beginPath(); ctx.arc(cx,cy,(op.r+op.feather)*v.zoom,0,7); ctx.stroke(); }
+            ctx.setLineDash([]); ctx.fillStyle=seld?'#ffd166':'#5ad1c4';
+            ctx.beginPath(); ctx.arc(cx,cy,4,0,7); ctx.fill();
+          } else {
+            const [ax,ay]=sc(op.ax,op.ay), [hx,hy]=sc(op.ax+(op.dx||0), op.ay+(op.dy||0));
+            ctx.strokeStyle='rgba(90,209,196,.5)'; ctx.lineWidth=1.4;
+            ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(hx,hy); ctx.stroke();
+            ctx.strokeStyle='rgba(90,209,196,.35)'; ctx.beginPath(); ctx.arc(ax,ay,op.r*v.zoom,0,7); ctx.stroke();
+            ctx.fillStyle='rgba(90,209,196,.6)'; ctx.beginPath(); ctx.arc(ax,ay,2.5,0,7); ctx.fill();
+            ctx.fillStyle=seld?'#ffd166':'#5ad1c4'; ctx.beginPath(); ctx.arc(hx,hy,seld?6:4,0,7); ctx.fill();
+          } }
       } else {                                          // affine transform box (whole part)
         const hs=partHandles(l);
         const [lx,ty]=sc(hs.L,hs.T), [rx,by]=sc(hs.R,hs.B);
@@ -976,7 +1049,8 @@ function renderFace(W,H){
   const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
   ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
     :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)'
-      :(S.faceWarp?'  — drag a grid point to stretch it (radius sets how wide)'
+      :(S.faceWarp?(S.warpTool==='region'?'  — drag a circle over an area, then Zoom / Rotate it'
+                                          :'  — tap to drop a point, drag to pull it')
                   :'  — drag to move · pull the handles to stretch / zoom'))), 12, H-14);
 }
 // find the topmost non-base feature whose (offset) alpha is under the finger
@@ -990,48 +1064,59 @@ function pickFeature(ip){
 function faceDown(sp){
   const ip=s2i(sp.x,sp.y);
   const sel=activeLayer();
-  // ---- WARP mode: grab a grid point of the selected feature and stretch it locally ----
+  // ---- WARP mode: region circle (zoom/rotate an area) or point pull ----
   if(S.faceWarp){
     if(S.expr==='neutral'){ toast('Pick an expression to warp'); return; }
-    if(sel && sel.role!=='base' && sel.visible){
-      const n=hitWarpNode(sel, sp);
-      if(n>=0){ ensureWarp(sel,S.expr);
-        S.warpDrag={ layer:sel, node:n, downImg:ip, restGrab:warpRestNodes(sel)[n],
-          startWarp:ensureWarp(sel,S.expr).map(d=>({x:d.x,y:d.y})) };
-        draw(); return; }
+    let l=sel;
+    if(!l || l.role==='base'){ const hit=pickFeature(ip); if(hit>=0){ S.active=hit; S.warpSel=null; renderLayerList(); l=activeLayer(); } }
+    if(!l || l.role==='base'){ draw(); return; }
+    const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+    // 1) grab an existing operator's handle (pin tip / region centre)? → drag it (snapshot lazily on move)
+    const oi=hitWarpOp(l, sp);
+    if(oi>=0){ const op=ops[oi]; S.warpSel=op;
+      S.warpDrag=(op.t==='rgn') ? { layer:l, op, mode:'move', grab:{x:ip.x-op.cx, y:ip.y-op.cy}, snapped:false }
+                                : { layer:l, op, mode:'pull', snapped:false };
+      renderWarpPanel(); draw(); return; }
+    // 2) on the selected region's ring → resize it
+    if(S.warpTool==='region' && S.warpSel && S.warpSel.t==='rgn' && ops.indexOf(S.warpSel)>=0){
+      const op=S.warpSel, dR=Math.abs(Math.hypot(ip.x-op.cx, ip.y-op.cy)-op.r);
+      if(dR*S.view.zoom<=14){ S.warpDrag={ layer:l, op, mode:'resize', snapped:false }; draw(); return; }
     }
-    // no node near the finger → (re)select the feature under it so its grid shows
-    const hit=pickFeature(ip); if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
-    S.warpDrag=null; draw();
-    if(activeLayer() && activeLayer().role!=='base') toast('Drag a grid point to stretch — bigger radius pulls a wider area');
-    return;
+    // 3) else create a NEW operator at the finger (adding it IS the change → snapshot now)
+    const p=ensurePose(l,S.expr); if(!p.warp) p.warp=[]; pushPoseUndo(l,S.expr);
+    const op = (S.warpTool==='region')
+      ? {t:'rgn', cx:ip.x, cy:ip.y, r:1, feather:Math.max(8,Math.round(S.warpRadius*0.6)), scale:1, rot:0}
+      : {t:'pin', ax:ip.x, ay:ip.y, dx:0, dy:0, r:S.warpRadius};
+    p.warp.push(op); S.warpSel=op;
+    S.warpDrag={ layer:l, op, mode:(S.warpTool==='region'?'draw':'pull'), snapped:true };
+    renderWarpPanel(); draw(); return;
   }
   // ---- BOX mode (affine whole-part) ----
   // 1) a transform handle of the already-selected feature? → start that stretch/zoom
   if(S.expr!=='neutral' && sel && sel.role!=='base' && sel.visible){
     const h=hitHandle(sel, sp);
-    if(h){ S.faceDrag={ mode:h, ip, start:poseOf(sel,S.expr), c:featureCenter(sel), box:featureBox(sel) }; draw(); return; }
+    if(h){ S.faceDrag={ mode:h, ip, start:poseOf(sel,S.expr), c:featureCenter(sel), box:featureBox(sel), snapped:false }; draw(); return; }
   }
   // 2) else select the topmost feature under the finger (accounting for its current-expression offset)
   const hit=pickFeature(ip);
   if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
   const l=activeLayer();
   if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick an expression to pose'); }
-  else if(l && l.role!=='base'){ S.faceDrag={ mode:'move', ip, start:poseOf(l,S.expr), c:featureCenter(l), box:featureBox(l) }; }
+  else if(l && l.role!=='base'){ S.faceDrag={ mode:'move', ip, start:poseOf(l,S.expr), c:featureCenter(l), box:featureBox(l), snapped:false }; }
   else S.faceDrag=null;
   draw();
 }
-function warpMove(sp){ const wd=S.warpDrag; if(!wd) return; const l=wd.layer;
-  const ip=s2i(sp.x,sp.y), rest=warpRestNodes(l), w=ensureWarp(l,S.expr);
-  const dfx=ip.x-wd.downImg.x, dfy=ip.y-wd.downImg.y, R=Math.max(1,S.warpRadius);
-  for(let n=0;n<w.length;n++){                         // smooth bump falloff: 1 at the grabbed node → 0 at radius
-    const d=Math.hypot(rest[n].x-wd.restGrab.x, rest[n].y-wd.restGrab.y), t=d/R, g=t>=1?0:(1-t*t)*(1-t*t);
-    w[n].x=wd.startWarp[n].x+dfx*g; w[n].y=wd.startWarp[n].y+dfy*g; }
-  draw(); markDirty();
+function warpMove(sp){ const wd=S.warpDrag; if(!wd) return; const op=wd.op, ip=s2i(sp.x,sp.y);
+  if(!wd.snapped){ pushPoseUndo(wd.layer,S.expr); wd.snapped=true; }   // snapshot once, on first real move
+  if(op.t==='pin'){ op.dx=Math.round(ip.x-op.ax); op.dy=Math.round(ip.y-op.ay); }
+  else if(wd.mode==='move'){ op.cx=Math.round(ip.x-wd.grab.x); op.cy=Math.round(ip.y-wd.grab.y); }
+  else { op.r=Math.max(2, Math.round(Math.hypot(ip.x-op.cx, ip.y-op.cy))); }   // draw or resize
+  renderWarpPanel(); draw(); markDirty();
 }
 function faceMove(sp){
   const l=activeLayer(); const fd=S.faceDrag; if(!l||!fd) return;
   const ip=s2i(sp.x,sp.y), c=fd.c, b=fd.box, start=fd.start;
+  if(!fd.snapped){ pushPoseUndo(l,S.expr); fd.snapped=true; }   // snapshot once, on first real move
   const pose=ensurePose(l,S.expr);
   const clamp=v=>Math.max(0.15,Math.min(5, Math.abs(v)));
   if(fd.mode==='move'){
@@ -1069,15 +1154,51 @@ function renderExprPose(){
     <div class="mrow"><label>Rotate</label><input type="range" class="pRot" min="-45" max="45" step="1" value="${p.rot}"><span class="mval">${p.rot|0}°</span></div>`;
   const getp=()=>ensurePose(l,S.expr);
   const upd=()=>{ const q=poseOf(l,S.expr); box.querySelector('.pOff').textContent=`${q.dx|0},${q.dy|0}`; draw(); markDirty(); };
-  const STEP=6;
-  box.querySelector('.pL').onclick=()=>{ getp().dx-=STEP; upd(); };
-  box.querySelector('.pR').onclick=()=>{ getp().dx+=STEP; upd(); };
-  box.querySelector('.pU').onclick=()=>{ getp().dy-=STEP; upd(); };
-  box.querySelector('.pD').onclick=()=>{ getp().dy+=STEP; upd(); };
-  box.querySelector('.pRst').onclick=()=>{ if(l.poses) delete l.poses[S.expr]; renderExprPose(); draw(); markDirty(); };
+  const STEP=6, nudge=fn=>{ pushPoseUndo(l,S.expr); fn(); upd(); };
+  box.querySelector('.pL').onclick=()=>nudge(()=>getp().dx-=STEP);
+  box.querySelector('.pR').onclick=()=>nudge(()=>getp().dx+=STEP);
+  box.querySelector('.pU').onclick=()=>nudge(()=>getp().dy-=STEP);
+  box.querySelector('.pD').onclick=()=>nudge(()=>getp().dy+=STEP);
+  box.querySelector('.pRst').onclick=()=>{ pushPoseUndo(l,S.expr); if(l.poses) delete l.poses[S.expr]; S.warpSel=null; renderExprPose(); renderWarpPanel(); draw(); };
+  // sliders: snapshot once at the start of the drag so one slider-drag = one undo step
+  ['pSx','pSy','pRot'].forEach(cls=>box.querySelector('.'+cls).addEventListener('pointerdown',()=>pushPoseUndo(l,S.expr)));
   box.querySelector('.pSx').oninput=e=>{ getp().sx=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
   box.querySelector('.pSy').oninput=e=>{ getp().sy=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
   box.querySelector('.pRot').oninput=e=>{ getp().rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
+}
+// the selected warp operator's controls (region: zoom/rotate/feather · point: reach) + delete
+function renderWarpPanel(){
+  const box=document.getElementById('warpPanel'); if(!box) return;
+  if(S.mode!=='face' || !S.faceWarp){ box.innerHTML=''; return; }
+  const l=activeLayer();
+  if(S.expr==='neutral'){ box.innerHTML='<p class="hint">Pick an expression first (Happy / Sad …), then warp.</p>'; return; }
+  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Tap a feature (eye / brow / mouth) to warp it.</p>'; return; }
+  const op=S.warpSel, ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+  if(!op || ops.indexOf(op)<0){
+    box.innerHTML=`<p class="hint">${S.warpTool==='region'
+      ? '<b>Drag a circle</b> over an area (e.g. the eye), then Zoom / Rotate it here. Drag its centre to move the circle, its edge to resize.'
+      : '<b>Tap</b> on the part to drop a point, then drag it to pull. Tap an existing point to edit it.'}</p>`;
+    return; }
+  const del=`<button class="mini danger wDel" title="delete this ${op.t==='rgn'?'region':'point'}">🗑</button>`;
+  if(op.t==='rgn'){
+    box.innerHTML=`
+      <div class="mrow"><label>Zoom</label><input type="range" class="wScale" min="0.3" max="2.5" step="0.02" value="${op.scale==null?1:op.scale}"><span class="mval">${(+(op.scale==null?1:op.scale)).toFixed(2)}×</span></div>
+      <div class="mrow"><label>Rotate</label><input type="range" class="wRot" min="-60" max="60" step="1" value="${op.rot||0}"><span class="mval">${op.rot|0}°</span></div>
+      <div class="mrow"><label>Soft edge</label><input type="range" class="wFeather" min="0" max="160" step="2" value="${op.feather||0}"><span class="mval">${op.feather|0}</span><span style="flex:0">${del}</span></div>`;
+    const snap=el=>el.addEventListener('pointerdown',()=>pushPoseUndo(l,S.expr));
+    const sc=box.querySelector('.wScale'), rt=box.querySelector('.wRot'), ft=box.querySelector('.wFeather');
+    [sc,rt,ft].forEach(snap);
+    sc.oninput=e=>{ op.scale=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+    rt.oninput=e=>{ op.rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
+    ft.oninput=e=>{ op.feather=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0); draw(); markDirty(); };
+  } else {
+    box.innerHTML=`
+      <div class="mrow"><label>Reach</label><input type="range" class="wReach" min="15" max="260" step="5" value="${op.r}"><span class="mval">${op.r|0}</span><span style="flex:0">${del}</span></div>`;
+    const rc=box.querySelector('.wReach'); rc.addEventListener('pointerdown',()=>pushPoseUndo(l,S.expr));
+    rc.oninput=e=>{ op.r=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0); draw(); markDirty(); };
+  }
+  box.querySelector('.wDel').onclick=()=>{ pushPoseUndo(l,S.expr); const i=ops.indexOf(op); if(i>=0) ops.splice(i,1);
+    S.warpSel=null; renderWarpPanel(); draw(); };
 }
 let exprRAF=0, exprStart=0;
 function setExprPreview(on){
@@ -1099,7 +1220,11 @@ function applyMode(){
   if(S.preview) setPreview(false);
   if(!face && S.exprPreview) setExprPreview(false);
   S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; l._rest=null; });   // rebuild cut images / centres / boxes / warp grids for the new view
-  if(face){ renderExprChips(); renderExprPose(); }
+  if(face){ migrateAllWarp(); renderExprChips(); renderExprPose();
+    document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
+    document.querySelectorAll('#warpRow button').forEach(b=>b.classList.toggle('on', (b.dataset.edit==='warp')===S.faceWarp));
+    document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.classList.toggle('on', b.dataset.warptool===S.warpTool));
+    renderWarpPanel(); }
   draw();
 }
 // the pose rows for happy/sad/angry/shocked, normalized (dx/W, dy/H), for export
@@ -1108,26 +1233,32 @@ function collectExpressions(W,H){
   for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
     for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
       const q=poseOf(l, ex.id);   // normalized (handles legacy `scale` → sx/sy)
-      const hasWarp=q.warp && q.warp.some(d=>d.x||d.y);
+      const hasWarp=q.warp && q.warp.length;
       if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1||hasWarp){
         const e={ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) };
-        if(hasWarp) e.warp={ cols:WARP_COLS, rows:WARP_ROWS, d:q.warp.map(pt=>[f3(pt.x/W), f3(pt.y/H)]) };  // per-node displacement, normalized
+        if(hasWarp) e.warp=q.warp.map(op=> op.t==='rgn'   // localized operators, coords normalized
+          ? {t:'rgn', cx:f3(op.cx/W), cy:f3(op.cy/H), r:f3(op.r/W), feather:f3((op.feather||0)/W), scale:f3(op.scale==null?1:op.scale), rot:op.rot||0}
+          : {t:'pin', ax:f3(op.ax/W), ay:f3(op.ay/H), dx:f3((op.dx||0)/W), dy:f3((op.dy||0)/H), r:f3(op.r/W)});
         list.push(e); } }
     if(list.length) out[ex.id]=list; }
   return out;
 }
 document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
 document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
-// Face edit sub-mode: ▦ Box (affine whole part) ↔ 🫳 Warp a point (local mesh)
+// Face edit sub-mode: ▦ Box (affine whole part) ↔ 🫠 Warp an area (local operators)
 document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
   S.faceWarp = b.dataset.edit==='warp';
   document.querySelectorAll('#warpRow button').forEach(x=>x.classList.toggle('on', x===b));
-  document.getElementById('warpRadRow').style.display = S.faceWarp?'':'none';
-  S.faceDrag=null; S.warpDrag=null; draw(); });
-const warpRadEl=document.getElementById('warpRad');
-warpRadEl.oninput=()=>{ S.warpRadius=+warpRadEl.value; document.getElementById('warpRadVal').textContent=warpRadEl.value; };
-document.getElementById('warpReset').onclick=()=>{ const l=activeLayer();
-  if(l && l.poses && l.poses[S.expr] && l.poses[S.expr].warp){ delete l.poses[S.expr].warp; draw(); markDirty(); toast('Warp reset on this feature'); }
+  document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
+  S.faceDrag=null; S.warpDrag=null; renderWarpPanel(); draw(); });
+// Warp tool: ⭕ Region (circle zoom/rotate) ↔ 📍 Point (pull a spot)
+document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.onclick=()=>{
+  S.warpTool = b.dataset.warptool;
+  document.querySelectorAll('#warpTools button[data-warptool]').forEach(x=>x.classList.toggle('on', x===b));
+  S.warpSel=null; renderWarpPanel(); draw(); });
+document.getElementById('warpClear').onclick=()=>{ const l=activeLayer();
+  if(l && l.poses && l.poses[S.expr] && l.poses[S.expr].warp && l.poses[S.expr].warp.length){
+    pushPoseUndo(l,S.expr); delete l.poses[S.expr].warp; S.warpSel=null; renderWarpPanel(); draw(); toast('Warp cleared on this feature'); }
   else toast('No warp on this feature'); };
 
 /* ---------- boot ---------- */
@@ -1135,7 +1266,8 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 applyMode();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS };
+window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
+  draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp };
 </script>
 </body>
 </html>
