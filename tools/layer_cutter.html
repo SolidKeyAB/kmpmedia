@@ -830,21 +830,44 @@ function zipStore(files){
    {dx,dy,rot,scale} relative to neutral. The base face stays put; features nudge/rotate/scale to
    read as happy / sad / angry / shocked. We composite the assembled face live and can morph through
    the whole set. Authoring is here; the exported rig.expressions is what the app will later play. */
+// A pose = how a feature is transformed for one expression, RELATIVE to neutral:
+// move (dx,dy) · rotate (rot°) · stretch (sx = width×, sy = height×; sx≠sy = non-uniform stretch).
 function poseOf(l, exprId){
-  const d={dx:0,dy:0,rot:0,scale:1};
+  const d={dx:0,dy:0,rot:0,sx:1,sy:1};
   if(exprId==='neutral' || !l.poses) return d;
   const p=l.poses[exprId]; if(!p) return d;
-  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, scale:(p.scale==null?1:p.scale) };
+  const s=(p.scale==null?1:p.scale);   // migrate older uniform `scale` → sx/sy
+  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy) };
 }
-// Rotate/scale pivot for a feature = its pinned joint if set, else the centre of its cut shape (cached).
+// Get/create the stored pose object for the current expression, migrating a legacy `scale` to sx/sy.
+function ensurePose(l, exprId){
+  let p=l.poses[exprId]; if(!p){ p=l.poses[exprId]={dx:0,dy:0,rot:0,sx:1,sy:1}; }
+  if(p.sx==null){ const s=(p.scale==null?1:p.scale); p.sx=s; p.sy=s; } if('scale' in p) delete p.scale;
+  return p;
+}
+// Rotate/stretch pivot for a feature = its pinned joint if set, else the centre of its cut shape (cached).
 function featureCenter(l){
   if(l._ctr) return l._ctr;
   if(l.pivot){ return (l._ctr={x:l.pivot.x,y:l.pivot.y}); }
   const box=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih));
   return (l._ctr = box ? {x:box.x+box.w/2, y:box.y+box.h/2} : {x:S.iw/2,y:S.ih/2});
 }
+function featureBox(l){ if(l._box) return l._box;
+  const b=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih)); return (l._box = b || {x:0,y:0,w:S.iw,h:S.ih}); }
+// The feature's transform box corners + edge/corner handles, in IMAGE space (axis-aligned; rotation is
+// a slider, so the handle box ignores it). Scale is about featureCenter, then translated by dx,dy.
+function partHandles(l){ const p=poseOf(l,S.expr), b=featureBox(l), c=featureCenter(l);
+  const L=c.x+(b.x-c.x)*p.sx+p.dx, T=c.y+(b.y-c.y)*p.sy+p.dy, Wd=b.w*p.sx, Hd=b.h*p.sy;
+  const R=L+Wd, B=T+Hd, MX=L+Wd/2, MY=T+Hd/2;
+  return { L,T,R,B, tl:[L,T], tr:[R,T], bl:[L,B], br:[R,B], ml:[L,MY], mr:[R,MY], tc:[MX,T], bc:[MX,B] };
+}
+function hitHandle(l, sp){ const hs=partHandles(l), v=S.view;
+  for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [ix,iy]=hs[k];
+    if(Math.hypot(sp.x-(v.x+ix*v.zoom), sp.y-(v.y+iy*v.zoom))<=12) return k; }
+  return null;
+}
 function lerpPose(a,b,f){ return { dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
-  rot:a.rot+(b.rot-a.rot)*f, scale:a.scale+(b.scale-a.scale)*f }; }
+  rot:a.rot+(b.rot-a.rot)*f, sx:a.sx+(b.sx-a.sx)*f, sy:a.sy+(b.sy-a.sy)*f }; }
 function easeHold(f){ const t=Math.min(1,Math.max(0,(f-0.18)/0.64)); return t*t*(3-2*t); } // hold each face, smooth between
 function currentPoseFor(l){
   if(!S.exprPreview) return poseOf(l, S.expr);
@@ -860,25 +883,34 @@ function renderFace(W,H){
     const p=currentPoseFor(l), c=featureCenter(l);
     ctx.save();
     ctx.translate(p.dx,p.dy);
-    ctx.translate(c.x,c.y); ctx.rotate(p.rot*Math.PI/180); ctx.scale(p.scale,p.scale); ctx.translate(-c.x,-c.y);
+    ctx.translate(c.x,c.y); ctx.rotate(p.rot*Math.PI/180); ctx.scale(p.sx,p.sy); ctx.translate(-c.x,-c.y);
     ctx.drawImage(cut,0,0); ctx.restore();
   }
   ctx.restore();
-  // outline the selected feature so it's clear what a drag moves (skip while morph-previewing)
-  if(!S.exprPreview){ const l=activeLayer();
-    if(l && l.role!=='base'){ const box=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih));
-      if(box){ const p=poseOf(l,S.expr), v=S.view;
-        ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
-        ctx.strokeRect(v.x+(box.x+p.dx)*v.zoom, v.y+(box.y+p.dy)*v.zoom, box.w*v.zoom, box.h*v.zoom);
-        ctx.setLineDash([]); } } }
+  // the selected feature's TRANSFORM BOX + handles (corners = zoom, sides = stretch W, top/bottom = stretch H,
+  // drag the middle = move). Skipped while morph-previewing or on the neutral/base face.
+  if(!S.exprPreview && S.expr!=='neutral'){ const l=activeLayer();
+    if(l && l.role!=='base' && l.visible){ const hs=partHandles(l), v=S.view;
+      const sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      const [lx,ty]=sc(hs.L,hs.T), [rx,by]=sc(hs.R,hs.B);
+      ctx.strokeStyle='#5ad1c4'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.strokeRect(lx,ty,rx-lx,by-ty); ctx.setLineDash([]);
+      ctx.fillStyle='#5ad1c4';
+      for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [hx,hy]=sc(hs[k][0],hs[k][1]); ctx.fillRect(hx-4,hy-4,8,8); } } }
   ctx.fillStyle='#ffd166'; ctx.font='14px sans-serif';
   const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
   ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
-    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)':'  — drag a feature to pose it')), 12, H-14);
+    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)':'  — drag to move · pull the handles to stretch / zoom')), 12, H-14);
 }
 function faceDown(sp){
   const ip=s2i(sp.x,sp.y);
-  // select the topmost feature under the finger (accounting for its current-expression offset)
+  // 1) a transform handle of the already-selected feature? → start that stretch/zoom
+  const sel=activeLayer();
+  if(S.expr!=='neutral' && sel && sel.role!=='base' && sel.visible){
+    const h=hitHandle(sel, sp);
+    if(h){ S.faceDrag={ mode:h, ip, start:poseOf(sel,S.expr), c:featureCenter(sel), box:featureBox(sel) }; draw(); return; }
+  }
+  // 2) else select the topmost feature under the finger (accounting for its current-expression offset)
   let hit=-1;
   for(let i=S.layers.length-1;i>=0;i--){ const l=S.layers[i]; if(!l.visible||l.role==='base') continue;
     const p=poseOf(l,S.expr); const x=Math.round(ip.x-p.dx), y=Math.round(ip.y-p.dy);
@@ -886,18 +918,28 @@ function faceDown(sp){
     if(l.mctx.getImageData(x,y,1,1).data[3]>8){ hit=i; break; } }
   if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
   const l=activeLayer();
-  if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick Happy / Sad / Angry / Shocked to pose'); }
-  else if(l && l.role!=='base'){ S.faceDrag={ ip, start:poseOf(l,S.expr) }; }
+  if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick an expression to pose'); }
+  else if(l && l.role!=='base'){ S.faceDrag={ mode:'move', ip, start:poseOf(l,S.expr), c:featureCenter(l), box:featureBox(l) }; }
   else S.faceDrag=null;
   draw();
 }
 function faceMove(sp){
-  const l=activeLayer(); if(!l||!S.faceDrag) return;
-  const ip=s2i(sp.x,sp.y);
-  const pose=l.poses[S.expr]||(l.poses[S.expr]={dx:0,dy:0,rot:0,scale:1});
-  pose.dx=Math.round(S.faceDrag.start.dx+(ip.x-S.faceDrag.ip.x));
-  pose.dy=Math.round(S.faceDrag.start.dy+(ip.y-S.faceDrag.ip.y));
-  renderExprPose(); draw();
+  const l=activeLayer(); const fd=S.faceDrag; if(!l||!fd) return;
+  const ip=s2i(sp.x,sp.y), c=fd.c, b=fd.box, start=fd.start;
+  const pose=ensurePose(l,S.expr);
+  const clamp=v=>Math.max(0.15,Math.min(5, Math.abs(v)));
+  if(fd.mode==='move'){
+    pose.dx=Math.round(start.dx+(ip.x-fd.ip.x)); pose.dy=Math.round(start.dy+(ip.y-fd.ip.y));
+  } else if(fd.mode==='ml'||fd.mode==='mr'){                 // stretch width
+    const bx=(fd.mode==='ml'?b.x:b.x+b.w); pose.sx=clamp((ip.x-start.dx-c.x)/((bx-c.x)||1));
+  } else if(fd.mode==='tc'||fd.mode==='bc'){                 // stretch height
+    const by=(fd.mode==='tc'?b.y:b.y+b.h); pose.sy=clamp((ip.y-start.dy-c.y)/((by-c.y)||1));
+  } else {                                                   // corner = uniform zoom
+    const bx=(fd.mode==='tl'||fd.mode==='bl'?b.x:b.x+b.w), by=(fd.mode==='tl'||fd.mode==='tr'?b.y:b.y+b.h);
+    const fx=Math.abs((ip.x-start.dx-c.x)/((bx-c.x)||1)), fy=Math.abs((ip.y-start.dy-c.y)/((by-c.y)||1));
+    const s=clamp((fx+fy)/2); pose.sx=s; pose.sy=s;
+  }
+  renderExprPose(); draw(); markDirty();
 }
 function renderExprChips(){
   const box=document.getElementById('exprChips'); if(!box) return; box.innerHTML='';
@@ -908,26 +950,28 @@ function renderExprChips(){
 function renderExprPose(){
   const box=document.getElementById('exprPose'); if(!box) return;
   if(S.mode!=='face'){ box.innerHTML=''; return; }
-  if(S.expr==='neutral'){ box.innerHTML='<p class="hint"><b>Neutral</b> is the resting face — pick Happy / Sad / Angry / Shocked above, then pose each feature.</p>'; return; }
+  if(S.expr==='neutral'){ box.innerHTML='<p class="hint"><b>Neutral</b> is the resting face — pick a state above (Happy / Sad / Angry / Shocked), then stretch / move the parts.</p>'; return; }
   const l=activeLayer();
-  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Select a <b>feature</b> (a mover: brow / eye / mouth) in the Layers list — or tap it on the canvas — then drag it or use the controls below.</p>'; return; }
+  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Select a <b>feature</b> (a mover: brow / eye / mouth) in the Layers list — or tap it on the canvas — then drag it / pull its handles, or fine-tune below.</p>'; return; }
   const p=poseOf(l,S.expr);
   box.innerHTML=`
     <div class="mrow"><label>${l.name} · move</label>
       <span class="nudge"><button class="mini pL">◀</button><button class="mini pU">▲</button><button class="mini pD">▼</button><button class="mini pR">▶</button></span>
       <button class="mini pRst" title="reset this feature to neutral">⟲</button><span class="mval pOff">${p.dx|0},${p.dy|0}</span></div>
-    <div class="mrow"><label>Rotate</label><input type="range" class="pRot" min="-45" max="45" step="1" value="${p.rot}"><span class="mval">${p.rot|0}°</span></div>
-    <div class="mrow"><label>Scale</label><input type="range" class="pScl" min="0.5" max="1.6" step="0.05" value="${p.scale}"><span class="mval">${(+p.scale).toFixed(2)}×</span></div>`;
-  const getp=()=> l.poses[S.expr]||(l.poses[S.expr]={dx:0,dy:0,rot:0,scale:1});
-  const upd=()=>{ box.querySelector('.pOff').textContent=`${(l.poses[S.expr]?.dx||0)|0},${(l.poses[S.expr]?.dy||0)|0}`; draw(); markDirty(); };
+    <div class="mrow"><label>Width</label><input type="range" class="pSx" min="0.3" max="2.5" step="0.05" value="${p.sx}"><span class="mval">${(+p.sx).toFixed(2)}×</span></div>
+    <div class="mrow"><label>Height</label><input type="range" class="pSy" min="0.3" max="2.5" step="0.05" value="${p.sy}"><span class="mval">${(+p.sy).toFixed(2)}×</span></div>
+    <div class="mrow"><label>Rotate</label><input type="range" class="pRot" min="-45" max="45" step="1" value="${p.rot}"><span class="mval">${p.rot|0}°</span></div>`;
+  const getp=()=>ensurePose(l,S.expr);
+  const upd=()=>{ const q=poseOf(l,S.expr); box.querySelector('.pOff').textContent=`${q.dx|0},${q.dy|0}`; draw(); markDirty(); };
   const STEP=6;
   box.querySelector('.pL').onclick=()=>{ getp().dx-=STEP; upd(); };
   box.querySelector('.pR').onclick=()=>{ getp().dx+=STEP; upd(); };
   box.querySelector('.pU').onclick=()=>{ getp().dy-=STEP; upd(); };
   box.querySelector('.pD').onclick=()=>{ getp().dy+=STEP; upd(); };
   box.querySelector('.pRst').onclick=()=>{ if(l.poses) delete l.poses[S.expr]; renderExprPose(); draw(); markDirty(); };
+  box.querySelector('.pSx').oninput=e=>{ getp().sx=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+  box.querySelector('.pSy').oninput=e=>{ getp().sy=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
   box.querySelector('.pRot').oninput=e=>{ getp().rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
-  box.querySelector('.pScl').oninput=e=>{ getp().scale=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
 }
 let exprRAF=0, exprStart=0;
 function setExprPreview(on){
@@ -948,7 +992,7 @@ function applyMode(){
   show('toolsGroup', !face); show('cleanupGroup', !face); show('motionGroup', !face); show('faceGroup', face);
   if(S.preview) setPreview(false);
   if(!face && S.exprPreview) setExprPreview(false);
-  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; });   // rebuild cut images / centres for the new view
+  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; });   // rebuild cut images / centres / boxes for the new view
   if(face){ renderExprChips(); renderExprPose(); }
   draw();
 }
@@ -957,8 +1001,9 @@ function collectExpressions(W,H){
   const out={};
   for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
     for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
-      const dx=p.dx||0, dy=p.dy||0, rot=p.rot||0, scale=(p.scale==null?1:p.scale);
-      if(dx||dy||rot||scale!==1) list.push({ id:sanitize(l.name), dx:f3(dx/W), dy:f3(dy/H), rot, scale:f3(scale) }); }
+      const q=poseOf(l, ex.id);   // normalized (handles legacy `scale` → sx/sy)
+      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1)
+        list.push({ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) }); }
     if(list.length) out[ex.id]=list; }
   return out;
 }
