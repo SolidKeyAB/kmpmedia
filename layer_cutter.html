@@ -184,10 +184,20 @@
       <h2>Expressions</h2>
       <div class="row" id="exprChips"></div>
       <div id="exprPose"></div>
+      <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
+        <span style="font-size:11px;color:var(--dim)">Edit:</span>
+        <button class="sm on" data-edit="box">▦ Box (whole part)</button>
+        <button class="sm" data-edit="warp">🫳 Warp a point</button>
+      </div>
+      <div class="mrow" id="warpRadRow" style="display:none">
+        <label>Warp radius</label>
+        <input type="range" id="warpRad" min="15" max="220" step="5" value="60"><span class="mval" id="warpRadVal">60</span>
+        <button class="mini" id="warpReset" title="reset the warp on this feature">⟲</button>
+      </div>
       <div class="row" style="margin-top:8px;">
         <button class="sm go" id="previewExpr">▶ Preview expressions</button>
       </div>
-      <p class="hint">Pick an expression, then <b>drag a feature on the canvas</b> (or use the nudges / Rotate / Scale below) to pose it — e.g. brows <b>down&amp;in</b> = angry, brows <b>up</b> + mouth open = shocked. <b>Neutral</b> is the resting face. ▶ Preview morphs through them all. Tip: tick <b>punch</b> on each feature so its old spot doesn't ghost when it moves.</p>
+      <p class="hint">Pick an expression, then pose it. <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫳 Warp a point</b> drops a grid on the part — <b>drag any point</b> to stretch just there (small <b>radius</b> = one point; bigger = pull a wider area, e.g. the eye). <b>Neutral</b> is the resting face. ▶ Preview morphs through them all. Tip: tick <b>punch</b> so a feature's old spot doesn't ghost when it moves.</p>
     </div>
 
     <!-- Export -->
@@ -230,7 +240,12 @@ const S = {
   expr:'neutral',                       // the expression being posed / shown
   exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
   faceDrag:null,                        // in-progress feature drag in face mode
+  faceWarp:false,                       // face edit sub-mode: false = affine box, true = local mesh warp
+  warpRadius:60,                        // warp point influence radius (image px): small = stretch one point, big = move/scale an area
+  warpDrag:null,                        // in-progress warp-node drag
 };
+// A warp mesh is a WARP_COLS×WARP_ROWS grid of cells (so (COLS+1)×(ROWS+1) nodes) over a feature's box.
+const WARP_COLS=4, WARP_ROWS=4;
 // The fixed expression set (neutral is the base/identity). Each is a named POSE: per-feature offset,
 // rotate and scale relative to neutral — brows + eyelids + mouth carry the emotion.
 const EXPRS = [
@@ -647,7 +662,7 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
     S.view.y = mid.y - (S.pinch.mid.y - S.pinch.vy)*(nz/S.pinch.zoom);
     draw(); return; }
   if(S.preview) return;
-  if(S.mode==='face'){ if(S.faceDrag) faceMove(sp); return; }
+  if(S.mode==='face'){ if(S.warpDrag) warpMove(sp); else if(S.faceDrag) faceMove(sp); return; }
   if(!drawing){ if(S.tool==='brush'||S.tool==='erase')draw(); return; }
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
@@ -662,6 +677,7 @@ function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
   if(S.faceDrag){ S.faceDrag=null; markDirty(); }
+  if(S.warpDrag){ S.warpDrag=null; markDirty(); }
   drawing=false; lastImg=null; }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
@@ -837,7 +853,7 @@ function poseOf(l, exprId){
   if(exprId==='neutral' || !l.poses) return d;
   const p=l.poses[exprId]; if(!p) return d;
   const s=(p.scale==null?1:p.scale);   // migrate older uniform `scale` → sx/sy
-  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy) };
+  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy), warp:(p.warp||null) };
 }
 // Get/create the stored pose object for the current expression, migrating a legacy `scale` to sx/sy.
 function ensurePose(l, exprId){
@@ -866,8 +882,61 @@ function hitHandle(l, sp){ const hs=partHandles(l), v=S.view;
     if(Math.hypot(sp.x-(v.x+ix*v.zoom), sp.y-(v.y+iy*v.zoom))<=12) return k; }
   return null;
 }
-function lerpPose(a,b,f){ return { dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
-  rot:a.rot+(b.rot-a.rot)*f, sx:a.sx+(b.sx-a.sx)*f, sy:a.sy+(b.sy-a.sy)*f }; }
+/* ---- local mesh warp: deform POINTS / sub-regions of one feature (not the whole part) ----
+   A feature carries, per expression, an optional pose.warp = array of per-node {x,y} displacements
+   (image px) over a fixed grid of its box. Rendering maps the feature's cut from the rest grid to
+   restNode→affine(restNode)+warp[node] via per-triangle texture mapping, so the warp composes with
+   the affine box. Dragging a node pushes it + its neighbours (smooth falloff over warpRadius). */
+function warpRestNodes(l){
+  if(l._rest) return l._rest;
+  const b=featureBox(l), nodes=[];
+  for(let j=0;j<=WARP_ROWS;j++) for(let i=0;i<=WARP_COLS;i++)
+    nodes.push({x:b.x+b.w*i/WARP_COLS, y:b.y+b.h*j/WARP_ROWS});
+  return (l._rest=nodes);
+}
+function ensureWarp(l, exprId){ const p=ensurePose(l,exprId);
+  if(!p.warp){ const N=(WARP_COLS+1)*(WARP_ROWS+1); p.warp=[]; for(let k=0;k<N;k++) p.warp.push({x:0,y:0}); }
+  return p.warp; }
+// map an image-space point through the feature's affine pose (same order as renderFace: scale→rotate→+d)
+function affinePt(p, pose, c){
+  const x=(p.x-c.x)*pose.sx, y=(p.y-c.y)*pose.sy, a=pose.rot*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+  return { x:c.x + (x*cs - y*sn) + pose.dx, y:c.y + (x*sn + y*cs) + pose.dy };
+}
+// posed position of every grid node = affine(rest) + warp displacement
+function posedNodes(l, pose, c){ const rest=warpRestNodes(l), w=pose.warp;
+  return rest.map((p,i)=>{ const a=affinePt(p,pose,c); if(w&&w[i]){ a.x+=w[i].x; a.y+=w[i].y; } return a; }); }
+// draw source triangle s[0..2] (image coords in `cut`) onto dest triangle d[0..2]; tiny outward pad kills seams
+function texTri(img, s, d){
+  const cx=(d[0].x+d[1].x+d[2].x)/3, cy=(d[0].y+d[1].y+d[2].y)/3, PAD=0.6;
+  const dd=d.map(p=>{ const vx=p.x-cx, vy=p.y-cy, L=Math.hypot(vx,vy)||1; return {x:p.x+vx/L*PAD, y:p.y+vy/L*PAD}; });
+  ctx.save(); ctx.beginPath(); ctx.moveTo(dd[0].x,dd[0].y); ctx.lineTo(dd[1].x,dd[1].y); ctx.lineTo(dd[2].x,dd[2].y); ctx.closePath(); ctx.clip();
+  const x0=s[0].x,y0=s[0].y, x1=s[1].x-x0,y1=s[1].y-y0, x2=s[2].x-x0,y2=s[2].y-y0;
+  const u0=d[0].x,v0=d[0].y, u1=d[1].x-u0,v1=d[1].y-v0, u2=d[2].x-u0,v2=d[2].y-v0;
+  const det=x1*y2-x2*y1;
+  if(Math.abs(det)>1e-6){ const a=(u1*y2-u2*y1)/det, b=(v1*y2-v2*y1)/det, c=(u2*x1-u1*x2)/det, dC=(v2*x1-v1*x2)/det;
+    const e=u0-a*x0-c*y0, f=v0-b*x0-dC*y0; ctx.transform(a,b,c,dC,e,f); ctx.drawImage(img,0,0); }
+  ctx.restore();
+}
+// render a feature's cut warped by (affine pose + mesh). Identical to a plain affine draw when warp is empty.
+function drawWarpedFeature(cut, pose, c, l){
+  const rest=warpRestNodes(l), dst=posedNodes(l,pose,c), NC=WARP_COLS+1, id=(i,j)=>j*NC+i;
+  for(let j=0;j<WARP_ROWS;j++) for(let i=0;i<WARP_COLS;i++){
+    const a=id(i,j), b=id(i+1,j), c2=id(i,j+1), d2=id(i+1,j+1);
+    texTri(cut, [rest[a],rest[b],rest[d2]], [dst[a],dst[b],dst[d2]]);
+    texTri(cut, [rest[a],rest[d2],rest[c2]], [dst[a],dst[d2],dst[c2]]);
+  }
+}
+function hitWarpNode(l, sp){ const pose=poseOf(l,S.expr), c=featureCenter(l), dst=posedNodes(l,pose,c), v=S.view;
+  let best=-1, bd=18*18;
+  for(let n=0;n<dst.length;n++){ const dx=sp.x-(v.x+dst[n].x*v.zoom), dy=sp.y-(v.y+dst[n].y*v.zoom); const d=dx*dx+dy*dy;
+    if(d<bd){ bd=d; best=n; } }
+  return best; }
+function lerpPose(a,b,f){ const o={ dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
+  rot:a.rot+(b.rot-a.rot)*f, sx:a.sx+(b.sx-a.sx)*f, sy:a.sy+(b.sy-a.sy)*f };
+  if(a.warp||b.warp){ const N=(WARP_COLS+1)*(WARP_ROWS+1); o.warp=[];
+    for(let k=0;k<N;k++){ const wa=(a.warp&&a.warp[k])||{x:0,y:0}, wb=(b.warp&&b.warp[k])||{x:0,y:0};
+      o.warp.push({x:wa.x+(wb.x-wa.x)*f, y:wa.y+(wb.y-wa.y)*f}); } }
+  return o; }
 function easeHold(f){ const t=Math.min(1,Math.max(0,(f-0.18)/0.64)); return t*t*(3-2*t); } // hold each face, smooth between
 function currentPoseFor(l){
   if(!S.exprPreview) return poseOf(l, S.expr);
@@ -881,47 +950,84 @@ function renderFace(W,H){
   for(const l of S.layers){ if(!l.visible) continue; const cut=buildCut(l); if(!cut) continue;
     if(l.role==='base'){ ctx.drawImage(cut,0,0); continue; }
     const p=currentPoseFor(l), c=featureCenter(l);
-    ctx.save();
-    ctx.translate(p.dx,p.dy);
-    ctx.translate(c.x,c.y); ctx.rotate(p.rot*Math.PI/180); ctx.scale(p.sx,p.sy); ctx.translate(-c.x,-c.y);
-    ctx.drawImage(cut,0,0); ctx.restore();
+    drawWarpedFeature(cut, p, c, l);
   }
   ctx.restore();
   // the selected feature's TRANSFORM BOX + handles (corners = zoom, sides = stretch W, top/bottom = stretch H,
   // drag the middle = move). Skipped while morph-previewing or on the neutral/base face.
   if(!S.exprPreview && S.expr!=='neutral'){ const l=activeLayer();
-    if(l && l.role!=='base' && l.visible){ const hs=partHandles(l), v=S.view;
-      const sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
-      const [lx,ty]=sc(hs.L,hs.T), [rx,by]=sc(hs.R,hs.B);
-      ctx.strokeStyle='#5ad1c4'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
-      ctx.strokeRect(lx,ty,rx-lx,by-ty); ctx.setLineDash([]);
-      ctx.fillStyle='#5ad1c4';
-      for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [hx,hy]=sc(hs[k][0],hs[k][1]); ctx.fillRect(hx-4,hy-4,8,8); } } }
+    if(l && l.role!=='base' && l.visible){ const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      if(S.faceWarp){                                   // mesh-warp overlay: draggable grid of points
+        const pose=poseOf(l,S.expr), c=featureCenter(l), dst=posedNodes(l,pose,c), NC=WARP_COLS+1;
+        ctx.strokeStyle='rgba(90,209,196,.45)'; ctx.lineWidth=1;
+        for(let j=0;j<=WARP_ROWS;j++){ ctx.beginPath(); for(let i=0;i<=NC-1;i++){ const [x,y]=sc(dst[j*NC+i].x,dst[j*NC+i].y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); }
+        for(let i=0;i<=WARP_COLS;i++){ ctx.beginPath(); for(let j=0;j<=WARP_ROWS;j++){ const [x,y]=sc(dst[j*NC+i].x,dst[j*NC+i].y); j?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); }
+        for(let n=0;n<dst.length;n++){ const [x,y]=sc(dst[n].x,dst[n].y); const grabbed=S.warpDrag&&S.warpDrag.node===n;
+          ctx.fillStyle=grabbed?'#ffd166':'#5ad1c4'; ctx.beginPath(); ctx.arc(x,y,grabbed?6:3.5,0,7); ctx.fill(); }
+      } else {                                          // affine transform box (whole part)
+        const hs=partHandles(l);
+        const [lx,ty]=sc(hs.L,hs.T), [rx,by]=sc(hs.R,hs.B);
+        ctx.strokeStyle='#5ad1c4'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+        ctx.strokeRect(lx,ty,rx-lx,by-ty); ctx.setLineDash([]);
+        ctx.fillStyle='#5ad1c4';
+        for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [hx,hy]=sc(hs[k][0],hs[k][1]); ctx.fillRect(hx-4,hy-4,8,8); }
+      } } }
   ctx.fillStyle='#ffd166'; ctx.font='14px sans-serif';
   const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
   ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
-    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)':'  — drag to move · pull the handles to stretch / zoom')), 12, H-14);
+    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)'
+      :(S.faceWarp?'  — drag a grid point to stretch it (radius sets how wide)'
+                  :'  — drag to move · pull the handles to stretch / zoom'))), 12, H-14);
+}
+// find the topmost non-base feature whose (offset) alpha is under the finger
+function pickFeature(ip){
+  for(let i=S.layers.length-1;i>=0;i--){ const l=S.layers[i]; if(!l.visible||l.role==='base') continue;
+    const p=poseOf(l,S.expr); const x=Math.round(ip.x-p.dx), y=Math.round(ip.y-p.dy);
+    if(x<0||y<0||x>=S.iw||y>=S.ih) continue;
+    if(l.mctx.getImageData(x,y,1,1).data[3]>8) return i; }
+  return -1;
 }
 function faceDown(sp){
   const ip=s2i(sp.x,sp.y);
-  // 1) a transform handle of the already-selected feature? → start that stretch/zoom
   const sel=activeLayer();
+  // ---- WARP mode: grab a grid point of the selected feature and stretch it locally ----
+  if(S.faceWarp){
+    if(S.expr==='neutral'){ toast('Pick an expression to warp'); return; }
+    if(sel && sel.role!=='base' && sel.visible){
+      const n=hitWarpNode(sel, sp);
+      if(n>=0){ ensureWarp(sel,S.expr);
+        S.warpDrag={ layer:sel, node:n, downImg:ip, restGrab:warpRestNodes(sel)[n],
+          startWarp:ensureWarp(sel,S.expr).map(d=>({x:d.x,y:d.y})) };
+        draw(); return; }
+    }
+    // no node near the finger → (re)select the feature under it so its grid shows
+    const hit=pickFeature(ip); if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
+    S.warpDrag=null; draw();
+    if(activeLayer() && activeLayer().role!=='base') toast('Drag a grid point to stretch — bigger radius pulls a wider area');
+    return;
+  }
+  // ---- BOX mode (affine whole-part) ----
+  // 1) a transform handle of the already-selected feature? → start that stretch/zoom
   if(S.expr!=='neutral' && sel && sel.role!=='base' && sel.visible){
     const h=hitHandle(sel, sp);
     if(h){ S.faceDrag={ mode:h, ip, start:poseOf(sel,S.expr), c:featureCenter(sel), box:featureBox(sel) }; draw(); return; }
   }
   // 2) else select the topmost feature under the finger (accounting for its current-expression offset)
-  let hit=-1;
-  for(let i=S.layers.length-1;i>=0;i--){ const l=S.layers[i]; if(!l.visible||l.role==='base') continue;
-    const p=poseOf(l,S.expr); const x=Math.round(ip.x-p.dx), y=Math.round(ip.y-p.dy);
-    if(x<0||y<0||x>=S.iw||y>=S.ih) continue;
-    if(l.mctx.getImageData(x,y,1,1).data[3]>8){ hit=i; break; } }
+  const hit=pickFeature(ip);
   if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
   const l=activeLayer();
   if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick an expression to pose'); }
   else if(l && l.role!=='base'){ S.faceDrag={ mode:'move', ip, start:poseOf(l,S.expr), c:featureCenter(l), box:featureBox(l) }; }
   else S.faceDrag=null;
   draw();
+}
+function warpMove(sp){ const wd=S.warpDrag; if(!wd) return; const l=wd.layer;
+  const ip=s2i(sp.x,sp.y), rest=warpRestNodes(l), w=ensureWarp(l,S.expr);
+  const dfx=ip.x-wd.downImg.x, dfy=ip.y-wd.downImg.y, R=Math.max(1,S.warpRadius);
+  for(let n=0;n<w.length;n++){                         // smooth bump falloff: 1 at the grabbed node → 0 at radius
+    const d=Math.hypot(rest[n].x-wd.restGrab.x, rest[n].y-wd.restGrab.y), t=d/R, g=t>=1?0:(1-t*t)*(1-t*t);
+    w[n].x=wd.startWarp[n].x+dfx*g; w[n].y=wd.startWarp[n].y+dfy*g; }
+  draw(); markDirty();
 }
 function faceMove(sp){
   const l=activeLayer(); const fd=S.faceDrag; if(!l||!fd) return;
@@ -992,7 +1098,7 @@ function applyMode(){
   show('toolsGroup', !face); show('cleanupGroup', !face); show('motionGroup', !face); show('faceGroup', face);
   if(S.preview) setPreview(false);
   if(!face && S.exprPreview) setExprPreview(false);
-  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; });   // rebuild cut images / centres / boxes for the new view
+  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; l._rest=null; });   // rebuild cut images / centres / boxes / warp grids for the new view
   if(face){ renderExprChips(); renderExprPose(); }
   draw();
 }
@@ -1002,13 +1108,27 @@ function collectExpressions(W,H){
   for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
     for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
       const q=poseOf(l, ex.id);   // normalized (handles legacy `scale` → sx/sy)
-      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1)
-        list.push({ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) }); }
+      const hasWarp=q.warp && q.warp.some(d=>d.x||d.y);
+      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1||hasWarp){
+        const e={ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) };
+        if(hasWarp) e.warp={ cols:WARP_COLS, rows:WARP_ROWS, d:q.warp.map(pt=>[f3(pt.x/W), f3(pt.y/H)]) };  // per-node displacement, normalized
+        list.push(e); } }
     if(list.length) out[ex.id]=list; }
   return out;
 }
 document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
 document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
+// Face edit sub-mode: ▦ Box (affine whole part) ↔ 🫳 Warp a point (local mesh)
+document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
+  S.faceWarp = b.dataset.edit==='warp';
+  document.querySelectorAll('#warpRow button').forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('warpRadRow').style.display = S.faceWarp?'':'none';
+  S.faceDrag=null; S.warpDrag=null; draw(); });
+const warpRadEl=document.getElementById('warpRad');
+warpRadEl.oninput=()=>{ S.warpRadius=+warpRadEl.value; document.getElementById('warpRadVal').textContent=warpRadEl.value; };
+document.getElementById('warpReset').onclick=()=>{ const l=activeLayer();
+  if(l && l.poses && l.poses[S.expr] && l.poses[S.expr].warp){ delete l.poses[S.expr].warp; draw(); markDirty(); toast('Warp reset on this feature'); }
+  else toast('No warp on this feature'); };
 
 /* ---------- boot ---------- */
 window.addEventListener('resize', resizeCanvas);
