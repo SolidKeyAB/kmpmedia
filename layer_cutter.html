@@ -147,22 +147,24 @@
       <div id="layerList"></div>
       <div class="row">
         <button class="sm" id="addLayer">＋ Add part layer</button>
+        <button class="sm go" id="preview">▶ Preview motion</button>
       </div>
-      <p class="hint"><b>base</b> = the body that stays joined. <b>mover</b> = a part you'll animate; tick “punch” so its shape is cut out of the base (no double image). Set each mover's 🎯 pivot at its joint.</p>
+      <p class="hint"><b>base</b> = the body, stays still &amp; joined. <b>mover</b> = a limb you'll animate — cut it OFF the body itself (not a separate study, or it won't line up), tick “punch” so its shape is removed from the base, and pin its 🎯 joint (shoulder/hip/neck). Then <b>▶ Preview motion</b> to watch the whole figure assemble + swing.</p>
     </div>
 
     <!-- Export -->
     <div class="group">
       <h2>Export</h2>
       <div class="row">
-        <button class="go" id="export">⬇ Export .zip (PNGs + rig.json)</button>
+        <button class="go" id="toNexum">📡 Send to app (nexum)</button>
       </div>
       <div class="row" style="margin-top:6px;">
-        <button class="sm" id="previewBtn">👁 Preview active cutout</button>
-        <button class="sm" id="showJson">{ } Show rig JSON</button>
+        <button class="sm" id="export">⬇ Export .zip</button>
+        <button class="sm" id="previewBtn">👁 Preview</button>
+        <button class="sm" id="showJson">{ } rig JSON</button>
       </div>
       <textarea id="json" style="display:none" readonly></textarea>
-      <p class="hint">The zip has one transparent PNG per layer (named after the layer), the base with the mover-holes punched, and <code>rig.json</code> with each part's pivot + placement — exactly what the SUPER X puppet reads.</p>
+      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the app over nexum (I bake the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
     </div>
   </aside>
 </div>
@@ -185,6 +187,7 @@ const S = {
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
   pointers:new Map(), pinch:null, lastPan:null, cursor:null,
+  preview:false, previewT:0,            // live assembled-motion preview
 };
 let nextId = 1;
 
@@ -274,10 +277,53 @@ function fitView(){ const r=stageWrap.getBoundingClientRect();
 function s2i(sx,sy){ return {x:(sx-S.view.x)/S.view.zoom, y:(sy-S.view.y)/S.view.zoom}; }
 
 /* ---------- draw ---------- */
+/* ---------- live assembled-motion preview: base still, movers swing about their pinned joint ---------- */
+function buildCut(l){
+  if(l._cut!==undefined && l._cut!==null) return l._cut;
+  const W=S.iw,H=S.ih,sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H).data;
+  let any=false; for(let p=3;p<md.length;p+=4){ if(md[p]>8){ any=true; break; } }
+  if(!any){ l._cut=null; return null; }
+  const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
+  const out=cx.createImageData(W,H); const od=out.data;
+  for(let p=0;p<W*H;p++){ const o=p*4; const a=md[o+3]; if(!a) continue;
+    od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(a/255)); }
+  cx.putImageData(out,0,0); l._cut=c; return c;
+}
+function renderPreview(W,H){
+  ctx.fillStyle='#0f1326'; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.translate(S.view.x,S.view.y); ctx.scale(S.view.zoom,S.view.zoom); ctx.imageSmoothingEnabled=true;
+  for(const l of S.layers){ if(!l.visible) continue; const cut=buildCut(l); if(!cut) continue;
+    if(l.role==='mover' && l.pivot){ const amp=(l.swingDeg||12)*Math.PI/180;
+      const ang=amp*Math.sin(S.previewT*2.2+(l._phase||0));
+      ctx.save(); ctx.translate(l.pivot.x,l.pivot.y); ctx.rotate(ang); ctx.translate(-l.pivot.x,-l.pivot.y);
+      ctx.drawImage(cut,0,0); ctx.restore();
+    } else ctx.drawImage(cut,0,0);
+  }
+  ctx.restore();
+  // mark un-pinned movers so she knows to pin a joint
+  if(S.layers.some(l=>l.role==='mover'&&!l.pivot)){ ctx.fillStyle='#ffd166'; ctx.font='13px sans-serif';
+    ctx.fillText('⚠ pin a 🎯 joint on each mover so it swings', 12, H-14); }
+}
+let previewRAF=0, previewStart=0;
+function setPreview(on){
+  S.preview=on; const btn=document.getElementById('preview');
+  if(on){ if(!S.img){ toast('Load + cut some parts first'); S.preview=false; return; }
+    S.layers.forEach(l=>{ l._cut=null; });
+    S.layers.filter(l=>l.role==='mover').forEach((l,i)=>{ l._phase=i*1.3; });
+    if(btn){ btn.classList.add('on'); btn.textContent='■ Stop preview'; }
+    previewStart=0; const loop=(ts)=>{ if(!S.preview) return; if(!previewStart) previewStart=ts;
+      S.previewT=(ts-previewStart)/1000; draw(); previewRAF=requestAnimationFrame(loop); };
+    previewRAF=requestAnimationFrame(loop); toast('Preview — base still, movers swing at their joint');
+  } else { if(previewRAF) cancelAnimationFrame(previewRAF); previewRAF=0;
+    if(btn){ btn.classList.remove('on'); btn.textContent='▶ Preview motion'; }
+    S.layers.forEach(l=>{ l._cut=null; }); draw(); }
+}
+
 function draw(){
   const dpr=window.devicePixelRatio||1; const W=cv.width/dpr, H=cv.height/dpr;
   ctx.clearRect(0,0,W,H);
   if(!S.img) return;
+  if(S.preview){ renderPreview(W,H); return; }
   const v=S.view;
   ctx.save();
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
@@ -413,6 +459,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
   if(S.pointers.size===2){ drawing=false; S.lasso=null; const pts=[...S.pointers.values()];
     S.pinch={ d:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),
       mid:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}, zoom:S.view.zoom, vx:S.view.x, vy:S.view.y }; return; }
+  if(S.preview) return;                 // preview is play-only; single-finger does nothing
   const sp=evPos(e); const ip=s2i(sp.x,sp.y);
   if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); } return; }
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
@@ -432,6 +479,7 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
     S.view.x = mid.x - (S.pinch.mid.x - S.pinch.vx)*(nz/S.pinch.zoom);
     S.view.y = mid.y - (S.pinch.mid.y - S.pinch.vy)*(nz/S.pinch.zoom);
     draw(); return; }
+  if(S.preview) return;
   if(!drawing){ if(S.tool==='brush'||S.tool==='erase')draw(); return; }
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
@@ -465,6 +513,7 @@ tolEl.oninput=()=>{S.tol=+tolEl.value; document.getElementById('tolVal').textCon
 bgEl.oninput=()=>{S.bg=+bgEl.value; document.getElementById('bgVal').textContent=bgEl.value;};
 document.getElementById('addLayer').onclick=()=>{ if(!S.img){toast('Load an image first');return;}
   S.layers.push(makeLayer('part_'+(S.layers.length), 'mover')); S.active=S.layers.length-1; renderLayerList(); draw(); };
+document.getElementById('preview').onclick=()=>setPreview(!S.preview);
 
 /* ---------- bbox of a layer's alpha ---------- */
 function bboxOf(data){ const W=S.iw,H=S.ih,d=data.data; let minx=W,miny=H,maxx=-1,maxy=-1;
@@ -515,6 +564,55 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
   else ta.style.display='none'; };
 
+/* ---------- nexum payload: an OGCutoutRig + the layer images, for the app host to bake ----------
+   The library's OGStageLayer rotates about the layer CENTRE, so each mover frame is drawn full-canvas
+   with its JOINT shifted to the centre — then the bake rotates about centre (= the joint) and offsets
+   x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
+function fullCanvasDataURL(maskData, offsetX, offsetY, punchMasks){
+  const W=S.iw,H=S.ih, sd=S.srcData.data, md=maskData.data;
+  const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const octx=oc.getContext('2d');
+  const out=octx.createImageData(W,H); const od=out.data;
+  for(let dy=0;dy<H;dy++)for(let dx=0;dx<W;dx++){
+    const sx=dx-offsetX, sy=dy-offsetY; if(sx<0||sy<0||sx>=W||sy>=H) continue;
+    const si=(sy*W+sx)*4; let a=md[si+3]/255; if(!a) continue;
+    if(punchMasks) for(const mv of punchMasks) a*=(1-mv[si+3]/255);
+    const oi=(dy*W+dx)*4; od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+  }
+  octx.putImageData(out,0,0); return oc.toDataURL('image/png');
+}
+async function buildNexumPayload(){
+  if(!S.srcData) return null; const W=S.iw,H=S.ih;
+  const punchMasks=[]; // movers (with punch on) to cut out of the base
+  for(const l of S.layers){ if(l.role==='mover' && l.punch){ const md=l.mctx.getImageData(0,0,W,H);
+    if(bboxOf(md)) punchMasks.push(md.data); } }
+  const images={}, rigLayers=[];
+  for(const l of S.layers){ const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box) continue;
+    const name=sanitize(l.name);
+    if(l.role==='base'){
+      images[name]=fullCanvasDataURL(md, 0, 0, punchMasks);
+      rigLayers.push({ id:name, resource:name, role:'base', pivotX:0.5, pivotY:0.5 });
+    } else {
+      const pv=l.pivot || {x:box.x+box.w/2, y:box.y+box.h/2};
+      const offX=Math.round(W/2 - pv.x), offY=Math.round(H/2 - pv.y);
+      images[name]=fullCanvasDataURL(md, offX, offY, null);
+      rigLayers.push({ id:name, resource:name, role:'mover',
+        pivotX:+(pv.x/W).toFixed(4), pivotY:+(pv.y/H).toFixed(4), swingDeg:10 });
+    }
+  }
+  const rig={ width:W, height:H, durationMs:2600, fps:60, layers:rigLayers };
+  return { kind:'og-rig-payload', v:1, rig, images };
+}
+// Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
+async function sendToNexum(){ if(!S.img){toast('Load an image first');return;}
+  toast('Packing layers…'); const str=JSON.stringify(await buildNexumPayload());
+  if(window.NexumHost && window.NexumHost.receivePayload){ window.NexumHost.receivePayload(str); toast('Sent to app ✓'); return; }
+  if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(str); toast('Sent to app ✓'); return; }
+  if(window.parent && window.parent!==window){ window.parent.postMessage(str,'*'); toast('Sent to host ✓'); return; }
+  const blob=new Blob([str],{type:'application/json'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='rig_payload.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('No app host — saved rig_payload.json'); }
+document.getElementById('toNexum').onclick=sendToNexum;
+
 /* preview active layer isolated */
 document.getElementById('previewBtn').onclick=async()=>{ const l=activeLayer(); if(!l)return;
   const W=S.iw,H=S.ih, sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md);
@@ -558,7 +656,7 @@ function zipStore(files){
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, wandAt, zipStore };
+window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore };
 </script>
 </body>
 </html>
