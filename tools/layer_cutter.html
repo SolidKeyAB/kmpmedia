@@ -155,14 +155,15 @@
     <div class="group">
       <h2>Export</h2>
       <div class="row">
-        <button class="go" id="export">⬇ Export .zip (PNGs + rig.json)</button>
+        <button class="go" id="toNexum">📡 Send to app (nexum)</button>
       </div>
       <div class="row" style="margin-top:6px;">
-        <button class="sm" id="previewBtn">👁 Preview active cutout</button>
-        <button class="sm" id="showJson">{ } Show rig JSON</button>
+        <button class="sm" id="export">⬇ Export .zip</button>
+        <button class="sm" id="previewBtn">👁 Preview</button>
+        <button class="sm" id="showJson">{ } rig JSON</button>
       </div>
       <textarea id="json" style="display:none" readonly></textarea>
-      <p class="hint">The zip has one transparent PNG per layer (named after the layer), the base with the mover-holes punched, and <code>rig.json</code> with each part's pivot + placement — exactly what the SUPER X puppet reads.</p>
+      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the app over nexum (I bake the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
     </div>
   </aside>
 </div>
@@ -515,6 +516,24 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
   else ta.style.display='none'; };
 
+/* ---------- nexum payload: rig + the layer images, for the app host to bake ---------- */
+async function buildNexumPayload(){
+  const {files, jsonStr}=await buildExport(); const images={};
+  for(const f of files){ if(f.name.endsWith('.png')){ const b=new Blob([f.data],{type:'image/png'});
+    images[f.name]=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b);}); } }
+  return { kind:'og-rig-payload', v:1, rig:JSON.parse(jsonStr), images };
+}
+// Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
+async function sendToNexum(){ if(!S.img){toast('Load an image first');return;}
+  toast('Packing layers…'); const str=JSON.stringify(await buildNexumPayload());
+  if(window.NexumHost && window.NexumHost.receivePayload){ window.NexumHost.receivePayload(str); toast('Sent to app ✓'); return; }
+  if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(str); toast('Sent to app ✓'); return; }
+  if(window.parent && window.parent!==window){ window.parent.postMessage(str,'*'); toast('Sent to host ✓'); return; }
+  const blob=new Blob([str],{type:'application/json'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='rig_payload.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('No app host — saved rig_payload.json'); }
+document.getElementById('toNexum').onclick=sendToNexum;
+
 /* preview active layer isolated */
 document.getElementById('previewBtn').onclick=async()=>{ const l=activeLayer(); if(!l)return;
   const W=S.iw,H=S.ih, sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md);
@@ -558,7 +577,7 @@ function zipStore(files){
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, wandAt, zipStore };
+window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore };
 </script>
 </body>
 </html>
