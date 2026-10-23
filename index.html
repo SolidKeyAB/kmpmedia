@@ -80,7 +80,10 @@
   <button class="sm" id="hUndo" title="Undo (⌘Z)" style="flex:0 0 auto;">↩︎</button>
   <button class="sm" id="hRedo" title="Redo (⇧⌘Z)" style="flex:0 0 auto;">↪︎</button>
   <button class="sm" id="loadBtn">📁 Load image</button>
+  <button class="sm" id="saveProj" title="Save this cut (image + layers + joints) to a file you can reopen">💾 Save</button>
+  <button class="sm" id="openProj" title="Reopen a saved cut and keep going">📂 Open</button>
   <input type="file" id="file" accept="image/*" style="display:none">
+  <input type="file" id="projFile" accept=".json,application/json" style="display:none">
 </header>
 
 <div class="main">
@@ -91,6 +94,7 @@
         <div class="big">🖼️</div>
         <div class="t">Open an image</div>
         <div class="s">Tap to pick from <b>Photos</b> or <b>Files</b> (any attachment)<br>· or paste a copied image · or drag one in ·</div>
+        <button class="sm go" id="resumeBtn" style="display:none;margin-top:12px">↩︎ Resume last cut</button>
       </div>
     </div>
   </div>
@@ -267,6 +271,83 @@ const emptyEl=document.getElementById('empty');
 ['dragleave','drop'].forEach(ev=>stageWrap.addEventListener(ev,e=>{ e.preventDefault(); emptyEl.classList.remove('drag'); }));
 stageWrap.addEventListener('drop',e=>{ const f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if(f)loadFile(f); });
 
+/* ---------- save / reopen an ongoing cut (full project: image + layers + masks + joints) ---------- */
+const AUTOSAVE_KEY='ogcut:autosave:v1';
+function serializeProject(){
+  return { kind:'og-cutter-project', v:1, savedAt:new Date().toISOString(),
+    iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId,
+    image:S.src.toDataURL('image/png'),
+    layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch,
+      visible:l.visible, color:l.color, pivot:l.pivot||null, swingDeg:l.swingDeg||null,
+      mask:l.mc.toDataURL('image/png') })) };
+}
+function saveProject(){
+  if(!S.img){ toast('Load + cut something first'); return; }
+  const blob=new Blob([JSON.stringify(serializeProject())],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='layercutter_cut.ogcut.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
+  toast('Saved — reopen it with 📂 Open to keep cutting');
+}
+function restoreProject(proj, quiet){
+  if(!proj || proj.kind!=='og-cutter-project'){ toast('Not a Layer Cutter project'); return; }
+  const img=new Image();
+  img.onload=()=>{
+    S.img=img; S.iw=proj.iw||img.naturalWidth; S.ih=proj.ih||img.naturalHeight;
+    if(typeof proj.bg==='number') S.bg=proj.bg;
+    S.src=document.createElement('canvas'); S.src.width=S.iw; S.src.height=S.ih;
+    const sctx=S.src.getContext('2d',{willReadFrequently:true}); sctx.drawImage(img,0,0);
+    S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
+    S.layers=[]; S.undo=[]; S.redo=[]; S.preview=false;
+    const pls=proj.layers||[];
+    nextId=Math.max(proj.nextId||1, ...pls.map(l=>(l.id||0)+1), 1);
+    S.active=Math.max(0, Math.min(proj.active??0, pls.length-1));
+    let pending=pls.length;
+    const finish=()=>{ document.getElementById('dims').textContent=`${S.iw}×${S.ih}`;
+      document.getElementById('empty').style.display='none';
+      fitView(); renderLayerList(); draw(); markDirty();
+      if(!quiet) toast('Project opened — pick up where you left off'); };
+    if(!pls.length){ finish(); return; }
+    pls.forEach((pl,idx)=>{
+      const mc=document.createElement('canvas'); mc.width=S.iw; mc.height=S.ih;
+      const mctx=mc.getContext('2d',{willReadFrequently:true});
+      const L={ id:pl.id||(idx+1), name:pl.name||('layer'+(idx+1)), role:pl.role||'mover',
+        punch:pl.punch!==undefined?pl.punch:(pl.role!=='base'), visible:pl.visible!==false,
+        color:pl.color||PALETTE[idx%PALETTE.length], mc, mctx, pivot:pl.pivot||null };
+      if(pl.swingDeg) L.swingDeg=pl.swingDeg;
+      S.layers[idx]=L;
+      if(pl.mask){ const mi=new Image();
+        mi.onload=()=>{ mctx.drawImage(mi,0,0); if(--pending===0) finish(); };
+        mi.onerror=()=>{ if(--pending===0) finish(); }; mi.src=pl.mask; }
+      else if(--pending===0) finish();
+    });
+  };
+  img.onerror=()=>toast('Project image failed to load');
+  img.src=proj.image;
+}
+function openProjectFile(file){
+  if(!file){ return; }
+  const r=new FileReader();
+  r.onload=()=>{ try{ restoreProject(JSON.parse(r.result)); }catch(e){ toast('Could not read that project file'); } };
+  r.readAsText(file);
+}
+/* best-effort autosave to the browser so an accidental reload doesn't lose the cut */
+let autosaveT=0;
+function markDirty(){ clearTimeout(autosaveT); autosaveT=setTimeout(()=>{
+  if(!S.img) return;
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(serializeProject())); }
+  catch(e){ /* quota / private mode — explicit 💾 Save still works */ } }, 2500); }
+function hasAutosave(){ try{ return !!localStorage.getItem(AUTOSAVE_KEY); }catch(e){ return false; } }
+function resumeAutosave(){ try{ const raw=localStorage.getItem(AUTOSAVE_KEY);
+  if(raw) restoreProject(JSON.parse(raw)); }catch(e){ toast('No session to resume'); } }
+
+document.getElementById('saveProj').onclick=saveProject;
+document.getElementById('openProj').onclick=()=>document.getElementById('projFile').click();
+document.getElementById('projFile').onchange=e=>openProjectFile(e.target.files[0]);
+const resumeBtn=document.getElementById('resumeBtn');
+if(resumeBtn && hasAutosave()){ resumeBtn.style.display='inline-block';
+  resumeBtn.onclick=(e)=>{ e.stopPropagation(); resumeAutosave(); }; }
+
 /* ---------- view ---------- */
 function resizeCanvas(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
   cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
@@ -354,7 +435,7 @@ function draw(){
 function snap(l){ return {id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
 function pushUndo(){ const l=activeLayer(); if(!l)return;
   S.undo.push(snap(l)); if(S.undo.length>40) S.undo.shift();
-  S.redo.length=0; }                    // a new action forks history → clear redo
+  S.redo.length=0; markDirty(); }       // a new action forks history → clear redo (+ autosave)
 function restoreFrom(fromStack, toStack, verb){
   const u=fromStack.pop(); if(!u){ toast('Nothing to '+verb); return; }
   const l=S.layers.find(x=>x.id===u.id); if(!l){ toast('Layer gone'); return; }
@@ -461,7 +542,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
       mid:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}, zoom:S.view.zoom, vx:S.view.x, vy:S.view.y }; return; }
   if(S.preview) return;                 // preview is play-only; single-finger does nothing
   const sp=evPos(e); const ip=s2i(sp.x,sp.y);
-  if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); } return; }
+  if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); markDirty(); } return; }
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
   // brush / erase
