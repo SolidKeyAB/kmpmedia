@@ -77,6 +77,8 @@
   <h1>✂️ Layer Cutter</h1>
   <span class="sub" id="dims">— no image —</span>
   <span class="spacer"></span>
+  <button class="sm" id="hUndo" title="Undo (⌘Z)" style="flex:0 0 auto;">↩︎</button>
+  <button class="sm" id="hRedo" title="Redo (⇧⌘Z)" style="flex:0 0 auto;">↪︎</button>
   <button class="sm" id="loadBtn">📁 Load image</button>
   <input type="file" id="file" accept="image/*" style="display:none">
 </header>
@@ -109,8 +111,12 @@
         <input type="range" id="brush" min="3" max="200" value="40">
         <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
         <input type="range" id="tol" min="2" max="120" value="40">
+        <div class="row" id="wandMode" style="margin-top:8px;">
+          <button class="sm on" data-wm="add">✚ Wand adds</button>
+          <button class="sm" data-wm="sub">✖ Wand removes</button>
+        </div>
       </div>
-      <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected for the active layer. Pivot = the joint the part rotates around.</p>
+      <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
     </div>
 
     <!-- Selection ops -->
@@ -129,6 +135,7 @@
       </div>
       <div class="row" style="margin-top:6px;">
         <button class="sm" id="undo">↩︎ Undo</button>
+        <button class="sm" id="redo">↪︎ Redo</button>
         <button class="sm danger" id="clear">✕ Clear layer</button>
       </div>
       <p class="hint">Knock-out white flood-fills the connected white background and keeps everything else — the fast first cut. Then Brush/Erase to fix, Grow to catch the soft pencil edge, Shrink/Feather to tidy.</p>
@@ -173,9 +180,9 @@ const S = {
   img:null, iw:0, ih:0,
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
-  tool:'wand', brush:40, tol:40, bg:235,
+  tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
   view:{zoom:1, x:0, y:0},
-  undo:[],                              // {id, data:ImageData}
+  undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
   pointers:new Map(), pinch:null, lastPan:null, cursor:null,
 };
@@ -230,7 +237,7 @@ function loadImage(src){
     S.src=document.createElement('canvas'); S.src.width=S.iw; S.src.height=S.ih;
     const sctx=S.src.getContext('2d', {willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
-    S.layers=[]; S.active=-1; S.undo=[]; nextId=1;
+    S.layers=[]; S.active=-1; S.undo=[]; S.redo=[]; nextId=1;
     S.layers.push(makeLayer('fig','base'));
     S.layers.push(makeLayer('arm_r','mover'));
     S.active=1;
@@ -298,11 +305,29 @@ function draw(){
 }
 
 /* ---------- mask editing (canvas-op based) ---------- */
+function snap(l){ return {id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
 function pushUndo(){ const l=activeLayer(); if(!l)return;
-  S.undo.push({id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)});
-  if(S.undo.length>24) S.undo.shift(); }
-document.getElementById('undo').onclick=()=>{ const u=S.undo.pop(); if(!u){toast('Nothing to undo');return;}
-  const l=S.layers.find(x=>x.id===u.id); if(l){ l.mctx.putImageData(u.data,0,0); draw(); } };
+  S.undo.push(snap(l)); if(S.undo.length>40) S.undo.shift();
+  S.redo.length=0; }                    // a new action forks history → clear redo
+function restoreFrom(fromStack, toStack, verb){
+  const u=fromStack.pop(); if(!u){ toast('Nothing to '+verb); return; }
+  const l=S.layers.find(x=>x.id===u.id); if(!l){ toast('Layer gone'); return; }
+  toStack.push(snap(l));                // save current so the inverse can bring it back
+  l.mctx.putImageData(u.data,0,0); S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
+}
+function doUndo(){ restoreFrom(S.undo, S.redo, 'undo'); }
+function doRedo(){ restoreFrom(S.redo, S.undo, 'redo'); }
+document.getElementById('undo').onclick=doUndo;
+document.getElementById('redo').onclick=doRedo;
+document.getElementById('hUndo').onclick=doUndo;
+document.getElementById('hRedo').onclick=doRedo;
+// wand add/remove mode (so a wrong flood is reverted directly, not only via history)
+document.querySelectorAll('#wandMode button').forEach(b=>b.onclick=()=>{
+  S.wandSub = b.dataset.wm==='sub';
+  document.querySelectorAll('#wandMode button').forEach(x=>x.classList.toggle('on', x===b)); });
+// keyboard: ⌘/Ctrl+Z undo, ⇧⌘/Ctrl+Z or Ctrl+Y redo
+window.addEventListener('keydown', e=>{ const mod=e.metaKey||e.ctrlKey; if(!mod)return; const k=e.key.toLowerCase();
+  if(k==='z'){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); } else if(k==='y'){ e.preventDefault(); doRedo(); } });
 
 function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.mctx;
   m.globalCompositeOperation = erase?'destination-out':'source-over';
@@ -390,7 +415,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
       mid:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}, zoom:S.view.zoom, vx:S.view.x, vy:S.view.y }; return; }
   const sp=evPos(e); const ip=s2i(sp.x,sp.y);
   if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); } return; }
-  if(S.tool==='wand'){ wandAt(ip.x,ip.y,false); return; }
+  if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
   // brush / erase
   drawing=true; pushUndo(); paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
