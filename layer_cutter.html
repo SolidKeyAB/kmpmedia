@@ -41,16 +41,18 @@
   label.sld{display:block; font-size:12px; color:var(--dim); margin:8px 0 2px;}
   input[type=range]{width:100%; accent-color:var(--accent);}
   .hint{font-size:11px; color:var(--dim); line-height:1.45; margin:6px 0 0;}
-  .layer{display:flex; align-items:center; gap:7px; padding:7px 8px; border:1px solid var(--line);
-    border-radius:9px; margin-bottom:6px; background:var(--panel2);}
-  .layer.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
-  .layer .sw{width:16px; height:16px; border-radius:4px; flex:0 0 auto; border:1px solid #0006;}
-  .layer input.nm{flex:1; min-width:0; background:transparent; border:none; color:var(--txt);
-    font:inherit; font-size:13px; padding:2px;}
-  .layer input.nm:focus{outline:1px solid var(--line); border-radius:4px;}
+  .layer{display:flex; flex-direction:column; align-items:stretch; gap:6px; padding:8px; border:1px solid var(--line);
+    border-radius:9px; margin-bottom:6px; background:var(--panel2); cursor:pointer;}
+  .layer.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; background:#242c52;}
+  .lrow{display:flex; align-items:center; gap:7px;}
+  .lrow .grow{flex:1;}
+  .layer .sw{width:22px; height:22px; border-radius:6px; flex:0 0 auto; border:1px solid #0006; cursor:pointer;}
+  .layer input.nm{flex:1; min-width:0; background:#0b0f1e66; border:1px solid var(--line); color:var(--txt);
+    font:inherit; font-size:14px; padding:7px 9px; border-radius:7px;}
+  .layer input.nm:focus{outline:none; border-color:var(--accent); background:#0b0f1e;}
   .layer select{background:var(--panel); color:var(--txt); border:1px solid var(--line);
-    border-radius:6px; font-size:11px; padding:3px;}
-  .layer .mini{background:transparent; border:none; min-height:28px; padding:3px 5px; flex:0 0 auto; font-size:14px;}
+    border-radius:6px; font-size:12px; padding:5px 6px;}
+  .layer .mini{background:transparent; border:none; min-height:30px; padding:3px 7px; flex:0 0 auto; font-size:15px;}
   .mini[disabled]{opacity:.28; pointer-events:none;}
   .pill{font-size:10px; padding:1px 6px; border-radius:20px; background:#0005; color:var(--dim);}
   .mrow{display:flex; align-items:center; gap:8px; margin:6px 0;}
@@ -286,31 +288,61 @@ function renderLayerList(){
   // show front-most at top
   for(let i=S.layers.length-1;i>=0;i--){
     const l=S.layers[i];
-    const row=document.createElement('div'); row.className='layer'+(i===S.active?' sel':'');
+    const row=document.createElement('div'); row.className='layer'+(i===S.active?' sel':''); row.dataset.idx=i;
+    // two rows: name (full-width, always readable) on top; role/punch/order below
     row.innerHTML=`
-      <span class="sw" style="background:${l.color}"></span>
-      <input class="nm" value="${l.name}">
-      <select class="role"><option value="base"${l.role==='base'?' selected':''}>base</option>
-        <option value="mover"${l.role==='mover'?' selected':''}>mover</option></select>
-      <label class="pill" title="punch hole in base"><input type="checkbox" class="pn" ${l.punch?'checked':''}> punch</label>
-      <button class="mini up" title="bring forward (toward front)" ${i===S.layers.length-1?'disabled':''}>▲</button>
-      <button class="mini dn" title="send back (toward back)" ${i===0?'disabled':''}>▼</button>
-      <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
-      <button class="mini del danger" title="delete">🗑</button>`;
-    row.onclick=(e)=>{ if(e.target.closest('input,select,button'))return; S.active=i; S.warpSel=null; renderLayerList(); draw(); };
-    row.querySelector('.nm').onchange=e=>{ l.name=e.target.value; markDirty(); };
+      <div class="lrow">
+        <span class="sw" style="background:${l.color}" title="tap to select this layer"></span>
+        <input class="nm" value="${l.name}" title="layer name — tap to rename">
+        <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
+        <button class="mini del danger" title="delete (you can undo)">🗑</button>
+      </div>
+      <div class="lrow">
+        <select class="role"><option value="base"${l.role==='base'?' selected':''}>base</option>
+          <option value="mover"${l.role==='mover'?' selected':''}>mover</option></select>
+        <label class="pill" title="punch hole in base"><input type="checkbox" class="pn" ${l.punch?'checked':''}> punch</label>
+        <span class="grow"></span>
+        <button class="mini up" title="bring forward (toward front)" ${i===S.layers.length-1?'disabled':''}>▲</button>
+        <button class="mini dn" title="send back (toward back)" ${i===0?'disabled':''}>▼</button>
+      </div>`;
+    // tap anywhere on the row (except a control) to select it — lightweight, no rebuild
+    row.onclick=(e)=>{ if(e.target.closest('button,select,input,.pill'))return; setActive(i); };
+    const nm=row.querySelector('.nm');
+    nm.onfocus=()=>{ if(S.active!==i) setActive(i); };           // tapping the name also selects
+    nm.onchange=e=>{ l.name=e.target.value; markDirty(); };
     row.querySelector('.role').onchange=e=>{ l.role=e.target.value; l.punch=(l.role!=='base'); renderLayerList(); markDirty(); };
     row.querySelector('.pn').onchange=e=>{ l.punch=e.target.checked; markDirty(); };
     row.querySelector('.up').onclick=()=>moveLayer(i,+1);
     row.querySelector('.dn').onclick=()=>moveLayer(i,-1);
     row.querySelector('.vis').onclick=()=>{ l.visible=!l.visible; renderLayerList(); draw(); markDirty(); };
-    row.querySelector('.del').onclick=()=>{ if(S.layers.length<=1){toast('Keep at least one layer');return;}
-      S.layers.splice(i,1); S.active=Math.min(S.active, S.layers.length-1); renderLayerList(); draw(); markDirty(); };
+    row.querySelector('.del').onclick=()=>deleteLayer(i);
     box.appendChild(row);
   }
   renderMotion();
   if(typeof renderExprPose==='function') renderExprPose();
   if(typeof renderWarpPanel==='function') renderWarpPanel();
+}
+// select a layer WITHOUT rebuilding the whole list (keeps a focused name field alive, feels instant)
+function setActive(i){
+  if(i<0 || i>=S.layers.length) return;
+  S.active=i; S.warpSel=null;
+  const box=document.getElementById('layerList');
+  for(const row of box.children) row.classList.toggle('sel', (+row.dataset.idx)===i);
+  renderMotion();
+  if(typeof renderExprPose==='function') renderExprPose();
+  if(typeof renderWarpPanel==='function') renderWarpPanel();
+  draw();
+}
+// delete a layer, but keep it in the undo stack so an accidental 🗑 is one tap to recover
+function deleteLayer(i){
+  if(S.layers.length<=1){ toast('Keep at least one layer'); return; }
+  const removed=S.layers[i];
+  pushHist({k:'layerdel', idx:i, id:removed.id, layer:removed});   // whole layer object (canvas + poses) is preserved
+  S.layers.splice(i,1);
+  if(S.active===i) S.active=Math.min(i, S.layers.length-1);
+  else if(S.active>i) S.active--;
+  S.warpSel=null; renderLayerList(); draw(); markDirty();
+  toast('Deleted “'+removed.name+'” — tap ↩︎ to undo');
 }
 // front/back z-order: dir +1 = toward front (higher index = drawn later = on top)
 function moveLayer(i, dir){ const j=i+dir; if(j<0||j>=S.layers.length) return;
@@ -558,6 +590,20 @@ function histSlider(el, l, expr){ let armed=true;
   el.addEventListener('pointerdown', ()=>{ armed=true; }); }                                // new drag → re-arm
 function restoreFrom(fromStack, toStack, verb){
   const u=fromStack.pop(); if(!u){ toast('Nothing to '+verb); return; }
+  if(u.k==='layerdel'){                                   // undo a deletion → re-insert the saved layer
+    toStack.push({k:'layeradd', id:u.id});               // inverse = delete it again on redo
+    const at=Math.min(u.idx, S.layers.length);
+    S.layers.splice(at, 0, u.layer); u.layer._cut=null;
+    S.active=at; S.warpSel=null; S.warpDrag=null; S.faceDrag=null;
+    renderLayerList(); draw(); toast('Layer restored'); return;
+  }
+  if(u.k==='layeradd'){                                   // redo a deletion → remove it again
+    const i=S.layers.findIndex(x=>x.id===u.id);
+    if(i>=0){ toStack.push({k:'layerdel', idx:i, id:u.id, layer:S.layers[i]});
+      S.layers.splice(i,1);
+      if(S.active===i) S.active=Math.min(i, S.layers.length-1); else if(S.active>i) S.active--; }
+    S.warpSel=null; renderLayerList(); draw(); toast('Layer deleted'); return;
+  }
   const l=S.layers.find(x=>x.id===u.id); if(!l){ toast('Layer gone'); return; }
   if(u.k==='pose'){
     toStack.push(snapPose(l, u.expr));                     // save current pose so the inverse restores it
