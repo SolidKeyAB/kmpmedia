@@ -171,6 +171,7 @@
         <button class="sm" id="addLayer">＋ Add part layer</button>
         <button class="sm go" id="preview">▶ Preview motion</button>
       </div>
+      <label class="pill" id="skinFillPill" title="When a part is cut out of the head/body, fill the empty hole it leaves with the surrounding skin colour — so when the mouth/eye moves for an expression you see skin underneath, not a transparent gap"><input type="checkbox" id="skinFill" checked> 🩹 fill cut-out holes with skin</label>
       <p class="hint"><b>base</b> = the body, stays still &amp; joined. <b>mover</b> = a limb you'll animate — cut it OFF the body itself (not a separate study, or it won't line up), tick “cut out” so its shape is lifted off whatever it sits on (the base, or the layer it <b>Swings with</b>), and pin its 🎯 joint (shoulder/hip/neck). Use <b>▲▼</b> on a row to order front/back. Then <b>▶ Preview motion</b> to watch the whole figure assemble + swing.</p>
     </div>
 
@@ -255,6 +256,7 @@ const S = {
   lasso:null,                           // in-progress lasso points (image coords)
   pointers:new Map(), pinch:null, lastPan:null, cursor:null,
   preview:false, previewT:0,            // live assembled-motion preview
+  skinFill:true,                        // fill cut-out holes with the parent's own colour (skin) so a moved part reveals skin, not a transparent gap
   mode:'rig',                           // 'rig' = cut + swing puppet; 'face' = expression authoring
   expr:'neutral',                       // the expression being posed / shown
   exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
@@ -468,7 +470,7 @@ stageWrap.addEventListener('drop',e=>{ const f=e.dataTransfer && e.dataTransfer.
 const AUTOSAVE_KEY='ogcut:autosave:v1';
 function serializeProject(){
   return { kind:'og-cutter-project', v:1, savedAt:new Date().toISOString(),
-    iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId,
+    iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId, skinFill:S.skinFill,
     image:S.src.toDataURL('image/png'),
     mode:S.mode, expr:S.expr,
     layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch,
@@ -493,6 +495,7 @@ function restoreProject(proj, quiet){
   img.onload=()=>{
     S.img=img; S.iw=proj.iw||img.naturalWidth; S.ih=proj.ih||img.naturalHeight;
     if(typeof proj.bg==='number') S.bg=proj.bg;
+    if(typeof proj.skinFill==='boolean'){ S.skinFill=proj.skinFill; const sf=document.getElementById('skinFill'); if(sf) sf.checked=proj.skinFill; }
     S.src=document.createElement('canvas'); S.src.width=S.iw; S.src.height=S.ih;
     const sctx=S.src.getContext('2d',{willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
@@ -565,17 +568,57 @@ function s2i(sx,sy){ return {x:(sx-S.view.x)/S.view.zoom, y:(sy-S.view.y)/S.view
 // masks of child layers that are 'punch'ed OUT of layer l (e.g. an eye cut out of the head it rides)
 function punchKidMasks(l){ return S.layers.filter(k=>k!==l && k.punch && k.parent===l.id)
     .map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data); }
+// Spread a layer's OWN surrounding colour into its punched-out holes, so when the
+// cut-out child (mouth/eye) moves for an expression it reveals SKIN, not a transparent
+// gap. Pure inpaint: seed with the layer's non-hole pixels, then grow (wave dilation,
+// 8-neighbour average) inward over the hole until filled. Works in source space,
+// returns Uint8ClampedArray(W*H*3) of skin RGB, or null if there are no holes.
+function skinFillRGB(ownMask, holeMasks){
+  if(!S.skinFill || !holeMasks || !holeMasks.length) return null;
+  const W=S.iw,H=S.ih, sd=S.srcData.data, N=W*H;
+  const rgb=new Float32Array(N*3), cur=new Uint8Array(N), hole=new Uint8Array(N);
+  let hx0=W,hy0=H,hx1=-1,hy1=-1, anyHole=false, sr=0,sg=0,sb=0,sn=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const p=y*W+x,o=p*4;
+    if(ownMask[o+3]<=8) continue;
+    let hf=1; for(const kd of holeMasks) hf*=(1-kd[o+3]/255);
+    if(hf<0.5){ hole[p]=1; anyHole=true; if(x<hx0)hx0=x;if(x>hx1)hx1=x;if(y<hy0)hy0=y;if(y>hy1)hy1=y; }
+    else { rgb[p*3]=sd[o]; rgb[p*3+1]=sd[o+1]; rgb[p*3+2]=sd[o+2]; cur[p]=1; sr+=sd[o];sg+=sd[o+1];sb+=sd[o+2];sn++; }
+  }
+  if(!anyHole || !sn) return null;
+  hx0=Math.max(0,hx0-1);hy0=Math.max(0,hy0-1);hx1=Math.min(W-1,hx1+1);hy1=Math.min(H-1,hy1+1);
+  let grew=true, guard=0;
+  while(grew && guard++<3000){ grew=false; const add=[];
+    for(let y=hy0;y<=hy1;y++)for(let x=hx0;x<=hx1;x++){ const p=y*W+x;
+      if(cur[p]||!hole[p]) continue;
+      let r=0,g=0,b=0,n=0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
+        const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=W||yy>=H)continue; const q=yy*W+xx;
+        if(cur[q]){ r+=rgb[q*3];g+=rgb[q*3+1];b+=rgb[q*3+2];n++; } }
+      if(n) add.push(p,r/n,g/n,b/n);
+    }
+    if(add.length){ grew=true; for(let i=0;i<add.length;i+=4){ const p=add[i]; rgb[p*3]=add[i+1];rgb[p*3+1]=add[i+2];rgb[p*3+2]=add[i+3]; cur[p]=1; } }
+  }
+  const mr=sr/sn,mg=sg/sn,mb=sb/sn;   // fallback mean skin for any pocket the wave couldn't reach
+  const out=new Uint8ClampedArray(N*3);
+  for(let p=0;p<N;p++){ if(hole[p]&&!cur[p]){ out[p*3]=mr;out[p*3+1]=mg;out[p*3+2]=mb; }
+    else { out[p*3]=rgb[p*3];out[p*3+1]=rgb[p*3+1];out[p*3+2]=rgb[p*3+2]; } }
+  return out;
+}
 function buildCut(l){
   if(l._cut!==undefined && l._cut!==null) return l._cut;
   const W=S.iw,H=S.ih,sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H).data;
   let any=false; for(let p=3;p<md.length;p+=4){ if(md[p]>8){ any=true; break; } }
   if(!any){ l._cut=null; return null; }
   const kids=punchKidMasks(l);   // holes where child parts were cut out (so they animate on their own, no ghost)
+  const skin=skinFillRGB(md, kids);   // skin to pour into those holes (null when skin-fill off / no holes)
   const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
   const out=cx.createImageData(W,H); const od=out.data;
   for(let p=0;p<W*H;p++){ const o=p*4; const ma=md[o+3]; if(!ma) continue;
-    let f=ma/255; for(const kd of kids) f*=(1-kd[o+3]/255);
-    od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*f); }
+    let hf=1; for(const kd of kids) hf*=(1-kd[o+3]/255);
+    if(skin){ const t=1-hf;   // fill holes with skin: keep the FULL silhouette, blend colour toward skin
+      od[o]=sd[o]*(1-t)+skin[p*3]*t; od[o+1]=sd[o+1]*(1-t)+skin[p*3+1]*t; od[o+2]=sd[o+2]*(1-t)+skin[p*3+2]*t;
+      od[o+3]=Math.round(sd[o+3]*(ma/255)); }
+    else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hf); } }
   cx.putImageData(out,0,0); l._cut=c; return c;
 }
 function layerById(id){ return S.layers.find(x=>x.id===id) || null; }
@@ -862,6 +905,9 @@ bgEl.oninput=()=>{S.bg=+bgEl.value; document.getElementById('bgVal').textContent
 document.getElementById('addLayer').onclick=()=>{ if(!S.img){toast('Load an image first');return;}
   S.layers.push(makeLayer('part_'+(S.layers.length), 'mover')); S.active=S.layers.length-1; renderLayerList(); draw(); };
 document.getElementById('preview').onclick=()=>setPreview(!S.preview);
+document.getElementById('skinFill').onchange=e=>{ S.skinFill=e.target.checked;
+  S.layers.forEach(l=>{ l._cut=null; });   // rebuild cut images with/without skin fill
+  draw(); markDirty(); toast(S.skinFill?'🩹 Cut-out holes filled with skin':'Cut-out holes left transparent'); };
 
 /* ---------- bbox of a layer's alpha ---------- */
 function bboxOf(data){ const W=S.iw,H=S.ih,d=data.data; let minx=W,miny=H,maxx=-1,maxy=-1;
@@ -878,13 +924,16 @@ async function buildExport(){
   for(const l of S.layers){
     const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box)continue;
     const kids=punchKidMasks(l);   // pieces cut OUT of this layer (eye out of head, etc.)
+    const holes=(l.role==='base'?baseKnock:[]).concat(kids);
+    const skin=skinFillRGB(md.data, holes);   // fill the holes with skin so moved parts reveal skin, not a gap
     const oc=document.createElement('canvas'); oc.width=box.w; oc.height=box.h; const octx=oc.getContext('2d');
     const out=octx.createImageData(box.w,box.h); const od=out.data; const mdd=md.data;
-    for(let y=0;y<box.h;y++)for(let x=0;x<box.w;x++){ const sx=box.x+x, sy=box.y+y; const si=(sy*W+sx)*4; const oi=(y*box.w+x)*4;
-      let a=mdd[si+3]/255;
-      if(l.role==='base'){ for(const mv of baseKnock){ a*= (1 - mv[si+3]/255); } }
-      for(const kd of kids){ a*= (1 - kd[si+3]/255); }
-      od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+    for(let y=0;y<box.h;y++)for(let x=0;x<box.w;x++){ const sx=box.x+x, sy=box.y+y; const sp=sy*W+sx, si=sp*4; const oi=(y*box.w+x)*4;
+      let hf=1; for(const kd of holes){ hf*= (1 - kd[si+3]/255); }
+      if(skin){ const t=1-hf;
+        od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
+        od[oi+3]=Math.round(sd[si+3]*mdd[si+3]/255); }
+      else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(mdd[si+3]/255)*hf); }
     }
     octx.putImageData(out,0,0);
     const blob=await new Promise(res=>oc.toBlob(res,'image/png'));
@@ -922,13 +971,18 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
    x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
 function fullCanvasDataURL(maskData, offsetX, offsetY, punchMasks){
   const W=S.iw,H=S.ih, sd=S.srcData.data, md=maskData.data;
+  const skin=skinFillRGB(md, punchMasks);   // pour skin into the holes so a moved part reveals skin, not a gap
   const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const octx=oc.getContext('2d');
   const out=octx.createImageData(W,H); const od=out.data;
   for(let dy=0;dy<H;dy++)for(let dx=0;dx<W;dx++){
     const sx=dx-offsetX, sy=dy-offsetY; if(sx<0||sy<0||sx>=W||sy>=H) continue;
-    const si=(sy*W+sx)*4; let a=md[si+3]/255; if(!a) continue;
-    if(punchMasks) for(const mv of punchMasks) a*=(1-mv[si+3]/255);
-    const oi=(dy*W+dx)*4; od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+    const sp=sy*W+sx, si=sp*4; if(!md[si+3]) continue;
+    let hf=1; if(punchMasks) for(const mv of punchMasks) hf*=(1-mv[si+3]/255);
+    const oi=(dy*W+dx)*4;
+    if(skin){ const t=1-hf;
+      od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
+      od[oi+3]=Math.round(sd[si+3]*md[si+3]/255); }
+    else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(md[si+3]/255)*hf); }
   }
   octx.putImageData(out,0,0); return oc.toDataURL('image/png');
 }
