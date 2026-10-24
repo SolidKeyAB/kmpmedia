@@ -379,8 +379,12 @@ function renderMotion(){
     <div class="mrow"><label>Tuck to body</label>
       <span class="nudge"><button class="mini nL" title="left">◀</button><button class="mini nU" title="up">▲</button><button class="mini nD" title="down">▼</button><button class="mini nR" title="right">▶</button></span>
       <button class="mini nRst" title="reset">⟲</button><span class="mval mOff">${l.tuckX|0},${l.tuckY|0}</span></div>
-    <p class="hint" style="margin-top:4px">${l.parent!=null && layerById(l.parent) ? '↳ rides <b>'+layerById(l.parent).name+'</b> and adds its own swing. Set Angle 0 to <i>only</i> follow it.'+(l.punch?' With <b>cut out</b> on, this piece is removed from <b>'+layerById(l.parent).name+'</b> so it animates on its own (no ghost).':' Tick <b>cut out</b> in its row to remove it from '+layerById(l.parent).name+' so it can move on its own.') : 'Tip: set <b>Swings with → head</b> so eyes/brows/mouth travel with the head — and tick <b>cut out</b> to lift them off it so they animate freely.'}</p>`;
-  box.querySelector('.mPar').onchange=e=>{ l.parent = e.target.value ? +e.target.value : null; renderMotion(); draw(); markDirty(); };
+    <p class="hint" style="margin-top:4px">${l.parent!=null && layerById(l.parent) ? '↳ rides <b>'+layerById(l.parent).name+'</b>’s position AND swing (incl. its Tuck) — keep <b>Tuck to body</b> here at 0 unless you want an EXTRA nudge within '+layerById(l.parent).name+'. Set Angle 0 to <i>only</i> follow it.'+(l.punch?' With <b>cut out</b> on, this piece is removed from <b>'+layerById(l.parent).name+'</b> so it animates on its own (no ghost).':' Tick <b>cut out</b> in its row to remove it from '+layerById(l.parent).name+' so it can move on its own.') : 'Tip: set <b>Swings with → head</b> so eyes/brows/mouth travel with the head — and tick <b>cut out</b> to lift them off it so they animate freely.'}</p>`;
+  box.querySelector('.mPar').onchange=e=>{ const was=l.parent; l.parent = e.target.value ? +e.target.value : null;
+    // a freshly-wired part already RIDES its parent's tuck — so clear its own, or it double-shifts off its socket
+    if(was==null && l.parent!=null && (l.tuckX||l.tuckY)){ l.tuckX=0; l.tuckY=0;
+      toast('Cleared its own tuck — it now rides '+(layerById(l.parent)||{name:'the parent'}).name+"'s position (add tuck only for an extra nudge)"); }
+    renderMotion(); draw(); markDirty(); };
   const upd=()=>{ box.querySelector('.mOff').textContent=`${l.tuckX|0},${l.tuckY|0}`; draw(); markDirty(); };
   box.querySelector('.mAng').oninput=e=>{ l.swingDeg=+e.target.value; box.querySelector('.mAng').nextElementSibling.textContent=l.swingDeg+'°'; draw(); markDirty(); };
   box.querySelector('.mSpd').oninput=e=>{ l.speed=+e.target.value; box.querySelector('.mSpd').nextElementSibling.textContent=l.speed.toFixed(1)+'×'; draw(); markDirty(); };
