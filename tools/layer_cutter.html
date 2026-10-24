@@ -202,7 +202,7 @@
           <button class="mini" id="lipUndo" title="remove the last lip point" style="margin-left:auto">⌫ point</button>
           <button class="mini" id="lipClear" title="remove the whole lip line on this layer">⟲ clear</button>
         </div>
-        <p class="hint" style="margin-top:4px">The lip line tells ✨ FACS auto-pose where your <i>actual</i> lips are, so Happy/Sad/Angry bend the real mouth (ends curl up/down, middle holds) instead of guessing. Trace 3–6 points. Needs the mouth named <b>mouth / lip / dudak</b>.</p>
+        <p class="hint" style="margin-top:4px">The lip line lets ✨ FACS auto-pose reshape your <i>actual</i> mouth to an absolute target — even if it's drawn smiling: <b>Happy</b>=smile, <b>Neutral</b>=flattened, <b>Sad</b>=frown, <b>Angry</b>=tight. Tap ✨ on <b>Neutral</b> too, to flatten the drawn grin. Trace 3–6 points. Needs the mouth named <b>mouth / lip / dudak</b>.</p>
       </div>
       <div id="warpTools" style="display:none; margin-top:6px;">
         <div class="row" style="align-items:center; gap:8px;">
@@ -1468,45 +1468,54 @@ function facsRole(name){
 }
 // A believable pose for ONE feature under one expression — moves scaled to the feature's own box.
 function facsPose(l, exprId){
-  const r=facsRole(l.name); if(!r.part || exprId==='neutral') return null;
+  const r=facsRole(l.name); if(!r.part) return null;
   const b=featureBox(l), W=b.w, H=b.h, m=(r.side==='r')?-1:1;   // right-side features mirror horizontally
   const pose={dx:0,dy:0,rot:0,sx:1,sy:1};
   // mouth corner handles (REST space): up>0 ⇒ corners rise (smile), up<0 ⇒ corners drop (frown)
   const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
                       {px:b.x+0.90*W, py:b.y+0.55*H, dx:+0.03*W, dy:-up*0.45*H} ];
-  // if she TRACED a lip line, bend THAT real curve (ends curl up/down, middle holds) — else fall back to the box guess
   const lips = (r.part==='mouth' && Array.isArray(l.lips) && l.lips.length>=2) ? l.lips : null;
-  const curl = up => {
-    if(!lips) return corners(up);
-    const xs=lips.map(q=>q.x), xmin=Math.min(...xs), xmax=Math.max(...xs), half=(((xmax-xmin)||1)/2), mid=(xmin+xmax)/2;
-    return lips.map(q=>{ const w=Math.min(1, Math.abs(q.x-mid)/half);   // 0 at the centre → 1 at the corners
-      return { px:q.x, py:q.y, dx:0, dy:-up*0.42*H*w }; });
+  // ABSOLUTE RETARGET (traced mouths): measure the lip's own vertical centre, then reshape it so the corners
+  // sit T·H above(+)/below(−) that centre with the middle AT centre. This is independent of what the art was
+  // drawn as — a grin, a frown, anything — so Happy=smile, Neutral=flat, Sad=frown all come out right.
+  const retarget = T => {
+    const xs=lips.map(q=>q.x), ys=lips.map(q=>q.y);
+    const xmin=Math.min(...xs), xmax=Math.max(...xs), half=(((xmax-xmin)||1)/2), xc=(xmin+xmax)/2;
+    const yc=ys.reduce((a,c)=>a+c,0)/ys.length;    // mouth vertical centre = the flat baseline
+    return lips.map(q=>{ const w=Math.min(1, Math.abs(q.x-xc)/half);   // 0 at centre → 1 at the corners
+      return { px:q.x, py:q.y, dx:0, dy: Math.round((yc - T*H*w) - q.y) }; });
   };
+  // traced → absolute target T (corner raise in units of H); untraced → relative corner nudge `up` (box guess)
+  const mouthMls = (up,T) => lips ? retarget(T) : corners(up);
+  // NEUTRAL is identity — UNLESS the mouth was traced: then FLATTEN the drawn expression into a true resting face.
+  if(exprId==='neutral'){ if(lips){ pose.mls=retarget(0.0); return pose; } return null; }
   if(exprId==='happy'){            // AU6 cheek-raise + AU12 lip-corner pull
-    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=curl(+0.5); }   // gentle widen + soft corner-lift (was 1.06 / +1.0 = over-curled & pinched)
+    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=mouthMls(+0.5, +0.22); }   // corners up ~0.22·H (strong smile)
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
     else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
   } else if(exprId==='sad'){       // AU1 inner-brow-up + AU15 BIG lip-corner depress + droopy lids
-    // mouth is the main signal: a wide, strongly down-turned frown so the drawn grin actually reads as sad
-    if(r.part==='mouth'){ pose.sx=0.94; pose.dy=+0.05*H; pose.mls=curl(-1.15); }
+    if(r.part==='mouth'){ pose.sx=0.94; pose.dy=+0.04*H; pose.mls=mouthMls(-1.15, -0.28); }   // corners well below centre = frown
     else if(r.part==='brow'){ pose.rot=-14*m; pose.dy=-0.20*H; }   // inner ends lifted (oblique ╱‾╲), outer down
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }      // lids droop
   } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU7 lid-tighten + AU23 lip-tighten (flat, NOT a frown)
     // angry ≠ sad: SMALL tight flat mouth + squinted glare + low furrowed brows — a different silhouette from sad's big frown
     if(r.part==='brow'){ pose.rot=+15*m; pose.dy=+0.42*H; pose.dx=+0.12*W*m; }  // inner ends down & inward (furrow)
     else if(r.part==='eye'){ pose.sy=0.74; pose.dy=+0.05*H; }                   // narrowed glare
-    else if(r.part==='mouth'){ pose.sx=0.84; pose.sy=0.82; pose.mls=curl(-0.3); }  // tight, compressed, barely down
+    else if(r.part==='mouth'){ pose.sx=0.84; pose.sy=0.82; pose.mls=mouthMls(-0.3, -0.07); }  // tight, compressed, barely down
   } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
     if(r.part==='brow'){ pose.dy=-0.70*H; }
     else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
-    else if(r.part==='mouth'){ pose.sx=0.90; pose.sy=1.40; pose.dy=+0.10*H; }
+    else if(r.part==='mouth'){ pose.sx=0.90; pose.sy=1.40; pose.dy=+0.10*H; }   // jaw-drop O (open) — keeps the drawn mouth
   } else return null;
   return pose;
 }
 // Apply FACS to the WHOLE face for the current expression (one undo step per feature).
 function applyFacs(){
   if(S.mode!=='face'){ return; }
-  if(S.expr==='neutral'){ toast('Pick an expression (Happy / Sad / Angry / Shocked) first'); return; }
+  if(S.expr==='neutral'){
+    const anyLips=S.layers.some(l=>l.role!=='base' && l.visible && Array.isArray(l.lips) && l.lips.length>=2);
+    if(!anyLips){ toast('Neutral is the rest face. Trace a 👄 lip line to flatten a drawn smile here, or pick Happy / Sad / Angry'); return; }
+  }
   let n=0;
   for(const l of S.layers){ if(l.role==='base' || !l.visible) continue;
     const fp=facsPose(l, S.expr); if(!fp) continue;          // unrecognised feature → leave as-is
