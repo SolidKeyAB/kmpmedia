@@ -1561,7 +1561,7 @@ function facsPose(l, exprId){
     // sad = SOFT: a gentle downturn + worried raised-inner brows + droopy eyes. A big deep frown reads as a
     // scowl (anger), so keep the mouth modest and let the raised-inner brow + slack lids carry the sadness.
     if(r.part==='mouth'){ pose.sx=0.97; pose.dy=+0.03*H; pose.mls=mouthMls(-0.55, -0.15); }   // gentle downturn, not a deep ∩
-    else if(r.part==='brow'){ pose.rot=-16*m; pose.dy=-0.10*H; }   // inner ends clearly lifted (oblique ╱‾╲); only a small global raise
+    else if(r.part==='brow'){ pose.rot=-13*m; pose.dy=-0.30*H; }   // RAISED HIGH on the forehead (+ gentle inner-up oblique) — a high brow reads worried/sad and can NEVER read angry, regardless of the oblique sign
     else if(r.part==='eye'){ pose.sy=0.90; pose.dy=+0.07*H; }      // lids droop
   } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU7 lid-tighten + AU23 lip-tighten (firm, NOT a frown)
     // angry must be the MOST INTENSE: hard LOW furrowed brows pressing on a tight narrowed glare + a firm set
