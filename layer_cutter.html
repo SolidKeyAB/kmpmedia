@@ -1440,14 +1440,16 @@ function facsPose(l, exprId){
     if(r.part==='mouth'){ pose.sx=1.03; pose.mls=corners(+0.5); }   // gentle widen + soft corner-lift (was 1.06 / +1.0 = over-curled & pinched)
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
     else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
-  } else if(exprId==='sad'){       // AU1 inner-brow-up + AU4 + AU15 lip-corner depress
-    if(r.part==='mouth'){ pose.sx=0.96; pose.mls=corners(-0.7); }
-    else if(r.part==='brow'){ pose.rot=-10*m; pose.dy=-0.15*H; }   // inner end up, outer down
-    else if(r.part==='eye'){ pose.sy=0.95; pose.dy=+0.04*H; }
-  } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU5/7 + AU23 lip-tighten
-    if(r.part==='brow'){ pose.rot=+12*m; pose.dy=+0.35*H; pose.dx=+0.10*W*m; }  // inner down & inward
-    else if(r.part==='eye'){ pose.sy=0.85; pose.dy=+0.04*H; }
-    else if(r.part==='mouth'){ pose.sx=0.92; pose.mls=corners(-0.4); }
+  } else if(exprId==='sad'){       // AU1 inner-brow-up + AU15 BIG lip-corner depress + droopy lids
+    // mouth is the main signal: a wide, strongly down-turned frown so the drawn grin actually reads as sad
+    if(r.part==='mouth'){ pose.sx=0.94; pose.dy=+0.05*H; pose.mls=corners(-1.15); }
+    else if(r.part==='brow'){ pose.rot=-14*m; pose.dy=-0.20*H; }   // inner ends lifted (oblique ╱‾╲), outer down
+    else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }      // lids droop
+  } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU7 lid-tighten + AU23 lip-tighten (flat, NOT a frown)
+    // angry ≠ sad: SMALL tight flat mouth + squinted glare + low furrowed brows — a different silhouette from sad's big frown
+    if(r.part==='brow'){ pose.rot=+15*m; pose.dy=+0.42*H; pose.dx=+0.12*W*m; }  // inner ends down & inward (furrow)
+    else if(r.part==='eye'){ pose.sy=0.74; pose.dy=+0.05*H; }                   // narrowed glare
+    else if(r.part==='mouth'){ pose.sx=0.84; pose.sy=0.82; pose.mls=corners(-0.3); }  // tight, compressed, barely down
   } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
     if(r.part==='brow'){ pose.dy=-0.70*H; }
     else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
