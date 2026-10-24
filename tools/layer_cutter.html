@@ -194,6 +194,15 @@
         <span style="font-size:11px;color:var(--dim)">Edit:</span>
         <button class="sm on" data-edit="box">▦ Box (whole part)</button>
         <button class="sm" data-edit="warp">🫠 Warp an area</button>
+        <button class="sm" data-edit="lips">👄 Lip line</button>
+      </div>
+      <div id="lipTools" style="display:none; margin-top:6px;">
+        <div class="row" style="align-items:center; gap:8px;">
+          <span style="font-size:11px;color:var(--dim)">On <b>Neutral</b>, tap along the mouth left→right to trace the lip line.</span>
+          <button class="mini" id="lipUndo" title="remove the last lip point" style="margin-left:auto">⌫ point</button>
+          <button class="mini" id="lipClear" title="remove the whole lip line on this layer">⟲ clear</button>
+        </div>
+        <p class="hint" style="margin-top:4px">The lip line tells ✨ FACS auto-pose where your <i>actual</i> lips are, so Happy/Sad/Angry bend the real mouth (ends curl up/down, middle holds) instead of guessing. Trace 3–6 points. Needs the mouth named <b>mouth / lip / dudak</b>.</p>
       </div>
       <div id="warpTools" style="display:none; margin-top:6px;">
         <div class="row" style="align-items:center; gap:8px;">
@@ -251,6 +260,7 @@ const S = {
   exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
   faceDrag:null,                        // in-progress feature drag in face mode
   faceWarp:false,                       // face edit sub-mode: false = affine box, true = local warp
+  lipEdit:false,                        // face edit sub-mode: tap to trace the mouth's lip line (guides the morph)
   warpTool:'region',                    // 'region' = circle zoom/rotate an area · 'point' = pull a spot
   warpRadius:60,                        // default reach (image px) for a new point / region feather
   warpSel:null,                         // the currently selected warp operator (for the side panel)
@@ -465,6 +475,7 @@ function serializeProject(){
       visible:l.visible, locked:!!l.locked, color:l.color, pivot:l.pivot||null,
       swingDeg:l.swingDeg??10, speed:l.speed??1, tuckX:l.tuckX||0, tuckY:l.tuckY||0,
       parent:l.parent??null,
+      lips:(Array.isArray(l.lips)&&l.lips.length)?l.lips:null,
       poses:l.poses||{},
       mask:l.mc.toDataURL('image/png') })) };
 }
@@ -505,6 +516,7 @@ function restoreProject(proj, quiet){
         color:pl.color||PALETTE[idx%PALETTE.length], mc, mctx, pivot:pl.pivot||null,
         swingDeg:pl.swingDeg??10, speed:pl.speed??1, tuckX:pl.tuckX||0, tuckY:pl.tuckY||0,
         parent:(pl.parent??null),
+        lips:(Array.isArray(pl.lips)&&pl.lips.length)?pl.lips:null,
         poses:pl.poses||{} };
       S.layers[idx]=L;
       if(pl.mask){ const mi=new Image();
@@ -1231,6 +1243,17 @@ function renderFace(W,H){
         ctx.fillStyle='#5ad1c4';
         for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [hx,hy]=sc(hs[k][0],hs[k][1]); ctx.fillRect(hx-4,hy-4,8,8); }
       } } }
+  // lip-line guide: the traced mouth curve (gold), tracking the current pose so you see it bend per expression
+  if(!S.exprPreview){ const la=activeLayer();
+    if(la && la.role!=='base' && la.visible && Array.isArray(la.lips) && la.lips.length){
+      const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      const pp=poseOf(la,S.expr), cc=featureCenter(la);
+      ctx.strokeStyle='rgba(255,209,102,.85)'; ctx.lineWidth=2; ctx.beginPath();
+      la.lips.forEach((q,i)=>{ const r=affinePt(q,pp,cc); const [x,y]=sc(r.x,r.y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+      ctx.stroke();
+      la.lips.forEach((q,i)=>{ const r=affinePt(q,pp,cc); const [x,y]=sc(r.x,r.y);
+        ctx.fillStyle=(i===0||i===la.lips.length-1)?'#ff8a3d':'#ffd166';   // corners accented
+        ctx.beginPath(); ctx.arc(x,y,3.5,0,7); ctx.fill(); }); } }
   ctx.fillStyle='#ffd166'; ctx.font='14px sans-serif';
   const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
   ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
@@ -1250,6 +1273,19 @@ function pickFeature(ip){
 function faceDown(sp){
   const ip=s2i(sp.x,sp.y);
   const sel=activeLayer();
+  // ---- LIP-LINE mode: trace the mouth curve (rest space → mark on Neutral) ----
+  if(S.lipEdit){
+    if(S.expr!=='neutral'){ toast('Switch to 😐 Neutral to trace the resting lip line'); return; }
+    let l=sel;
+    if(!l || l.role==='base'){ const hit=pickFeature(ip); if(hit>=0){ S.active=hit; renderLayerList(); l=activeLayer(); } }
+    if(!l || l.role==='base'){ toast('Tap your mouth layer first, then trace its lip line'); draw(); return; }
+    if(l.locked){ toast('🔒 '+l.name+' is locked — unlock it to trace'); return; }
+    if(!Array.isArray(l.lips)) l.lips=[];
+    l.lips.push({x:Math.round(ip.x), y:Math.round(ip.y)});   // Neutral ⇒ image coords ARE rest coords
+    renderExprPose(); draw(); markDirty();
+    toast('Lip point '+l.lips.length+' — keep tapping left→right, then pick Sad/Happy → ✨ auto-pose');
+    return;
+  }
   // ---- WARP mode: region circle (zoom/rotate an area) or point pull ----
   if(S.faceWarp){
     if(S.expr==='neutral'){ toast('Pick an expression to warp'); return; }
@@ -1409,7 +1445,9 @@ function applyMode(){
   S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; l._rest=null; });   // rebuild cut images / centres / boxes / warp grids for the new view
   if(face){ migrateAllWarp(); renderExprChips(); renderExprPose();
     document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
-    document.querySelectorAll('#warpRow button').forEach(b=>b.classList.toggle('on', (b.dataset.edit==='warp')===S.faceWarp));
+    const lt=document.getElementById('lipTools'); if(lt) lt.style.display = S.lipEdit?'':'none';
+    const curEdit = S.lipEdit?'lips':(S.faceWarp?'warp':'box');
+    document.querySelectorAll('#warpRow button').forEach(b=>b.classList.toggle('on', b.dataset.edit===curEdit));
     document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.classList.toggle('on', b.dataset.warptool===S.warpTool));
     renderWarpPanel(); }
   draw();
@@ -1436,20 +1474,28 @@ function facsPose(l, exprId){
   // mouth corner handles (REST space): up>0 ⇒ corners rise (smile), up<0 ⇒ corners drop (frown)
   const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
                       {px:b.x+0.90*W, py:b.y+0.55*H, dx:+0.03*W, dy:-up*0.45*H} ];
+  // if she TRACED a lip line, bend THAT real curve (ends curl up/down, middle holds) — else fall back to the box guess
+  const lips = (r.part==='mouth' && Array.isArray(l.lips) && l.lips.length>=2) ? l.lips : null;
+  const curl = up => {
+    if(!lips) return corners(up);
+    const xs=lips.map(q=>q.x), xmin=Math.min(...xs), xmax=Math.max(...xs), half=(((xmax-xmin)||1)/2), mid=(xmin+xmax)/2;
+    return lips.map(q=>{ const w=Math.min(1, Math.abs(q.x-mid)/half);   // 0 at the centre → 1 at the corners
+      return { px:q.x, py:q.y, dx:0, dy:-up*0.42*H*w }; });
+  };
   if(exprId==='happy'){            // AU6 cheek-raise + AU12 lip-corner pull
-    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=corners(+0.5); }   // gentle widen + soft corner-lift (was 1.06 / +1.0 = over-curled & pinched)
+    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=curl(+0.5); }   // gentle widen + soft corner-lift (was 1.06 / +1.0 = over-curled & pinched)
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
     else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
   } else if(exprId==='sad'){       // AU1 inner-brow-up + AU15 BIG lip-corner depress + droopy lids
     // mouth is the main signal: a wide, strongly down-turned frown so the drawn grin actually reads as sad
-    if(r.part==='mouth'){ pose.sx=0.94; pose.dy=+0.05*H; pose.mls=corners(-1.15); }
+    if(r.part==='mouth'){ pose.sx=0.94; pose.dy=+0.05*H; pose.mls=curl(-1.15); }
     else if(r.part==='brow'){ pose.rot=-14*m; pose.dy=-0.20*H; }   // inner ends lifted (oblique ╱‾╲), outer down
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }      // lids droop
   } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU7 lid-tighten + AU23 lip-tighten (flat, NOT a frown)
     // angry ≠ sad: SMALL tight flat mouth + squinted glare + low furrowed brows — a different silhouette from sad's big frown
     if(r.part==='brow'){ pose.rot=+15*m; pose.dy=+0.42*H; pose.dx=+0.12*W*m; }  // inner ends down & inward (furrow)
     else if(r.part==='eye'){ pose.sy=0.74; pose.dy=+0.05*H; }                   // narrowed glare
-    else if(r.part==='mouth'){ pose.sx=0.84; pose.sy=0.82; pose.mls=corners(-0.3); }  // tight, compressed, barely down
+    else if(r.part==='mouth'){ pose.sx=0.84; pose.sy=0.82; pose.mls=curl(-0.3); }  // tight, compressed, barely down
   } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
     if(r.part==='brow'){ pose.dy=-0.70*H; }
     else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
@@ -1494,12 +1540,20 @@ function collectExpressions(W,H){
 document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
 document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
 document.getElementById('facsAuto').onclick=applyFacs;   // FACS action-unit auto-pose (whole face)
-// Face edit sub-mode: ▦ Box (affine whole part) ↔ 🫠 Warp an area (local operators)
+// Face edit sub-mode: ▦ Box (affine) ↔ 🫠 Warp an area ↔ 👄 Lip line
 document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
-  S.faceWarp = b.dataset.edit==='warp';
+  const e=b.dataset.edit; S.faceWarp=(e==='warp'); S.lipEdit=(e==='lips');
   document.querySelectorAll('#warpRow button').forEach(x=>x.classList.toggle('on', x===b));
   document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
+  document.getElementById('lipTools').style.display = S.lipEdit?'':'none';
+  if(S.lipEdit && S.expr!=='neutral') toast('Tip: switch to 😐 Neutral to trace the lip line');
   S.faceDrag=null; S.warpDrag=null; renderWarpPanel(); draw(); });
+document.getElementById('lipClear').onclick=()=>{ const l=activeLayer();
+  if(l && Array.isArray(l.lips) && l.lips.length){ l.lips=null; renderExprPose(); draw(); markDirty(); toast('Lip line cleared on '+l.name); }
+  else toast('No lip line on this layer'); };
+document.getElementById('lipUndo').onclick=()=>{ const l=activeLayer();
+  if(l && Array.isArray(l.lips) && l.lips.length){ l.lips.pop(); if(!l.lips.length) l.lips=null; draw(); markDirty(); toast('Removed last lip point'); }
+  else toast('No lip point to remove'); };
 // Warp tool: ⭕ Region (circle zoom/rotate) ↔ 📍 Point (pull a spot)
 document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.onclick=()=>{
   S.warpTool = b.dataset.warptool;
