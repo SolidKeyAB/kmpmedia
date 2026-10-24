@@ -295,6 +295,7 @@ function renderLayerList(){
       <div class="lrow">
         <span class="sw" style="background:${l.color}" title="tap to select this layer"></span>
         <input class="nm" value="${l.name}" title="layer name — tap to rename">
+        <button class="mini editcut" title="change this layer's cut — jumps to the Wand / Brush / Erase tools for it">✏️</button>
         <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
         <button class="mini del danger" title="delete (you can undo)">🗑</button>
       </div>
@@ -316,6 +317,7 @@ function renderLayerList(){
     row.querySelector('.up').onclick=()=>moveLayer(i,+1);
     row.querySelector('.dn').onclick=()=>moveLayer(i,-1);
     row.querySelector('.vis').onclick=()=>{ l.visible=!l.visible; renderLayerList(); draw(); markDirty(); };
+    row.querySelector('.editcut').onclick=()=>editLayerCut(i);
     row.querySelector('.del').onclick=()=>deleteLayer(i);
     box.appendChild(row);
   }
@@ -333,6 +335,15 @@ function setActive(i){
   if(typeof renderExprPose==='function') renderExprPose();
   if(typeof renderWarpPanel==='function') renderWarpPanel();
   draw();
+}
+// one tap to RE-EDIT a layer's cut: leave the Face view if needed, select the layer, and bring the cut tools into view
+function editLayerCut(i){
+  if(i<0 || i>=S.layers.length) return;
+  if(S.mode!=='rig'){ S.mode='rig'; applyMode(); markDirty(); renderLayerList(); }
+  setActive(i);
+  const tg=document.getElementById('toolsGroup');
+  if(tg && tg.scrollIntoView) tg.scrollIntoView({behavior:'smooth', block:'nearest'});
+  toast('Editing "'+S.layers[i].name+'" — Wand ✚/✖, Brush or Erase to change its area');
 }
 // delete a layer, but keep it in the undo stack so an accidental 🗑 is one tap to recover
 function deleteLayer(i){
