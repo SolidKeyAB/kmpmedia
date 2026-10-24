@@ -216,6 +216,7 @@
       </div>
       <div class="row" style="margin-top:8px;">
         <button class="sm go" id="previewExpr">▶ Preview expressions</button>
+        <button class="sm" id="exportFaceFrames" title="Bake each expression's posed head into a transparent PNG (neutral + happy/sad/angry/shocked), same framing as superx_head.png — drop straight into the WordStorm SUPER X watcher">📸 Export face frames</button>
       </div>
       <p class="hint">Pick an expression, then tap <b>✨ FACS auto-pose</b> for a believable whole-face start (needs features named brow / eye / mouth), and tweak from there. Or pose by hand: <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>cut out</b> (on the feature's row) so it's lifted off the head — its old spot won't ghost when it moves.</p>
     </div>
@@ -1184,25 +1185,26 @@ function mlsControls(pose, l){
   return {P,Q};
 }
 // draw source triangle s[0..2] (image coords in `cut`) onto dest triangle d[0..2]; tiny outward pad kills seams
-function texTri(img, s, d){
+function texTri(img, s, d, g=ctx){
   const cx=(d[0].x+d[1].x+d[2].x)/3, cy=(d[0].y+d[1].y+d[2].y)/3, PAD=0.6;
   const dd=d.map(p=>{ const vx=p.x-cx, vy=p.y-cy, L=Math.hypot(vx,vy)||1; return {x:p.x+vx/L*PAD, y:p.y+vy/L*PAD}; });
-  ctx.save(); ctx.beginPath(); ctx.moveTo(dd[0].x,dd[0].y); ctx.lineTo(dd[1].x,dd[1].y); ctx.lineTo(dd[2].x,dd[2].y); ctx.closePath(); ctx.clip();
+  g.save(); g.beginPath(); g.moveTo(dd[0].x,dd[0].y); g.lineTo(dd[1].x,dd[1].y); g.lineTo(dd[2].x,dd[2].y); g.closePath(); g.clip();
   const x0=s[0].x,y0=s[0].y, x1=s[1].x-x0,y1=s[1].y-y0, x2=s[2].x-x0,y2=s[2].y-y0;
   const u0=d[0].x,v0=d[0].y, u1=d[1].x-u0,v1=d[1].y-v0, u2=d[2].x-u0,v2=d[2].y-v0;
   const det=x1*y2-x2*y1;
   if(Math.abs(det)>1e-6){ const a=(u1*y2-u2*y1)/det, b=(v1*y2-v2*y1)/det, c=(u2*x1-u1*x2)/det, dC=(v2*x1-v1*x2)/det;
-    const e=u0-a*x0-c*y0, f=v0-b*x0-dC*y0; ctx.transform(a,b,c,dC,e,f); ctx.drawImage(img,0,0); }
-  ctx.restore();
+    const e=u0-a*x0-c*y0, f=v0-b*x0-dC*y0; g.transform(a,b,c,dC,e,f); g.drawImage(img,0,0); }
+  g.restore();
 }
 // render a feature's cut: affine box pose, then warp ops via a fine mesh. No ops → fast direct affine draw.
-function drawWarpedFeature(cut, pose, c, l){
+// [g] is the target context (defaults to the on-screen ctx; exportFaceFrames passes an off-screen one).
+function drawWarpedFeature(cut, pose, c, l, g=ctx){
   const ops=pose.warp, hasField=!!(ops&&ops.length);
   const hasMls=!!(pose.mls && pose.mls.length && pose.mls.some(h=>h.dx||h.dy));
   if(!hasField && !hasMls){
-    ctx.save(); ctx.translate(pose.dx,pose.dy);
-    ctx.translate(c.x,c.y); ctx.rotate(pose.rot*Math.PI/180); ctx.scale(pose.sx,pose.sy); ctx.translate(-c.x,-c.y);
-    ctx.drawImage(cut,0,0); ctx.restore(); return;
+    g.save(); g.translate(pose.dx,pose.dy);
+    g.translate(c.x,c.y); g.rotate(pose.rot*Math.PI/180); g.scale(pose.sx,pose.sy); g.translate(-c.x,-c.y);
+    g.drawImage(cut,0,0); g.restore(); return;
   }
   const ctrl=hasMls?mlsControls(pose,l):null;
   const b=featureBox(l), N=WARP_MESH, NC=N+1, id=(i,j)=>j*NC+i, V=[];
@@ -1215,9 +1217,50 @@ function drawWarpedFeature(cut, pose, c, l){
   }
   for(let j=0;j<N;j++) for(let i=0;i<N;i++){
     const a=V[id(i,j)], b2=V[id(i+1,j)], c2=V[id(i,j+1)], d2=V[id(i+1,j+1)];
-    texTri(cut, [a.s,b2.s,d2.s], [a.d,b2.d,d2.d]);
-    texTri(cut, [a.s,d2.s,c2.s], [a.d,d2.d,c2.d]);
+    texTri(cut, [a.s,b2.s,d2.s], [a.d,b2.d,d2.d], g);
+    texTri(cut, [a.s,d2.s,c2.s], [a.d,d2.d,c2.d], g);
   }
+}
+/* ---------- EXPORT POSED HEAD FRAMES (for the WordStorm SUPER X watcher) ----------
+   For each expression, composite the HEAD cut + its posed face-feature children onto a transparent
+   full-canvas W×H PNG — same framing as superx_head.png, so the app can frame-swap them. The neutral
+   frame is the head's resource name itself (superx_head.png); the rest are <head>_<expr>.png. */
+function headLayerForFrames(){
+  // the mover that OWNS face features (eyes/brows/mouth parent) — the head; fall back to a name match.
+  const feat = S.layers.find(l=>{ const r=facsRole(l.name); return (r.part==='eye'||r.part==='brow'||r.part==='mouth') && l.parent!=null; });
+  if(feat){ const h=layerById(feat.parent); if(h) return h; }
+  return S.layers.find(l=>/head|face|kafa|yüz|yuz/i.test(l.name)) || null;
+}
+function renderPosedHead(headL, exprId){
+  const W=S.iw,H=S.ih;
+  const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const g=oc.getContext('2d');
+  g.imageSmoothingEnabled=true;
+  const hcut=buildCut(headL); if(hcut) g.drawImage(hcut,0,0);           // head base (feature holes skin-filled)
+  // its face-feature children, posed for this expression, composited on top (back→front = list order)
+  for(const l of S.layers){ if(l.parent!==headL.id || !l.visible) continue;
+    const r=facsRole(l.name); if(!(r.part==='eye'||r.part==='brow'||r.part==='mouth')) continue;
+    const cut=buildCut(l); if(!cut) continue;
+    drawWarpedFeature(cut, poseOf(l, exprId), featureCenter(l), l, g);
+  }
+  return oc;
+}
+async function exportFaceFrames(){
+  if(!S.img){ toast('Load a project first'); return; }
+  const headL=headLayerForFrames();
+  if(!headL){ toast('No head layer found — name the head "head" and parent the eyes/brows/mouth to it'); return; }
+  S.layers.forEach(l=>{ l._cut=null; });   // rebuild cuts fresh (skin-fill current)
+  const base=sanitize(headL.name);
+  const files=[];
+  for(const ex of EXPRS){
+    const oc=renderPosedHead(headL, ex.id);
+    const blob=await new Promise(res=>oc.toBlob(res,'image/png'));
+    const buf=new Uint8Array(await blob.arrayBuffer());
+    files.push({ name:(ex.id==='neutral'? base : base+'_'+ex.id)+'.png', data:buf });
+  }
+  const zip=zipStore(files); const blob=new Blob([zip],{type:'application/zip'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='superx_face_frames.zip';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('Exported '+files.length+' face frames → superx_face_frames.zip');
 }
 // an operator's grab handle in displayed image space (pin → its pulled tip; region → its centre)
 function opHandle(op){ return op.t==='rgn' ? {x:op.cx, y:op.cy} : {x:op.ax+(op.dx||0), y:op.ay+(op.dy||0)}; }
@@ -1619,6 +1662,7 @@ function collectExpressions(W,H){
 }
 document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
 document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
+document.getElementById('exportFaceFrames').onclick=exportFaceFrames;
 document.getElementById('facsAuto').onclick=applyFacs;   // FACS action-unit auto-pose (whole face)
 // Face edit sub-mode: ▦ Box (affine) ↔ 🫠 Warp an area ↔ 👄 Lip line
 document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
