@@ -562,9 +562,12 @@ function renderPreview(W,H){
     } else ctx.drawImage(cut,0,0);
   }
   ctx.restore();
-  // mark un-pinned movers so she knows to pin a joint
-  if(S.layers.some(l=>l.role==='mover'&&!l.pivot)){ ctx.fillStyle='#ffd166'; ctx.font='13px sans-serif';
-    ctx.fillText('⚠ pin a 🎯 joint on each mover so it swings', 12, H-14); }
+  // a mover only needs its OWN 🎯 joint if it isn't wired to a parent — one riding the head (Swings with)
+  // uses the head's joint, so don't nag about it. Warn only about movers that won't move at all.
+  const stuck=S.layers.filter(l=>l.role==='mover' && !l.pivot && l.parent==null);
+  if(stuck.length){ ctx.fillStyle='#ffd166'; ctx.font='13px sans-serif';
+    const who=stuck.length<=3 ? stuck.map(l=>l.name).join(', ') : stuck.length+' movers';
+    ctx.fillText('⚠ '+who+': pin a 🎯 joint — or wire it to the head via "Swings with" — so it moves', 12, H-14); }
 }
 let previewRAF=0, previewStart=0;
 function setPreview(on){
