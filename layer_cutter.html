@@ -1557,18 +1557,14 @@ function facsPose(l, exprId){
     if(r.part==='mouth'){ pose.sx=1.03; pose.mls=mouthMls(+0.5, +0.22); }   // corners up ~0.22·H (strong smile)
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
     else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
-  } else if(exprId==='sad'){       // AU1 inner-brow-up + AU15 GENTLE lip-corner depress + droopy lids
-    // sad = SOFT: a gentle downturn + worried raised-inner brows + droopy eyes. A big deep frown reads as a
-    // scowl (anger), so keep the mouth modest and let the raised-inner brow + slack lids carry the sadness.
-    if(r.part==='mouth'){ pose.sx=0.97; pose.dy=+0.03*H; pose.mls=mouthMls(-0.55, -0.15); }   // gentle downturn, not a deep ∩
-    else if(r.part==='brow'){ pose.rot=-13*m; pose.dy=-0.30*H; }   // RAISED HIGH on the forehead (+ gentle inner-up oblique) — a high brow reads worried/sad and can NEVER read angry, regardless of the oblique sign
-    else if(r.part==='eye'){ pose.sy=0.90; pose.dy=+0.07*H; }      // lids droop
-  } else if(exprId==='angry'){     // AU4 brow-lower-&-knit + AU7 lid-tighten + AU23 lip-tighten (firm, NOT a frown)
-    // angry must be the MOST INTENSE: hard LOW furrowed brows pressing on a tight narrowed glare + a firm set
-    // mouth. The brow furrow (not the mouth) is what separates it from sad — sad's brows rise, angry's crush down.
-    if(r.part==='brow'){ pose.rot=+20*m; pose.dy=+0.55*H; pose.dx=+0.15*W*m; }  // inner ends driven down & inward (hard furrow)
-    else if(r.part==='eye'){ pose.sy=0.68; pose.dy=+0.06*H; }                   // tight narrowed glare
-    else if(r.part==='mouth'){ pose.sx=0.96; pose.sy=0.86; pose.mls=mouthMls(-0.3, -0.08); }  // firm compressed line, present (not a shrunk dot), barely down
+  } else if(exprId==='sad'){       // Özge's rule — SAD = everything SOFT & SAGGING: low droopy brows, small/closed eyes, mouth down. NO sharp angle (angle = anger).
+    if(r.part==='mouth'){ pose.sx=0.97; pose.dy=+0.04*H; pose.mls=mouthMls(-0.6, -0.17); }   // mouth going down (frown)
+    else if(r.part==='brow'){ pose.rot=-7*m; pose.dy=+0.06*H; }    // LOW & droopy, only a gentle inner-up — deliberately NOT a sharp angle
+    else if(r.part==='eye'){ pose.sy=0.55; pose.dy=+0.12*H; }      // SMALL / nearly closed, drooping straight down (no slant)
+  } else if(exprId==='angry'){     // Özge's rule — ANGRY = SHARP & ANGLED: furrowed angled brows + angled/slanted eyes. The ANGLE (not low position) is the anger cue.
+    if(r.part==='brow'){ pose.rot=+22*m; pose.dy=+0.40*H; pose.dx=+0.16*W*m; }  // sharp downward-INWARD angle, knitted together (the furrow)
+    else if(r.part==='eye'){ pose.sy=0.72; pose.rot=+12*m; pose.dy=+0.03*H; }   // narrowed AND slanted — an angled glare (inner corner driven down), not just small
+    else if(r.part==='mouth'){ pose.sx=0.95; pose.sy=0.86; pose.mls=mouthMls(-0.3, -0.08); }  // tight & tense, not a big frown
   } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
     if(r.part==='brow'){ pose.dy=-0.70*H; }
     else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
