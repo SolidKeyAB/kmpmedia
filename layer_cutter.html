@@ -1410,9 +1410,9 @@ function facsPose(l, exprId){
   const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
                       {px:b.x+0.90*W, py:b.y+0.55*H, dx:+0.03*W, dy:-up*0.45*H} ];
   if(exprId==='happy'){            // AU6 cheek-raise + AU12 lip-corner pull
-    if(r.part==='mouth'){ pose.sx=1.06; pose.mls=corners(+1.0); }
+    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=corners(+0.5); }   // gentle widen + soft corner-lift (was 1.06 / +1.0 = over-curled & pinched)
     else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
-    else if(r.part==='brow'){ pose.dy=-0.25*H; }
+    else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
   } else if(exprId==='sad'){       // AU1 inner-brow-up + AU4 + AU15 lip-corner depress
     if(r.part==='mouth'){ pose.sx=0.96; pose.mls=corners(-0.7); }
     else if(r.part==='brow'){ pose.rot=-10*m; pose.dy=-0.15*H; }   // inner end up, outer down
