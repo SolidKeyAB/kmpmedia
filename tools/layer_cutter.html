@@ -1533,7 +1533,15 @@ function facsRole(name){
 // A believable pose for ONE feature under one expression — moves scaled to the feature's own box.
 function facsPose(l, exprId){
   const r=facsRole(l.name); if(!r.part) return null;
-  const b=featureBox(l), W=b.w, H=b.h, m=(r.side==='r')?-1:1;   // right-side features mirror horizontally
+  const b=featureBox(l), W=b.w, H=b.h;
+  // VIEWER-SIDE from GEOMETRY, not the l/r name (names may be viewer- or character-relative → angle flips).
+  // Compare this feature's centre-x to the midline of all paired brow/eye features. m=+1 ⇒ viewer-LEFT, -1 ⇒ right.
+  // Directional poses (brow furrow angle + knit, angry-eye slant) use m so the tilt always points the right way.
+  const cx0 = b.x + 0.5*W;
+  let sumx=0, nx=0;
+  for(const o of S.layers){ const rr=facsRole(o.name); if(rr.part==='brow'||rr.part==='eye'){ const bb=featureBox(o); sumx+=bb.x+0.5*bb.w; nx++; } }
+  const midx = nx ? sumx/nx : S.iw/2;
+  const m = (cx0 < midx) ? 1 : -1;   // +1 = viewer-left feature (inner end on its RIGHT) → +rot drives that inner end DOWN
   const pose={dx:0,dy:0,rot:0,sx:1,sy:1};
   // mouth corner handles (REST space): up>0 ⇒ corners rise (smile), up<0 ⇒ corners drop (frown)
   const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
