@@ -751,15 +751,21 @@ function draw(){
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(S.src,0,0);
-  const revealBase = (S.tool==='clone') ? (activeLayer()&&activeLayer().role==='base'?activeLayer():S.layers.find(l=>l.role==='base')) : null;
+  // 🩹 PATCH MODE reveals the holes on the layer you're patching — the ACTIVE layer if it has
+  // holes (eye cut off the head → reveal the HEAD, not the base), else any layer that does, else
+  // fall back to the base. (Previously it only ever revealed the base, so head/mouth holes stayed
+  // invisible — the exact "I can't see the holes" problem.)
+  const revealBase = (S.tool==='clone') ? (
+      (activeLayer() && openHoleKids(activeLayer()).length) ? activeLayer()
+      : (S.layers.find(l=>openHoleKids(l).length)
+         || (activeLayer()&&activeLayer().role==='base'?activeLayer():S.layers.find(l=>l.role==='base')))
+    ) : null;
   if(revealBase){
-    // 🩹 PATCH MODE: lift the movers off this base so the hole they leave is actually visible.
-    // Punch each cut-out footprint transparent, tint the empty hole magenta, then show the
-    // patched pixels filling it — so you can see the gap AND watch it fill as you clone/heal.
+    // lift the pieces off this layer so the hole they leave is actually visible: punch each
+    // cut-out footprint transparent, tint the empty hole magenta, then show the patched pixels
+    // filling it — so you can see the gap AND watch it fill as you clone/heal.
     const W0=S.iw,H0=S.ih;
-    const kids=punchKids(revealBase)
-      .concat(revealBase.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[])
-      .filter(k=>!k.seeThrough && k.visible);
+    const kids=holeKids(revealBase).filter(k=>!k.seeThrough && k.visible);
     ctx.globalCompositeOperation='destination-out';                 // lift movers → holes go transparent
     for(const k of kids) ctx.drawImage(k.mc,0,0);
     ctx.globalCompositeOperation='source-over';
