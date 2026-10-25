@@ -224,6 +224,11 @@
     <!-- Export -->
     <div class="group">
       <h2>Export</h2>
+      <div class="row" style="align-items:center; gap:6px;">
+        <label style="font-size:12px;color:var(--dim)">Name</label>
+        <input id="charName" type="text" placeholder="character" style="flex:1; min-width:0; padding:5px 7px; font-size:12px;">
+      </div>
+      <p class="hint" style="margin-top:2px">Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;_face_frames.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
       <div class="row">
         <button class="go" id="toNexum">📡 Send to app (nexum)</button>
       </div>
@@ -284,6 +289,8 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1600); }
 function f3(v){ return (Math.round(v*1000)/1000); }
 function sanitize(n){ return (n||'layer').toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,'')||'layer'; }
+// The character/project name that drives export filenames (defaults to "character" when the field is blank).
+function charSlug(){ const el=document.getElementById('charName'); return sanitize((el&&el.value)||'character'); }
 function hexToRgb(h){ const n=parseInt(h.slice(1),16); return [n>>16&255, n>>8&255, n&255]; }
 
 /* ---------- layer model ---------- */
@@ -457,6 +464,9 @@ function loadImage(src){
   img.src=src;
 }
 function loadFile(file){ if(!file || !file.type.startsWith('image/')){ toast('That is not an image'); return; }
+  // Prefill the export name from the file name (e.g. "snowman.png" → "snowman"), if not already set.
+  const ci=document.getElementById('charName');
+  if(ci && !ci.value && file.name){ ci.value=sanitize(file.name.replace(/\.[^.]+$/,'')); }
   const r=new FileReader(); r.onload=()=>loadImage(r.result); r.readAsDataURL(file); }
 const pick=()=>document.getElementById('file').click();
 document.getElementById('loadBtn').onclick=pick;
@@ -477,7 +487,7 @@ function serializeProject(){
   return { kind:'og-cutter-project', v:1, savedAt:new Date().toISOString(),
     iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId, skinFill:S.skinFill,
     image:S.src.toDataURL('image/png'),
-    mode:S.mode, expr:S.expr,
+    mode:S.mode, expr:S.expr, name:((document.getElementById('charName')||{}).value||''),
     layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch, seeThrough:!!l.seeThrough,
       visible:l.visible, locked:!!l.locked, color:l.color, pivot:l.pivot||null,
       swingDeg:l.swingDeg??10, speed:l.speed??1, tuckX:l.tuckX||0, tuckY:l.tuckY||0,
@@ -490,7 +500,7 @@ function saveProject(){
   if(!S.img){ toast('Load + cut something first'); return; }
   const blob=new Blob([JSON.stringify(serializeProject())],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='layercutter_cut.ogcut.json'; document.body.appendChild(a); a.click();
+  a.download=charSlug()+'.ogcut.json'; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
   toast('Saved — reopen it with 📂 Open to keep cutting');
 }
@@ -512,6 +522,7 @@ function restoreProject(proj, quiet){
     const finish=()=>{ document.getElementById('dims').textContent=`${S.iw}×${S.ih}`;
       document.getElementById('empty').style.display='none';
       S.mode=proj.mode||'rig'; S.expr=proj.expr||'neutral';
+      { const ci=document.getElementById('charName'); if(ci && typeof proj.name==='string') ci.value=proj.name; }
       fitView(); renderLayerList(); applyMode(); draw(); markDirty();
       if(!quiet) toast('Project opened — pick up where you left off'); };
     if(!pls.length){ finish(); return; }
@@ -969,9 +980,10 @@ async function buildExport(){
 document.getElementById('export').onclick=async()=>{ if(!S.img){toast('Load an image first');return;}
   toast('Building zip…'); const {files,jsonStr}=await buildExport();
   const zip=zipStore(files); const blob=new Blob([zip],{type:'application/zip'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='superx_layers.zip';
+  const zipName=charSlug()+'_layers.zip';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=zipName;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  document.getElementById('json').value=jsonStr; toast('Exported superx_layers.zip'); };
+  document.getElementById('json').value=jsonStr; toast('Exported '+zipName); };
 
 document.getElementById('showJson').onclick=async()=>{ const ta=document.getElementById('json');
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
@@ -1258,9 +1270,10 @@ async function exportFaceFrames(){
     files.push({ name:(ex.id==='neutral'? base : base+'_'+ex.id)+'.png', data:buf });
   }
   const zip=zipStore(files); const blob=new Blob([zip],{type:'application/zip'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='superx_face_frames.zip';
+  const ffName=charSlug()+'_face_frames.zip';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=ffName;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  toast('Exported '+files.length+' face frames → superx_face_frames.zip');
+  toast('Exported '+files.length+' face frames → '+ffName);
 }
 // an operator's grab handle in displayed image space (pin → its pulled tip; region → its centre)
 function opHandle(op){ return op.t==='rgn' ? {x:op.cx, y:op.cy} : {x:op.ax+(op.dx||0), y:op.ay+(op.dy||0)}; }
