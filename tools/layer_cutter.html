@@ -944,6 +944,7 @@ async function buildExport(){
   // unparented punch-movers are cut out of the base (limbs off the torso)
   const baseKnockKids=S.layers.filter(l=>l.role==='mover'&&l.punch&&l.parent==null);
   const files=[]; const rig={ rig:'custom', v:2, imageW:W, imageH:H, note:'from KMPMedia Layer Cutter', layers:{} };
+  const parts=[];   // collected for the OGPuppet export (union-framed, drop-in for the lib primitive)
   for(const l of S.layers){
     const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box)continue;
     const kids=punchKids(l).concat(l.role==='base'?baseKnockKids:[]);   // pieces cut OUT of this layer (eye out of head, limbs off torso)
@@ -970,11 +971,46 @@ async function buildExport(){
       x:f3(pv.x/W), y:f3(pv.y/H), size:f3(box.w/W), rot:0,
       pivX:f3((pv.x-box.x)/box.w), pivY:f3((pv.y-box.y)/box.h),
       ...(par?{parent:sanitize(par.name)}:{}) };
+    parts.push({ name:sanitize(l.name), box, oc, role:l.role,
+      swingDeg:+l.swingDeg||0, speed:+l.speed||1, tuckX:l.tuckX||0, tuckY:l.tuckY||0, pv });
   }
   const exprs=collectExpressions(W,H); if(Object.keys(exprs).length) rig.expressions=exprs;
   const jsonStr=JSON.stringify(rig,null,2);
   files.push({name:'rig.json', data:new TextEncoder().encode(jsonStr)});
+  await addPuppetFiles(files, parts);   // also emit the OGPuppet pack (puppet.json + union-framed PNGs)
   return {files, jsonStr};
+}
+
+/* ---------- OGPuppet pack: every part composited onto ONE shared union frame + puppet.json, so the
+   export drops straight into the library's OGPuppet primitive (OGPuppetSpec / OGPuppetView) with no
+   reframing. Pivots/tuck are re-based from source pixels to fractions of that shared frame. ---------- */
+async function addPuppetFiles(files, parts){
+  if(!parts.length) return;
+  const base=parts.find(p=>p.role==='base'); if(!base) return;   // OGPuppet needs a still base
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const p of parts){ const b=p.box;
+    if(b.x<minx)minx=b.x; if(b.y<miny)miny=b.y; if(b.x+b.w>maxx)maxx=b.x+b.w; if(b.y+b.h>maxy)maxy=b.y+b.h; }
+  const UW=maxx-minx, UH=maxy-miny;
+  const head=parts.find(p=>p.name==='head');
+  const spec={ base:base.name, aspect:f3(UW/UH), grounded:false, parts:[] };
+  if(head){ spec.headCenterX=f3((head.box.x+head.box.w/2-minx)/UW);
+            spec.headCenterY=f3((head.box.y+head.box.h/2-miny)/UH); }
+  for(const p of parts){
+    // composite this part onto a shared union-sized canvas at its offset → a drop-in sprite
+    const uc=document.createElement('canvas'); uc.width=UW; uc.height=UH;
+    uc.getContext('2d').drawImage(p.oc, p.box.x-minx, p.box.y-miny);
+    const blob=await new Promise(res=>uc.toBlob(res,'image/png'));
+    files.push({name:'puppet/'+p.name+'.png', data:new Uint8Array(await blob.arrayBuffer())});
+    if(p.role==='base') continue;   // the base is the still backdrop, not a mover
+    const part={ res:p.name, pivotX:f3((p.pv.x-minx)/UW), pivotY:f3((p.pv.y-miny)/UH) };
+    if(p.swingDeg) part.swingDeg=p.swingDeg;
+    if(p.speed!==1) part.speed=f3(p.speed);
+    if(p.tuckX) part.tuckX=f3(p.tuckX/UW);
+    if(p.tuckY) part.tuckY=f3(p.tuckY/UH);
+    if(p.name==='head') part.head=true;
+    spec.parts.push(part);
+  }
+  files.push({name:'puppet.json', data:new TextEncoder().encode(JSON.stringify(spec,null,2))});
 }
 
 document.getElementById('export').onclick=async()=>{ if(!S.img){toast('Load an image first');return;}
