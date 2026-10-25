@@ -55,6 +55,7 @@
   .layer .mini{background:transparent; border:none; min-height:30px; padding:3px 7px; flex:0 0 auto; font-size:15px;}
   .mini[disabled]{opacity:.28; pointer-events:none;}
   .pill{font-size:10px; padding:1px 6px; border-radius:20px; background:#0005; color:var(--dim);}
+  .hbadge{font-size:10px; font-weight:600; padding:1px 7px; border-radius:20px; background:#d81b9433; color:#ff6fc4; border:1px solid #ff6fc455; flex:0 0 auto; white-space:nowrap;}
   .mrow{display:flex; align-items:center; gap:8px; margin:6px 0;}
   .mrow label{font-size:11px; color:var(--dim); flex:0 0 78px;}
   .mrow input[type=range]{flex:1 1 auto; min-width:60px;}
@@ -326,6 +327,7 @@ function renderLayerList(){
       <div class="lrow">
         <span class="sw" style="background:${l.color}" title="tap to select this layer"></span>
         <input class="nm" value="${l.name}" title="layer name — tap to rename">
+        ${holeKids(l).length?`<span class="hbadge" title="${holeKids(l).length} piece(s) cut out of this layer — it has ${holeKids(l).length} hole(s). Pick 🩹 Patch base to heal them.">◳ ${holeKids(l).length}</span>`:''}
         <button class="mini editcut" title="change this layer's cut — jumps to the Wand / Brush / Erase tools for it">✏️</button>
         <button class="mini lk" title="${l.locked?'locked — touching the canvas won\'t move this layer; tap to unlock':'lock so you can\'t accidentally move it on the canvas'}">${l.locked?'🔒':'🔓'}</button>
         <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
@@ -346,7 +348,10 @@ function renderLayerList(){
     const nm=row.querySelector('.nm');
     nm.onfocus=()=>{ if(S.active!==i) setActive(i); };           // tapping the name also selects
     nm.onchange=e=>{ l.name=e.target.value; markDirty(); };
-    row.querySelector('.role').onchange=e=>{ l.role=e.target.value; l.punch=(l.role!=='base'); renderLayerList(); markDirty(); };
+    row.querySelector('.role').onchange=e=>{ l.role=e.target.value;
+      if(l.role==='base'){ const old=S.layers.filter(k=>k!==l&&k.role==='base'); old.forEach(k=>{ k.role='mover'; k.punch=true; });   // exactly one base per image
+        if(old.length) toast('🧍 '+l.name+' is now the base — '+old.map(k=>k.name).join(', ')+' became mover'+(old.length>1?'s':'')); }
+      l.punch=(l.role!=='base'); S.layers.forEach(k=>{k._cut=null;}); renderLayerList(); draw(); markDirty(); };
     row.querySelector('.pn').onchange=e=>{ l.punch=e.target.checked; S.layers.forEach(k=>{k._cut=null;}); renderLayerList(); draw(); markDirty(); };
     const stEl=row.querySelector('.st');
     if(stEl) stEl.onchange=e=>{ l.seeThrough=e.target.checked; S.layers.forEach(k=>{k._cut=null;}); draw(); markDirty();
@@ -598,6 +603,11 @@ function s2i(sx,sy){ return {x:(sx-S.view.x)/S.view.zoom, y:(sy-S.view.y)/S.view
 /* ---------- live assembled-motion preview: base still, movers swing about their pinned joint ---------- */
 // child layers 'punch'ed OUT of layer l (e.g. an eye cut out of the head it rides)
 function punchKids(l){ return S.layers.filter(k=>k!==l && k.punch && k.parent===l.id); }
+// every mover cut OUT of layer l — the pieces that leave holes in it: its own punch-children
+// PLUS, for the base, the unparented limbs cut straight off the torso. This is the hole-set the
+// export punches and the Patch/Auto-heal tools fill, so a layer "has holes" iff this is non-empty.
+function holeKids(l){ return punchKids(l).concat(l.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[]); }
+function openHoleKids(l){ return holeKids(l).filter(k=>!k.seeThrough); }   // the ones that actually need healing (not see-through)
 // Split a set of cut-out child layers into the holes that get SKIN vs the holes left
 // SEE-THROUGH (real transparent hole — so a video/background behind the image shows
 // through). A hole is see-through if that child is marked see-through, OR skin-fill is
@@ -877,11 +887,13 @@ function paintCloneDab(ix,iy){ const l=activeLayer(); if(!l||!S.cloneSrc||!S.clo
 
 // ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
 // this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
-function autoHealHoles(){ const l=activeLayer(); if(!l||!S.img)return;
-  // same hole set the export punches: this layer's cut-out children + (for the base) unparented limbs cut off the torso
-  const baseKnock = l.role==='base' ? S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null) : [];
-  const kids=punchKids(l).concat(baseKnock).filter(k=>!k.seeThrough);
-  if(!kids.length){ toast('No cut-out holes on this layer yet — cut a mover off it first'); return; }
+function autoHealHoles(){ if(!S.img)return; let l=activeLayer();
+  // the hole set the export punches lives on whatever the piece was cut FROM. If the selected
+  // layer has none, auto-jump to a layer that does — so a wrong selection heals instead of scolding.
+  if(!l || !openHoleKids(l).length){ const alt=S.layers.find(L=>openHoleKids(L).length);
+    if(alt){ l=alt; S.active=S.layers.indexOf(alt); renderLayerList(); toast('✨ Healing '+alt.name+' — that’s where the holes are'); } }
+  const kids=l?openHoleKids(l):[];
+  if(!kids.length){ toast('No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
   const md=l.mctx.getImageData(0,0,S.iw,S.ih).data;
   const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
   const res=inpaintRGB(md, holeMasks, 1); if(!res){ toast('Nothing to heal'); return; }
@@ -1044,10 +1056,18 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
-  if(S.tool==='clone'){                                   // Patch works on the base — select it so the holes show + you paint the right layer
-    const bi=S.layers.findIndex(l=>l.role==='base');
-    if(bi>=0 && (!activeLayer()||activeLayer().role!=='base')){ S.active=bi; renderLayerList(); }
-    toast('🩹 Holes glow magenta — tap 🎯 Set source, then paint them over');
+  if(S.tool==='clone'){                                   // Patch heals the layer the hole LIVES in — auto-jump there so the holes show
+    const cur=activeLayer();
+    // if a mover is selected, patch the layer it was cut FROM (its parent, or the base);
+    // otherwise find any layer that actually has holes; fall back to the base.
+    let target = (cur&&cur.role==='mover') ? (cur.parent!=null?layerById(cur.parent):S.layers.find(l=>l.role==='base')) : cur;
+    if(!target || !openHoleKids(target).length){
+      target = S.layers.find(l=>openHoleKids(l).length) || S.layers.find(l=>l.role==='base') || cur;
+    }
+    if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
+    const n = target?openHoleKids(target).length:0;
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta; tap 🎯 Set source then paint')
+            : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
   } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
   draw(); });
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
