@@ -594,6 +594,16 @@ if(resumeBtn && hasAutosave()){ resumeBtn.style.display='inline-block';
 function resizeCanvas(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
   cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
   ctx.setTransform(dpr,0,0,dpr,0,0); draw(); }
+// Keep the canvas BUFFER in lockstep with its on-screen CSS box. On mobile the viewport
+// changes (URL bar show/hide, panel relayout after a project loads) resize the canvas's CSS
+// box without always firing a 'resize' event — leaving a stale buffer. The image then renders
+// vertically scaled, so it sits OFFSET from where touches map (touch uses view + live rect,
+// which stay correct) → you tap the magenta hole but the fill lands below it. Re-syncing here,
+// before every draw, guarantees render and touch-mapping share one coordinate space.
+function syncCanvasSize(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(w>1 && h>1 && (cv.width!==w || cv.height!==h)){ cv.width=w; cv.height=h; ctx.setTransform(dpr,0,0,dpr,0,0); return true; }
+  return false; }
 function fitView(){ const r=stageWrap.getBoundingClientRect();
   const z=Math.min(r.width/S.iw, r.height/S.ih)*0.95;
   S.view.zoom=z; S.view.x=(r.width-S.iw*z)/2; S.view.y=(r.height-S.ih*z)/2; }
@@ -741,6 +751,7 @@ function setPreview(on){
 }
 
 function draw(){
+  syncCanvasSize();                                   // buffer must match its CSS box or render drifts from touch-mapping
   const dpr=window.devicePixelRatio||1; const W=cv.width/dpr, H=cv.height/dpr;
   ctx.clearRect(0,0,W,H);
   if(!S.img) return;
