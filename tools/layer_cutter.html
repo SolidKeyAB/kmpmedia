@@ -230,7 +230,7 @@
       </div>
       <p class="hint" style="margin-top:2px">Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;_face_frames.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
       <div class="row">
-        <button class="go" id="toNexum">📡 Send to app (nexum)</button>
+        <button class="go" id="toApp">📡 Send to app</button>
       </div>
       <div class="row" style="margin-top:6px;">
         <button class="sm" id="export">⬇ Export .zip</button>
@@ -238,7 +238,7 @@
         <button class="sm" id="showJson">{ } rig JSON</button>
       </div>
       <textarea id="json" style="display:none" readonly></textarea>
-      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the app over nexum (I bake the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
+      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the host app (it bakes the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
     </div>
   </aside>
 </div>
@@ -989,7 +989,7 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
   else ta.style.display='none'; };
 
-/* ---------- nexum payload: an OGCutoutRig + the layer images, for the app host to bake ----------
+/* ---------- host payload: an OGCutoutRig + the layer images, for the app host to bake ----------
    The library's OGStageLayer rotates about the layer CENTRE, so each mover frame is drawn full-canvas
    with its JOINT shifted to the centre — then the bake rotates about centre (= the joint) and offsets
    x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
@@ -1011,7 +1011,7 @@ function fullCanvasDataURL(maskData, offsetX, offsetY, holes){
   }
   octx.putImageData(out,0,0); return oc.toDataURL('image/png');
 }
-async function buildNexumPayload(){
+async function buildHostPayload(){
   if(!S.srcData) return null; const W=S.iw,H=S.ih;
   const baseKnockKids=S.layers.filter(l=>l.role==='mover' && l.punch && l.parent==null && bboxOf(l.mctx.getImageData(0,0,W,H)));
   const images={}, rigLayers=[];
@@ -1039,15 +1039,15 @@ async function buildNexumPayload(){
   return { kind:'og-rig-payload', v:1, rig, images };
 }
 // Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
-async function sendToNexum(){ if(!S.img){toast('Load an image first');return;}
-  toast('Packing layers…'); const str=JSON.stringify(await buildNexumPayload());
-  if(window.NexumHost && window.NexumHost.receivePayload){ window.NexumHost.receivePayload(str); toast('Sent to app ✓'); return; }
+async function sendToHost(){ if(!S.img){toast('Load an image first');return;}
+  toast('Packing layers…'); const str=JSON.stringify(await buildHostPayload());
+  if(window.AppHost && window.AppHost.receivePayload){ window.AppHost.receivePayload(str); toast('Sent to app ✓'); return; }
   if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(str); toast('Sent to app ✓'); return; }
   if(window.parent && window.parent!==window){ window.parent.postMessage(str,'*'); toast('Sent to host ✓'); return; }
   const blob=new Blob([str],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='rig_payload.json'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('No app host — saved rig_payload.json'); }
-document.getElementById('toNexum').onclick=sendToNexum;
+document.getElementById('toApp').onclick=sendToHost;
 
 /* preview active layer isolated */
 document.getElementById('previewBtn').onclick=async()=>{ const l=activeLayer(); if(!l)return;
@@ -1754,7 +1754,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 applyMode();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
+window.__lc = { S, loadImage, buildExport, buildHostPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
   draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
   mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer };
 </script>
