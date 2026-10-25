@@ -145,7 +145,7 @@
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
-          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the hole; it clones real pixels (stripes, shading) from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
+          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Picking this tool <b>lifts the movers so the holes glow magenta</b> (you can finally see the gap you're patching; the magenta recedes as you fill it). Tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the magenta hole; it clones real pixels (stripes, shading) from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -741,10 +741,32 @@ function draw(){
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(S.src,0,0);
-  for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
-  for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
-    ctx.globalAlpha = (i===S.active)?0.55:0.20; ctx.drawImage(l.mc,0,0); }
-  ctx.globalAlpha=1;
+  const revealBase = (S.tool==='clone') ? (activeLayer()&&activeLayer().role==='base'?activeLayer():S.layers.find(l=>l.role==='base')) : null;
+  if(revealBase){
+    // 🩹 PATCH MODE: lift the movers off this base so the hole they leave is actually visible.
+    // Punch each cut-out footprint transparent, tint the empty hole magenta, then show the
+    // patched pixels filling it — so you can see the gap AND watch it fill as you clone/heal.
+    const W0=S.iw,H0=S.ih;
+    const kids=punchKids(revealBase)
+      .concat(revealBase.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[])
+      .filter(k=>!k.seeThrough && k.visible);
+    ctx.globalCompositeOperation='destination-out';                 // lift movers → holes go transparent
+    for(const k of kids) ctx.drawImage(k.mc,0,0);
+    ctx.globalCompositeOperation='source-over';
+    if(kids.length){                                                // magenta backdrop BEHIND, so it shows only in the empty holes
+      const mh=document.createElement('canvas'); mh.width=W0; mh.height=H0; const mx=mh.getContext('2d');
+      for(const k of kids) mx.drawImage(k.mc,0,0);
+      mx.globalCompositeOperation='source-in'; mx.fillStyle='rgba(255,45,170,0.80)'; mx.fillRect(0,0,W0,H0);
+      ctx.globalCompositeOperation='destination-over'; ctx.drawImage(mh,0,0); ctx.globalCompositeOperation='source-over';
+    }
+    if(revealBase.backfill) ctx.drawImage(revealBase.backfill,0,0);  // patched texture covers the magenta where you've healed
+    ctx.globalAlpha=0.30; ctx.drawImage(revealBase.mc,0,0); ctx.globalAlpha=1;   // faint tint of the base you're patching
+  } else {
+    for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
+    for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
+      ctx.globalAlpha = (i===S.active)?0.55:0.20; ctx.drawImage(l.mc,0,0); }
+    ctx.globalAlpha=1;
+  }
   ctx.restore();
 
   // pivots (screen space)
@@ -1022,7 +1044,11 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
-  if(S.tool!=='clone'){ S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
+  if(S.tool==='clone'){                                   // Patch works on the base — select it so the holes show + you paint the right layer
+    const bi=S.layers.findIndex(l=>l.role==='base');
+    if(bi>=0 && (!activeLayer()||activeLayer().role!=='base')){ S.active=bi; renderLayerList(); }
+    toast('🩹 Holes glow magenta — tap 🎯 Set source, then paint them over');
+  } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
   draw(); });
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
