@@ -899,7 +899,10 @@ function autoHealHoles(){ if(!S.img)return; let l=activeLayer();
   if(!l || !openHoleKids(l).length){ const alt=S.layers.find(L=>openHoleKids(L).length);
     if(alt){ l=alt; S.active=S.layers.indexOf(alt); renderLayerList(); toast('✨ Healing '+alt.name+' — that’s where the holes are'); } }
   const kids=l?openHoleKids(l):[];
-  if(!kids.length){ toast('No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
+  if(!kids.length){
+    const stOnly = S.layers.flatMap(L=>holeKids(L)).filter(k=>k.seeThrough);
+    toast(stOnly.length ? ('🔲 '+stOnly[0].name+'’s hole is SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on it to heal it')
+                        : 'No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
   const md=l.mctx.getImageData(0,0,S.iw,S.ih).data;
   const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
   const res=inpaintRGB(md, holeMasks, 1); if(!res){ toast('Nothing to heal'); return; }
@@ -1072,8 +1075,10 @@ document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
     }
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
+    const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
     toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta; tap 🎯 Set source then paint')
-            : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
+          : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
+          : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
   } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
   draw(); });
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
