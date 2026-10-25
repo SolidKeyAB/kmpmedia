@@ -80,7 +80,7 @@ fun OGPuppetView(
             val painter = if (part.head && headPainter != null) headPainter else parts.getOrNull(i)
             painter?.let { p ->
                 val angle = OGPuppetRig.partAngle(spec, part, tSec, look01)
-                val sx = OGPuppetRig.partScaleX(part, look01)
+                val sx = OGPuppetRig.partScaleX(spec, part, look01)
                 val offX = OGPuppetRig.partOffsetX(part, look01)
                 val offY = OGPuppetRig.partOffsetY(part)
                 Image(

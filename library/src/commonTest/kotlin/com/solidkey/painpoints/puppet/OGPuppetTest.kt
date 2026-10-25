@@ -75,9 +75,11 @@ class OGPuppetTest {
         val head = sample.parts.first { it.head }
         val eye = sample.parts.first { it.gaze > 0f }
         // Head mirror-flips with the look sign; a plain part stays width 1.
-        assertTrue(OGPuppetRig.partScaleX(head, 1f) > 0f)
-        assertTrue(OGPuppetRig.partScaleX(head, -1f) < 0f)
-        assertEquals(1f, OGPuppetRig.partScaleX(eye, -1f))
+        assertTrue(OGPuppetRig.partScaleX(sample, head, 1f) > 0f)
+        assertTrue(OGPuppetRig.partScaleX(sample, head, -1f) < 0f)
+        assertEquals(1f, OGPuppetRig.partScaleX(sample, eye, -1f))
+        // A symmetric face (headMirror = false) never flips — it stays width 1 and only tilts.
+        assertEquals(1f, OGPuppetRig.partScaleX(sample.copy(headMirror = false), head, -1f))
         // The eye slides toward the look; a hard-right look pushes it right by +gaze.
         assertEquals(eye.gaze, OGPuppetRig.partOffsetX(eye, 1f))
         assertEquals(0f, OGPuppetRig.partOffsetX(eye, 0f))
