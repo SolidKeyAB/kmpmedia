@@ -69,6 +69,9 @@ data class OGPuppetSpec(
     /** Whether a head part mirror-FLIPS to turn (a profile/one-sided face reads as turning when flipped).
      *  `false` for a symmetric forward face (e.g. a bee) — it just tilts toward the look, no flip. */
     val headMirror: Boolean = true,
+    /** Invert the head's look DIRECTION (both the turn-tilt and the mirror). The right sign depends on which
+     *  way the drawn head faces; set `true` if the head turns AWAY from the look target instead of toward it. */
+    val headLookInvert: Boolean = false,
     /** Grounded idle bend amplitude (degrees) + how much MORE it leans toward the look target. */
     val bendDeg: Float = 4f,
     val bendLookDeg: Float = 5f,
@@ -118,17 +121,24 @@ object OGPuppetRig {
         if (spec.grounded) sin(tSec * 1.05f) * spec.bendDeg + look * spec.bendLookDeg
         else sin(tSec * 1.3f) * spec.tiltDeg
 
+    /** The look as the head sees it — inverted when [OGPuppetSpec.headLookInvert] is set (the drawn head faces
+     *  the other way), so "toward the move" means the same direction for the tilt and the mirror. */
+    private fun headLook(spec: OGPuppetSpec, look: Float): Float = if (spec.headLookInvert) -look else look
+
     /** A mover's local rotation (degrees) about its pivot: a head adds a damped look-turn, others idle-swing. */
     fun partAngle(spec: OGPuppetSpec, part: OGPuppetPart, tSec: Float, look: Float): Float {
         val idle = part.swingDeg * sin(2.2f * part.speed * tSec + part.phase)
-        return if (part.head) idle * 0.25f + look * spec.lookTurnDeg else idle
+        return if (part.head) idle * 0.25f + headLook(spec, look) * spec.lookTurnDeg else idle
     }
 
     /** A head mirror-flips toward the look direction to read as turning in place (kept near full width so the
      *  flip never looks squished) — only when [OGPuppetSpec.headMirror] is set (a one-sided face). A symmetric
      *  face (headMirror = false) and every non-head part stay at width 1. */
-    fun partScaleX(spec: OGPuppetSpec, part: OGPuppetPart, look: Float): Float =
-        if (part.head && spec.headMirror) (if (look >= 0f) 1f else -1f) * (0.9f + 0.1f * abs(look)) else 1f
+    fun partScaleX(spec: OGPuppetSpec, part: OGPuppetPart, look: Float): Float {
+        if (!(part.head && spec.headMirror)) return 1f
+        val l = headLook(spec, look)
+        return (if (l >= 0f) 1f else -1f) * (0.9f + 0.1f * abs(l))
+    }
 
     /** A mover's horizontal offset (fraction of width): its static tuck plus a gaze slide toward the look. */
     fun partOffsetX(part: OGPuppetPart, look: Float): Float = part.tuckX + part.gaze * look
