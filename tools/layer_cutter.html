@@ -127,6 +127,7 @@
         <button data-tool="erase">🧽 Erase</button>
         <button data-tool="lasso">➰ Lasso</button>
         <button data-tool="pivot">🎯 Pivot</button>
+        <button data-tool="clone">🩹 Patch base</button>
       </div>
       <div id="toolParams">
         <label class="sld">Brush size <span id="brushVal">40</span>px</label>
@@ -136,6 +137,15 @@
         <div class="row" id="wandMode" style="margin-top:8px;">
           <button class="sm on" data-wm="add">✚ Wand adds</button>
           <button class="sm" data-wm="sub">✖ Wand removes</button>
+        </div>
+        <div id="cloneParams" style="display:none; margin-top:8px;">
+          <div class="row">
+            <button class="sm" id="cloneSample">🎯 Set source spot</button>
+            <button class="sm go" id="autoHeal" title="Auto-fill every cut-out hole on this layer with the surrounding texture — a good start you can then refine by hand">✨ Auto-heal holes</button>
+          </div>
+          <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
+          <input type="range" id="soft" min="0" max="100" value="60">
+          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the hole; it clones real pixels (stripes, shading) from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -257,6 +267,7 @@ const S = {
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
   tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
+  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneOff:null,   // 🩹 clone-stamp: source spot + aligned offset while stroking
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
@@ -452,6 +463,7 @@ function loadImage(src){
     const sctx=S.src.getContext('2d', {willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
     S.layers=[]; S.active=-1; S.undo=[]; S.redo=[]; nextId=1;
+    S.cloneSrc=null; S.cloneOff=null; S.cloneSampling=false;
     S.layers.push(makeLayer('fig','base'));
     S.layers.push(makeLayer('arm_r','mover'));
     S.active=1;
@@ -494,7 +506,8 @@ function serializeProject(){
       parent:l.parent??null,
       lips:(Array.isArray(l.lips)&&l.lips.length)?l.lips:null,
       poses:l.poses||{},
-      mask:l.mc.toDataURL('image/png') })) };
+      mask:l.mc.toDataURL('image/png'),
+      backfill:l.backfill?l.backfill.toDataURL('image/png'):null })) };
 }
 function saveProject(){
   if(!S.img){ toast('Load + cut something first'); return; }
@@ -515,17 +528,18 @@ function restoreProject(proj, quiet){
     const sctx=S.src.getContext('2d',{willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
     S.layers=[]; S.undo=[]; S.redo=[]; S.preview=false;
+    S.cloneSrc=null; S.cloneOff=null; S.cloneSampling=false;
     const pls=proj.layers||[];
     nextId=Math.max(proj.nextId||1, ...pls.map(l=>(l.id||0)+1), 1);
     S.active=Math.max(0, Math.min(proj.active??0, pls.length-1));
-    let pending=pls.length;
+    let pending=0;
     const finish=()=>{ document.getElementById('dims').textContent=`${S.iw}×${S.ih}`;
       document.getElementById('empty').style.display='none';
       S.mode=proj.mode||'rig'; S.expr=proj.expr||'neutral';
       { const ci=document.getElementById('charName'); if(ci && typeof proj.name==='string') ci.value=proj.name; }
       fitView(); renderLayerList(); applyMode(); draw(); markDirty();
       if(!quiet) toast('Project opened — pick up where you left off'); };
-    if(!pls.length){ finish(); return; }
+    const done=()=>{ if(--pending===0) finish(); };
     pls.forEach((pl,idx)=>{
       const mc=document.createElement('canvas'); mc.width=S.iw; mc.height=S.ih;
       const mctx=mc.getContext('2d',{willReadFrequently:true});
@@ -538,11 +552,12 @@ function restoreProject(proj, quiet){
         lips:(Array.isArray(pl.lips)&&pl.lips.length)?pl.lips:null,
         poses:pl.poses||{} };
       S.layers[idx]=L;
-      if(pl.mask){ const mi=new Image();
-        mi.onload=()=>{ mctx.drawImage(mi,0,0); if(--pending===0) finish(); };
-        mi.onerror=()=>{ if(--pending===0) finish(); }; mi.src=pl.mask; }
-      else if(--pending===0) finish();
+      if(pl.mask){ pending++; const mi=new Image();
+        mi.onload=()=>{ mctx.drawImage(mi,0,0); done(); }; mi.onerror=done; mi.src=pl.mask; }
+      if(pl.backfill){ pending++; layerBackfill(L); const bi=new Image();
+        bi.onload=()=>{ L.bfctx.drawImage(bi,0,0); done(); }; bi.onerror=done; bi.src=pl.backfill; }
     });
+    if(pending===0) finish();
   };
   img.onerror=()=>toast('Project image failed to load');
   img.src=proj.image;
@@ -592,42 +607,64 @@ function splitHoles(childLayers){
   for(const k of childLayers){ ((!S.skinFill||k.seeThrough)?clear:skin).push(dat(k)); }
   return {skin, clear};
 }
-// Spread a layer's OWN surrounding colour into its punched-out holes, so when the
-// cut-out child (mouth/eye) moves for an expression it reveals SKIN, not a transparent
-// gap. Pure inpaint: seed with the layer's non-hole pixels, then grow (wave dilation,
-// 8-neighbour average) inward over the hole until filled. Works in source space,
-// returns Uint8ClampedArray(W*H*3) of skin RGB, or null if there are no holes.
-function skinFillRGB(ownMask, holeMasks){
-  if(!S.skinFill || !holeMasks || !holeMasks.length) return null;
+// Inpaint a layer's punched-out holes with its OWN surrounding colour/texture, so a
+// moved cut-out (mouth/eye/limb) reveals coat, not a transparent gap. Two-step:
+//  (1) multi-source BFS so every hole pixel takes the colour of its NEAREST known pixel
+//      — this carries real boundary colour (stripes, shading) inward instead of washing
+//      the whole hole to one grey mean (the old 8-neighbour-average did the latter);
+//  (2) a few light smoothing passes over hole pixels only, to melt the nearest-colour
+//      seams while keeping the texture gradient.
+// For a solid region (e.g. the bee body) nearest-colour == the one colour everywhere, so
+// the result is byte-for-byte what the old average produced — safe, strictly better on texture.
+// smoothPasses: 2 for the live skin-fill, less to keep more texture for a baked heal.
+// Returns {out:Uint8ClampedArray(W*H*3), hole:Uint8Array, filled:Uint8Array} or null.
+function inpaintRGB(ownMask, holeMasks, smoothPasses){
   const W=S.iw,H=S.ih, sd=S.srcData.data, N=W*H;
-  const rgb=new Float32Array(N*3), cur=new Uint8Array(N), hole=new Uint8Array(N);
+  const hole=new Uint8Array(N), known=new Uint8Array(N), filled=new Uint8Array(N);
+  let a=new Float32Array(N*3);
   let hx0=W,hy0=H,hx1=-1,hy1=-1, anyHole=false, sr=0,sg=0,sb=0,sn=0;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const p=y*W+x,o=p*4;
     if(ownMask[o+3]<=8) continue;
     let hf=1; for(const kd of holeMasks) hf*=(1-kd[o+3]/255);
     if(hf<0.5){ hole[p]=1; anyHole=true; if(x<hx0)hx0=x;if(x>hx1)hx1=x;if(y<hy0)hy0=y;if(y>hy1)hy1=y; }
-    else { rgb[p*3]=sd[o]; rgb[p*3+1]=sd[o+1]; rgb[p*3+2]=sd[o+2]; cur[p]=1; sr+=sd[o];sg+=sd[o+1];sb+=sd[o+2];sn++; }
+    else { a[p*3]=sd[o]; a[p*3+1]=sd[o+1]; a[p*3+2]=sd[o+2]; known[p]=1; filled[p]=1; sr+=sd[o];sg+=sd[o+1];sb+=sd[o+2];sn++; }
   }
   if(!anyHole || !sn) return null;
-  hx0=Math.max(0,hx0-1);hy0=Math.max(0,hy0-1);hx1=Math.min(W-1,hx1+1);hy1=Math.min(H-1,hy1+1);
-  let grew=true, guard=0;
-  while(grew && guard++<3000){ grew=false; const add=[];
-    for(let y=hy0;y<=hy1;y++)for(let x=hx0;x<=hx1;x++){ const p=y*W+x;
-      if(cur[p]||!hole[p]) continue;
-      let r=0,g=0,b=0,n=0;
-      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
-        const xx=x+dx,yy=y+dy; if(xx<0||yy<0||xx>=W||yy>=H)continue; const q=yy*W+xx;
-        if(cur[q]){ r+=rgb[q*3];g+=rgb[q*3+1];b+=rgb[q*3+2];n++; } }
-      if(n) add.push(p,r/n,g/n,b/n);
-    }
-    if(add.length){ grew=true; for(let i=0;i<add.length;i+=4){ const p=add[i]; rgb[p*3]=add[i+1];rgb[p*3+1]=add[i+2];rgb[p*3+2]=add[i+3]; cur[p]=1; } }
+  // (1) multi-source BFS from all known pixels → nearest-colour assignment over the holes
+  const q=new Int32Array(N); let head=0,tail=0;
+  for(let p=0;p<N;p++){ if(known[p]) q[head++]=p; }
+  while(tail<head){ const p=q[tail++]; const x=p%W,y=(p/W)|0;
+    const cr=a[p*3],cg=a[p*3+1],cb=a[p*3+2];
+    const nb=[p-1,p+1,p-W,p+W], ok=[x>0,x<W-1,y>0,y<H-1];
+    for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d];
+      if(hole[np] && !filled[np]){ filled[np]=1; a[np*3]=cr;a[np*3+1]=cg;a[np*3+2]=cb; q[head++]=np; } }
   }
-  const mr=sr/sn,mg=sg/sn,mb=sb/sn;   // fallback mean skin for any pocket the wave couldn't reach
+  // (2) light smoothing over hole pixels only (bounded to the hole bbox), ping-pong buffers
+  hx0=Math.max(0,hx0);hy0=Math.max(0,hy0);hx1=Math.min(W-1,hx1);hy1=Math.min(H-1,hy1);
+  let b=new Float32Array(N*3); const passes=smoothPasses==null?2:smoothPasses;
+  for(let pass=0;pass<passes;pass++){ b.set(a);
+    for(let y=hy0;y<=hy1;y++)for(let x=hx0;x<=hx1;x++){ const p=y*W+x; if(!hole[p])continue;
+      let r=a[p*3],g=a[p*3+1],bl=a[p*3+2],n=1;
+      const nb=[p-1,p+1,p-W,p+W], ok=[x>0,x<W-1,y>0,y<H-1];
+      for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d]; r+=a[np*3];g+=a[np*3+1];bl+=a[np*3+2];n++; }
+      b[p*3]=r/n;b[p*3+1]=g/n;b[p*3+2]=bl/n; }
+    const t=a;a=b;b=t; }
+  const mr=sr/sn,mg=sg/sn,mb=sb/sn;   // fallback mean for any pocket BFS couldn't reach
   const out=new Uint8ClampedArray(N*3);
-  for(let p=0;p<N;p++){ if(hole[p]&&!cur[p]){ out[p*3]=mr;out[p*3+1]=mg;out[p*3+2]=mb; }
-    else { out[p*3]=rgb[p*3];out[p*3+1]=rgb[p*3+1];out[p*3+2]=rgb[p*3+2]; } }
-  return out;
+  for(let p=0;p<N;p++){ if(hole[p]&&!filled[p]){ out[p*3]=mr;out[p*3+1]=mg;out[p*3+2]=mb; }
+    else { out[p*3]=a[p*3];out[p*3+1]=a[p*3+1];out[p*3+2]=a[p*3+2]; } }
+  return {out, hole, filled};
 }
+// Live skin-fill poured into the cut-out holes at composite time (gated by the 🩹 checkbox).
+function skinFillRGB(ownMask, holeMasks){
+  if(!S.skinFill || !holeMasks || !holeMasks.length) return null;
+  const r=inpaintRGB(ownMask, holeMasks, 2); return r ? r.out : null;
+}
+// Lazily give a layer a non-destructive BACKFILL canvas — real pixels painted UNDER the
+// base by the 🩹 clone-stamp / ✨ auto-heal. It overrides the live skin-fill wherever it
+// has alpha, is re-editable + undoable, and never touches the mover's own pixels.
+function layerBackfill(l){ if(!l.backfill){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih;
+    l.backfill=c; l.bfctx=c.getContext('2d',{willReadFrequently:true}); } return l.backfill; }
 function buildCut(l){
   if(l._cut!==undefined && l._cut!==null) return l._cut;
   const W=S.iw,H=S.ih,sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H).data;
@@ -635,6 +672,7 @@ function buildCut(l){
   if(!any){ l._cut=null; return null; }
   const {skin:skinMasks, clear:clearMasks}=splitHoles(punchKids(l));   // skin-filled holes vs see-through holes
   const skin=skinFillRGB(md, skinMasks);   // skin to pour into the skin-filled holes (null when none)
+  const bf=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;    // 🩹 clone-stamped / auto-healed pixels (override skin)
   const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
   const out=cx.createImageData(W,H); const od=out.data;
   for(let p=0;p<W*H;p++){ const o=p*4; const ma=md[o+3]; if(!ma) continue;
@@ -642,7 +680,8 @@ function buildCut(l){
     if(skin){ let hfSkin=1; for(const kd of skinMasks) hfSkin*=(1-kd[o+3]/255); const t=1-hfSkin;
       od[o]=sd[o]*(1-t)+skin[p*3]*t; od[o+1]=sd[o+1]*(1-t)+skin[p*3+1]*t; od[o+2]=sd[o+2]*(1-t)+skin[p*3+2]*t;
       od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
-    else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); } }
+    else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
+    if(bf){ const bt=bf[o+3]/255; if(bt){ od[o]=od[o]*(1-bt)+bf[o]*bt; od[o+1]=od[o+1]*(1-bt)+bf[o+1]*bt; od[o+2]=od[o+2]*(1-bt)+bf[o+2]*bt; } } }
   cx.putImageData(out,0,0); l._cut=c; return c;
 }
 function layerById(id){ return S.layers.find(x=>x.id===id) || null; }
@@ -702,6 +741,7 @@ function draw(){
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(S.src,0,0);
+  for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
   for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
     ctx.globalAlpha = (i===S.active)?0.55:0.20; ctx.drawImage(l.mc,0,0); }
   ctx.globalAlpha=1;
@@ -719,13 +759,19 @@ function draw(){
     ctx.beginPath(); for(let k=0;k<S.lasso.length;k++){ const p=S.lasso[k]; const sx=v.x+p.x*v.zoom, sy=v.y+p.y*v.zoom;
       k?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);} ctx.stroke(); ctx.setLineDash([]); }
   // brush cursor
-  if(S.cursor && (S.tool==='brush'||S.tool==='erase')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
+  if(S.cursor && (S.tool==='brush'||S.tool==='erase'||S.tool==='clone')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,S.brush*v.zoom/2,0,7); ctx.stroke(); }
+  // 🩹 clone source marker (green crosshair)
+  if(S.tool==='clone' && S.cloneSrc){ const px=v.x+S.cloneSrc.x*v.zoom, py=v.y+S.cloneSrc.y*v.zoom;
+    ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px,py,8,0,7);
+    ctx.moveTo(px-12,py); ctx.lineTo(px+12,py); ctx.moveTo(px,py-12); ctx.lineTo(px,py+12); ctx.stroke(); }
 }
 
 /* ---------- history: one timeline covering BOTH mask edits and expression poses ----------
    Entry is either {k:'mask', id, data} or {k:'pose', id, expr, pose} (pose = pre-change clone | null). */
 function snap(l){ return {k:'mask', id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
+function snapBackfill(l){ layerBackfill(l); return {k:'backfill', id:l.id, data:l.bfctx.getImageData(0,0,S.iw,S.ih)}; }
+function pushBackfillUndo(l){ if(l) pushHist(snapBackfill(l)); }                   // 🩹 patch/heal edit
 function clonePose(p){ return p ? JSON.parse(JSON.stringify(p)) : null; }
 function snapPose(l, expr){ return {k:'pose', id:l.id, expr, pose:clonePose(l.poses&&l.poses[expr])}; }
 function pushHist(entry){ S.undo.push(entry); if(S.undo.length>60) S.undo.shift(); S.redo.length=0; markDirty(); }
@@ -762,6 +808,11 @@ function restoreFrom(fromStack, toStack, verb){
     l._cut=null; renderLayerList(); if(typeof renderExprPose==='function') renderExprPose();
     if(typeof renderWarpPanel==='function') renderWarpPanel(); draw(); toast(verb==='undo'?'Undo':'Redo'); return;
   }
+  if(u.k==='backfill'){
+    toStack.push(snapBackfill(l));                         // save current backfill so the inverse restores it
+    layerBackfill(l); l.bfctx.putImageData(u.data,0,0); l._cut=null;
+    S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo'); return;
+  }
   toStack.push(snap(l));                                   // save current mask so the inverse restores it
   l.mctx.putImageData(u.data,0,0); l._cut=null; S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
 }
@@ -783,6 +834,40 @@ function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.m
   m.globalCompositeOperation = erase?'destination-out':'source-over';
   m.fillStyle = l.color; m.beginPath(); m.arc(ix,iy,S.brush/2,0,7); m.fill();
   m.globalCompositeOperation='source-over'; }
+
+// 🩹 clone-stamp one soft dab: copy a brush-sized patch of ORIGINAL source texture,
+// translated by the locked source→dest offset, onto the layer's backfill — radially
+// feathered AND clipped to the layer's own silhouette (so you can't smear outside it).
+function paintCloneDab(ix,iy){ const l=activeLayer(); if(!l||!S.cloneSrc||!S.cloneOff)return;
+  const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
+  const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
+  const sx0=dx0+S.cloneOff.dx, sy0=dy0+S.cloneOff.dy;               // matching source patch top-left
+  const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
+  tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the source spot
+  tc.globalCompositeOperation='destination-in';                    // ∩ radial soft brush
+  const inner=r*(1-Math.min(0.95,(S.cloneSoft||0)*0.95));
+  const g=tc.createRadialGradient(d/2,d/2,Math.max(0,inner), d/2,d/2,r);
+  g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  tc.fillStyle=g; tc.fillRect(0,0,d,d);
+  tc.drawImage(l.mc, dx0,dy0,d,d, 0,0,d,d);                         // ∩ layer silhouette (mc alpha)
+  tc.globalCompositeOperation='source-over';
+  layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
+
+// ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
+// this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
+function autoHealHoles(){ const l=activeLayer(); if(!l||!S.img)return;
+  // same hole set the export punches: this layer's cut-out children + (for the base) unparented limbs cut off the torso
+  const baseKnock = l.role==='base' ? S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null) : [];
+  const kids=punchKids(l).concat(baseKnock).filter(k=>!k.seeThrough);
+  if(!kids.length){ toast('No cut-out holes on this layer yet — cut a mover off it first'); return; }
+  const md=l.mctx.getImageData(0,0,S.iw,S.ih).data;
+  const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
+  const res=inpaintRGB(md, holeMasks, 1); if(!res){ toast('Nothing to heal'); return; }
+  pushBackfillUndo(l); layerBackfill(l);
+  const img=l.bfctx.getImageData(0,0,S.iw,S.ih), dd=img.data, {out,hole}=res;
+  for(let p=0;p<S.iw*S.ih;p++){ if(hole[p]){ const o=p*4; dd[o]=out[p*3];dd[o+1]=out[p*3+1];dd[o+2]=out[p*3+2];dd[o+3]=255; } }
+  l.bfctx.putImageData(img,0,0); l._cut=null; draw(); markDirty();
+  toast('✨ Holes healed with surrounding texture — 🩹 Patch to refine, ↩︎ to undo'); }
 
 function fillLasso(pts){ const l=activeLayer(); if(!l||pts.length<3)return; pushUndo();
   const m=l.mctx; m.fillStyle=l.color; m.beginPath(); m.moveTo(pts[0].x,pts[0].y);
@@ -870,6 +955,15 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
   if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); markDirty(); } return; }
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
+  if(S.tool==='clone'){
+    if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
+      const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
+      draw(); toast('🎯 Source set — now paint over the hole'); return; }
+    if(!S.cloneSrc){ toast('Tap 🎯 Set source spot first, then a clean patch of coat'); return; }
+    const l=activeLayer(); if(!l)return;
+    drawing=true; S.cloneOff={dx:S.cloneSrc.x-ip.x, dy:S.cloneSrc.y-ip.y};   // lock aligned offset for this stroke
+    pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
+  }
   // brush / erase
   drawing=true; pushUndo(); paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
 });
@@ -887,9 +981,14 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
     draw(); return; }
   if(S.preview) return;
   if(S.mode==='face'){ if(S.warpDrag) warpMove(sp); else if(S.faceDrag) faceMove(sp); return; }
-  if(!drawing){ if(S.tool==='brush'||S.tool==='erase')draw(); return; }
+  if(!drawing){ if(S.tool==='brush'||S.tool==='erase'||S.tool==='clone')draw(); return; }
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
+  if(S.tool==='clone'){
+    if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
+      for(let s=1;s<=steps;s++)paintCloneDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+    else paintCloneDab(ip.x,ip.y);
+    lastImg=ip; draw(); return; }
   if(S.tool==='brush'||S.tool==='erase'){ const erase=S.tool==='erase';
     // interpolate between last and current for smooth stroke
     if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
@@ -921,7 +1020,15 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 
 /* ---------- tool buttons & sliders ---------- */
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
-  S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b)); });
+  S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
+  const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
+  if(S.tool!=='clone'){ S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
+  draw(); });
+document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
+  S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
+  toast(S.cloneSampling?'Tap a clean patch of coat to set the clone source':'Sampling off'); };
+document.getElementById('autoHeal').onclick=autoHealHoles;
+{ const se=document.getElementById('soft'); if(se) se.oninput=()=>{ S.cloneSoft=+se.value/100; document.getElementById('softVal').textContent=se.value; }; }
 const brushEl=document.getElementById('brush'), tolEl=document.getElementById('tol'), bgEl=document.getElementById('bg');
 brushEl.oninput=()=>{S.brush=+brushEl.value; document.getElementById('brushVal').textContent=brushEl.value;};
 tolEl.oninput=()=>{S.tol=+tolEl.value; document.getElementById('tolVal').textContent=tolEl.value;};
@@ -950,6 +1057,7 @@ async function buildExport(){
     const kids=punchKids(l).concat(l.role==='base'?baseKnockKids:[]);   // pieces cut OUT of this layer (eye out of head, limbs off torso)
     const {skin:skinMasks, clear:clearMasks}=splitHoles(kids);
     const skin=skinFillRGB(md.data, skinMasks);   // skin-fill the non-see-through holes
+    const bf=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;   // 🩹 clone/auto-heal pixels bake into the export
     const oc=document.createElement('canvas'); oc.width=box.w; oc.height=box.h; const octx=oc.getContext('2d');
     const out=octx.createImageData(box.w,box.h); const od=out.data; const mdd=md.data;
     for(let y=0;y<box.h;y++)for(let x=0;x<box.w;x++){ const sx=box.x+x, sy=box.y+y; const sp=sy*W+sx, si=sp*4; const oi=(y*box.w+x)*4;
@@ -958,6 +1066,7 @@ async function buildExport(){
         od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
         od[oi+3]=Math.round(sd[si+3]*(mdd[si+3]/255)*hfClear); }
       else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(mdd[si+3]/255)*hfClear); }
+      if(bf){ const bt=bf[si+3]/255; if(bt){ od[oi]=od[oi]*(1-bt)+bf[si]*bt; od[oi+1]=od[oi+1]*(1-bt)+bf[si+1]*bt; od[oi+2]=od[oi+2]*(1-bt)+bf[si+2]*bt; } }
     }
     octx.putImageData(out,0,0);
     const blob=await new Promise(res=>oc.toBlob(res,'image/png'));
@@ -1029,7 +1138,7 @@ document.getElementById('showJson').onclick=async()=>{ const ta=document.getElem
    The library's OGStageLayer rotates about the layer CENTRE, so each mover frame is drawn full-canvas
    with its JOINT shifted to the centre — then the bake rotates about centre (= the joint) and offsets
    x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
-function fullCanvasDataURL(maskData, offsetX, offsetY, holes){
+function fullCanvasDataURL(maskData, offsetX, offsetY, holes, bfData){
   const W=S.iw,H=S.ih, sd=S.srcData.data, md=maskData.data;
   const {skin:skinMasks, clear:clearMasks}=holes||{skin:[],clear:[]};
   const skin=skinFillRGB(md, skinMasks);   // pour skin into the skin-filled holes; see-through holes stay transparent (video behind)
@@ -1044,6 +1153,7 @@ function fullCanvasDataURL(maskData, offsetX, offsetY, holes){
       od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
       od[oi+3]=Math.round(sd[si+3]*(md[si+3]/255)*hfClear); }
     else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(md[si+3]/255)*hfClear); }
+    if(bfData){ const bt=bfData[si+3]/255; if(bt){ od[oi]=od[oi]*(1-bt)+bfData[si]*bt; od[oi+1]=od[oi+1]*(1-bt)+bfData[si+1]*bt; od[oi+2]=od[oi+2]*(1-bt)+bfData[si+2]*bt; } }
   }
   octx.putImageData(out,0,0); return oc.toDataURL('image/png');
 }
@@ -1053,14 +1163,15 @@ async function buildHostPayload(){
   const images={}, rigLayers=[];
   for(const l of S.layers){ const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box) continue;
     const name=sanitize(l.name);
+    const bfData=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;   // 🩹 clone/auto-heal pixels bake into the host payload
     const kids=punchKids(l).concat(l.role==='base'?baseKnockKids:[]);   // child pieces cut OUT of this layer (+ limbs off the base)
     if(l.role==='base'){
-      images[name]=fullCanvasDataURL(md, 0, 0, splitHoles(kids));
+      images[name]=fullCanvasDataURL(md, 0, 0, splitHoles(kids), bfData);
       rigLayers.push({ id:name, resource:name, role:'base', pivotX:0.5, pivotY:0.5 });
     } else {
       const pv=l.pivot || {x:box.x+box.w/2, y:box.y+box.h/2};
       const offX=Math.round(W/2 - pv.x), offY=Math.round(H/2 - pv.y);
-      images[name]=fullCanvasDataURL(md, offX, offY, kids.length?splitHoles(kids):null);
+      images[name]=fullCanvasDataURL(md, offX, offY, kids.length?splitHoles(kids):null, bfData);
       const par=(l.parent!=null)?layerById(l.parent):null;
       const ml={ id:name, resource:name, role:'mover',
         pivotX:+(pv.x/W).toFixed(4), pivotY:+(pv.y/H).toFixed(4),
@@ -1792,7 +1903,8 @@ applyMode();
 // debug hook for automated verification
 window.__lc = { S, loadImage, buildExport, buildHostPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
   draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
-  mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer };
+  mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer,
+  inpaintRGB, layerBackfill, paintCloneDab, autoHealHoles };
 </script>
 </body>
 </html>
