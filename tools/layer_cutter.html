@@ -146,7 +146,7 @@
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
-          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Picking this tool <b>lifts the movers so the holes glow magenta</b> (you can finally see the gap you're patching; the magenta recedes as you fill it). Tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the magenta hole; it clones real pixels (stripes, shading) from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
+          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Picking this tool <b>lifts the movers so the holes glow magenta</b> (you can finally see the gap you're patching; the magenta recedes as you fill it). <b>Easiest:</b> just <b>tap or drag across the magenta</b> and it auto-fills with the surrounding texture. <b>For exact texture</b> (stripes/shading): tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the magenta; it clones real pixels from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -1002,7 +1002,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
       const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
       draw(); toast('🎯 Source set — now paint over the hole'); return; }
-    if(!S.cloneSrc){ toast('Tap 🎯 Set source spot first, then a clean patch of coat'); return; }
+    if(!S.cloneSrc){ autoHealHoles(); return; }   // no source set → just content-aware heal the holes (so tapping the magenta "fills the gap" works without the 🎯 step)
     const l=activeLayer(); if(!l)return;
     drawing=true; S.cloneOff={dx:S.cloneSrc.x-ip.x, dy:S.cloneSrc.y-ip.y};   // lock aligned offset for this stroke
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
@@ -1076,7 +1076,7 @@ document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
     const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
-    toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta; tap 🎯 Set source then paint')
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta. Tap/drag the magenta to auto-fill it, or 🎯 Set source to clone exact texture.')
           : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
           : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
   } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
