@@ -627,6 +627,13 @@ function patchTarget(){ const a=activeLayer();
   return S.layers.find(l=>openHoleKids(l).length)
       || (a && a.role==='base' ? a : S.layers.find(l=>l.role==='base'))
       || a || null; }
+// The sheet GROWN to include the footprints of the pieces cut from it — the base plus the holes it
+// must fill when those movers swing away. This is the region Patch/Auto-heal may paint into (so you
+// can rebuild the belt UNDER the arm, not just the sliver where the arm overlapped the figure).
+function grownSheet(l){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(l.mc,0,0);
+  for(const k of holeKids(l).filter(k=>!k.seeThrough && k.visible)) x.drawImage(k.mc,0,0);
+  return c; }
 // Split a set of cut-out child layers into the holes that get SKIN vs the holes left
 // SEE-THROUGH (real transparent hole — so a video/background behind the image shows
 // through). A hole is see-through if that child is marked see-through, OR skin-fill is
@@ -701,7 +708,6 @@ function buildCut(l){
   if(!any){ l._cut=null; return null; }
   const {skin:skinMasks, clear:clearMasks}=splitHoles(punchKids(l));   // skin-filled holes vs see-through holes
   const skin=skinFillRGB(md, skinMasks);   // skin to pour into the skin-filled holes (null when none)
-  const bf=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;    // 🩹 clone-stamped / auto-healed pixels (override skin)
   const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
   const out=cx.createImageData(W,H); const od=out.data;
   for(let p=0;p<W*H;p++){ const o=p*4; const ma=md[o+3]; if(!ma) continue;
@@ -710,8 +716,13 @@ function buildCut(l){
       od[o]=sd[o]*(1-t)+skin[p*3]*t; od[o+1]=sd[o+1]*(1-t)+skin[p*3+1]*t; od[o+2]=sd[o+2]*(1-t)+skin[p*3+2]*t;
       od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
     else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
-    if(bf){ const bt=bf[o+3]/255; if(bt){ od[o]=od[o]*(1-bt)+bf[o]*bt; od[o+1]=od[o+1]*(1-bt)+bf[o+1]*bt; od[o+2]=od[o+2]*(1-bt)+bf[o+2]*bt; } } }
-  cx.putImageData(out,0,0); l._cut=c; return c;
+  }
+  cx.putImageData(out,0,0);
+  // 🩹 clone-stamped / auto-healed pixels composite OVER the base — and because they can extend
+  // BEYOND the figure mask (rebuilt belt under where the arm swings away), drawImage them whole so
+  // the base GROWS to include the healed footprint, not just the pixels already inside md.
+  if(l.backfill) cx.drawImage(l.backfill,0,0);
+  l._cut=c; return c;
 }
 function layerById(id){ return S.layers.find(x=>x.id===id) || null; }
 // a layer's own swing angle at the current preview time
@@ -782,14 +793,13 @@ function draw(){
     // filling it — so you can see the gap AND watch it fill as you clone/heal.
     const W0=S.iw,H0=S.ih;
     const kids=holeKids(revealBase).filter(k=>!k.seeThrough && k.visible);
-    // The REAL hole is only where a cut-out overlaps the sheet it was cut FROM — a raised limb's
-    // silhouette can hang far outside the figure (84% of the elf's arm did), and that overhang is
-    // NOT figure material: it can't be healed (nothing to fill from). So clip the footprint to
-    // revealBase's own mask — otherwise the overhang glows magenta forever ("pink that patching
-    // won't remove"). hole = union(kids) ∩ revealBase.mc.
+    // The hole = the mover's WHOLE footprint. When the arm swings away the base must have coat/belt
+    // behind it, so the base has to GROW to cover the full footprint — even the part hanging outside
+    // the current figure mask (84% of the elf's arm). We lift the whole mover off (so it stops
+    // hiding what's below) and glow the footprint magenta; ✨ Auto-heal then rebuilds base texture
+    // there (sampled from the real belt/coat around it) and the magenta recedes as it fills.
     const hole=document.createElement('canvas'); hole.width=W0; hole.height=H0; const hx=hole.getContext('2d');
     for(const k of kids) hx.drawImage(k.mc,0,0);
-    hx.globalCompositeOperation='destination-in'; hx.drawImage(revealBase.mc,0,0); hx.globalCompositeOperation='source-over';
     ctx.globalCompositeOperation='destination-out'; ctx.drawImage(hole,0,0);  // lift movers → holes go transparent
     ctx.globalCompositeOperation='source-over';
     if(kids.length){                                                // magenta backdrop BEHIND, so it shows only in the empty holes
@@ -910,7 +920,8 @@ function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc||!S.clo
   const g=tc.createRadialGradient(d/2,d/2,Math.max(0,inner), d/2,d/2,r);
   g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
   tc.fillStyle=g; tc.fillRect(0,0,d,d);
-  tc.drawImage(l.mc, dx0,dy0,d,d, 0,0,d,d);                         // ∩ layer silhouette (mc alpha)
+  const clip=S._strokeClip||l.mc;                                   // ∩ base ∪ hole footprints (so you can paint belt UNDER the arm, not just on the figure)
+  tc.drawImage(clip, dx0,dy0,d,d, 0,0,d,d);
   tc.globalCompositeOperation='source-over';
   layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
 
@@ -926,7 +937,10 @@ function autoHealHoles(){ if(!S.img)return; let l=patchTarget();
     const stOnly = S.layers.flatMap(L=>holeKids(L)).filter(k=>k.seeThrough);
     toast(stOnly.length ? ('🔲 '+stOnly[0].name+'’s hole is SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on it to heal it')
                         : 'No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
-  const md=l.mctx.getImageData(0,0,S.iw,S.ih).data;
+  // Inpaint over the GROWN sheet (base ∪ hole footprints): the whole footprint is the hole to fill,
+  // the surrounding real base pixels (belt/coat) are the source. This rebuilds the base UNDER the
+  // mover — including the part outside the original figure mask — instead of only the thin overlap.
+  const md=grownSheet(l).getContext('2d',{willReadFrequently:true}).getImageData(0,0,S.iw,S.ih).data;
   const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
   const res=inpaintRGB(md, holeMasks, 1); if(!res){ toast('Nothing to heal'); return; }
   pushBackfillUndo(l); layerBackfill(l);
@@ -1026,8 +1040,9 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
       const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
       draw(); toast('🎯 Source set — now paint over the hole'); return; }
     if(!S.cloneSrc){ autoHealHoles(); return; }   // no source set → just content-aware heal the holes (so tapping the magenta "fills the gap" works without the 🎯 step)
-    const l=activeLayer(); if(!l)return;
+    const l=patchTarget(); if(!l)return;           // paint the SHEET the hole lives in, never the selected mover
     drawing=true; S.cloneOff={dx:S.cloneSrc.x-ip.x, dy:S.cloneSrc.y-ip.y};   // lock aligned offset for this stroke
+    S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
   }
   // brush / erase
