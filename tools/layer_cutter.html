@@ -131,8 +131,8 @@
         <button data-tool="clone">🩹 Patch base</button>
       </div>
       <div id="toolParams">
-        <label class="sld">Brush size <span id="brushVal">40</span>px</label>
-        <input type="range" id="brush" min="3" max="200" value="40">
+        <label class="sld">Brush size <span id="brushVal">120</span>px</label>
+        <input type="range" id="brush" min="3" max="600" value="120">
         <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
         <input type="range" id="tol" min="2" max="120" value="40">
         <div class="row" id="wandMode" style="margin-top:8px;">
@@ -147,7 +147,7 @@
           <input type="range" id="soft" min="0" max="100" value="60">
           <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
           <input type="range" id="infuse" min="0" max="100" value="0">
-          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>paint over the magenta</b>. This works like a <b>GIMP clone/heal brush</b>: the spot you pick is the <i>anchor</i>, and as you <b>drag in one stroke it copies a whole moving region</b> (not the same dot over and over) — so you transfer a real swath of texture. Each new stroke re-anchors to the picked spot (no drift). <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches the copied patch to the <i>real coat bordering the hole</i> — the lifted mover's own pixels (e.g. the arm) are excluded, so it never tints toward the arm. Leave it at 0 for a clean copy; nudge it up only if a patch's tone looks off against its surroundings. <b>Softness</b> feathers the edge so overlapping stamps connect smoothly. Painting is clipped to the area behind the mover + the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>stamp over the magenta</b> (tap, or drag to lay a trail). Every stamp copies <b>that same picked area</b> (a brush-sized chunk — the green ring shows exactly what's copied), dropped at each point you touch — so the source stays put on the clean belt and never drifts into the arm. Make the <b>brush big</b> so each stamp grabs a real swath of texture (small brush = tiny patch tiled = looks flat). Re-tap 🎯 on a different clean spot to grab a different bit (buckle vs strap). <b>Softness</b> feathers each stamp so overlapping ones connect smoothly. <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches each stamp to the <i>real coat bordering the hole</i> (the lifted arm's pixels are excluded, so it never tints toward the arm) — nudge it up only if a patch's tone looks off. Painting is clipped to the area behind the mover + the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -268,7 +268,7 @@ const S = {
   img:null, iw:0, ih:0,
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
-  tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
+  tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
   cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
@@ -839,9 +839,7 @@ function draw(){
   if(S.tool==='clone'){
     const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
     if(S.cloneSrc){
-      // the source centre — follows the cursor in parallel while a stroke is down (aligned), else the picked spot
-      const scx = (S.cloneOff && S.cursor) ? s2i(S.cursor.x,S.cursor.y).x - S.cloneOff.x : S.cloneSrc.x;
-      const scy = (S.cloneOff && S.cursor) ? s2i(S.cursor.x,S.cursor.y).y - S.cloneOff.y : S.cloneSrc.y;
+      const scx = S.cloneSrc.x, scy = S.cloneSrc.y;      // fixed source — the picked spot you stamp from
       const px=v.x+scx*v.zoom, py=v.y+scy*v.zoom;
       // the copy footprint at the source (solid green ring + centre dot)
       ctx.strokeStyle='#39d98a'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px,py,rz,0,7); ctx.stroke();
@@ -939,9 +937,9 @@ function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.m
 function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
   const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
   const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
-  // aligned source: dest − offset (offset = firstTouch − pickedSpot). No offset yet → fall back to fixed spot.
-  const srcCx = S.cloneOff ? ix - S.cloneOff.x : S.cloneSrc.x;
-  const srcCy = S.cloneOff ? iy - S.cloneOff.y : S.cloneSrc.y;
+  // FIXED source: every dab copies the SAME picked area ("stamp the set area at the clicked points").
+  // Non-aligned on purpose — over a big hole an aligned source sweeps off the clean belt into the arm.
+  const srcCx = S.cloneSrc.x, srcCy = S.cloneSrc.y;
   const sx0=Math.round(srcCx-r), sy0=Math.round(srcCy-r);
   const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
   tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the (moving) source
@@ -1107,8 +1105,6 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
       toast('🎯 First tap a clean patch of belt/coat to copy from, then paint over the magenta'); return; }
     const l=patchTarget(); if(!l)return;           // paint the SHEET the hole lives in, never the selected mover
     drawing=true;
-    // anchor the moving source to this stroke's start: as you drag, source = dest − offset (GIMP-aligned within the stroke)
-    S.cloneOff={x: ip.x - S.cloneSrc.x, y: ip.y - S.cloneSrc.y};
     S._cleanSrc=cleanSrcFor(l);                    // original with the hole punched out — so Infuse tone-matches the real coat, never the lifted arm
     S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
