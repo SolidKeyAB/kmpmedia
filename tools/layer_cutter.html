@@ -145,9 +145,9 @@
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
-          <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">55</span>%</label>
-          <input type="range" id="infuse" min="0" max="100" value="55">
-          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>paint over the magenta</b>. This works like a <b>GIMP clone/heal brush</b>: the spot you pick is the <i>anchor</i>, and as you <b>drag in one stroke it copies a whole moving region</b> (not the same dot over and over) — so you transfer a real swath of texture. Each new stroke re-anchors to the picked spot (no drift). <b>Infuse</b> = how strongly the copied patch is tone-matched to the real pixels bordering the hole, so it melds in seamlessly instead of looking like a pasted square. <b>Softness</b> feathers the edge. Painting is clipped to the area behind the mover + the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
+          <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
+          <input type="range" id="infuse" min="0" max="100" value="0">
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>paint over the magenta</b>. This works like a <b>GIMP clone/heal brush</b>: the spot you pick is the <i>anchor</i>, and as you <b>drag in one stroke it copies a whole moving region</b> (not the same dot over and over) — so you transfer a real swath of texture. Each new stroke re-anchors to the picked spot (no drift). <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches the copied patch to the <i>real coat bordering the hole</i> — the lifted mover's own pixels (e.g. the arm) are excluded, so it never tints toward the arm. Leave it at 0 for a clean copy; nudge it up only if a patch's tone looks off against its surroundings. <b>Softness</b> feathers the edge so overlapping stamps connect smoothly. Painting is clipped to the area behind the mover + the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -269,7 +269,7 @@ const S = {
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
   tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
-  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0.55, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength
+  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
@@ -945,11 +945,13 @@ function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
   const sx0=Math.round(srcCx-r), sy0=Math.round(srcCy-r);
   const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
   tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the (moving) source
-  // ✨ Infuse: shift the patch's mean colour toward the dest hole's surrounding tone so it blends in.
+  // ✨ Infuse: shift the patch's mean colour toward the REAL coat bordering the hole so it blends in.
+  // Dest tone comes from S._cleanSrc (original with the hole punched out) → the lifted mover's own
+  // pixels (the arm) are transparent there and can't be averaged in. Default heal 0 = clean raw copy.
   const heal=S.cloneHeal||0;
   if(heal>0){ try{
       const sMean=meanRGB(S.src, sx0,sy0,d,d);                      // tone of the copied texture
-      const dMean=meanRGB(S.src, dx0,dy0,d,d) || sMean;             // tone of the real pixels around the hole
+      const dMean=meanRGB(S._cleanSrc||S.src, dx0,dy0,d,d) || sMean;// tone of the REAL coat around the hole (arm punched out)
       if(sMean&&dMean){ const img=tc.getImageData(0,0,d,d), p=img.data;
         const kr=heal*(dMean[0]-sMean[0]), kg=heal*(dMean[1]-sMean[1]), kb=heal*(dMean[2]-sMean[2]);
         for(let i=0;i<p.length;i+=4){ p[i]=clamp8(p[i]+kr); p[i+1]=clamp8(p[i+1]+kg); p[i+2]=clamp8(p[i+2]+kb); }
@@ -976,6 +978,15 @@ function meanRGB(srcImg, x,y,w,h){
   for(let i=0;i<p.length;i+=4){ const a=p[i+3]; if(a>24){ r+=p[i]; g+=p[i+1]; b+=p[i+2]; n++; } }
   return n? [r/n,g/n,b/n] : null; }
 function clamp8(v){ return v<0?0:v>255?255:v; }
+// A copy of the original source with the layer's hole footprints (the lifted movers, e.g. the arm)
+// punched OUT (transparent). Infuse reads dest tone from this so it matches the real coat bordering
+// the hole and never averages in the mover's own pixels. Built once per stroke, cleared on pointer-up.
+function cleanSrcFor(l){
+  const w=S.src.width,h=S.src.height; const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d'); cx.drawImage(S.src,0,0);
+  const kids=holeKids(l).filter(k=>!k.seeThrough && k.visible);
+  cx.globalCompositeOperation='destination-out'; for(const k of kids) cx.drawImage(k.mc,0,0);
+  cx.globalCompositeOperation='source-over'; return c; }
 
 // ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
 // this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
@@ -1098,6 +1109,7 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     drawing=true;
     // anchor the moving source to this stroke's start: as you drag, source = dest − offset (GIMP-aligned within the stroke)
     S.cloneOff={x: ip.x - S.cloneSrc.x, y: ip.y - S.cloneSrc.y};
+    S._cleanSrc=cleanSrcFor(l);                    // original with the hole punched out — so Infuse tone-matches the real coat, never the lifted arm
     S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
   }
@@ -1144,7 +1156,7 @@ function endPointer(e){ S.pointers.delete(e.pointerId);
       S.undo.pop(); renderWarpPanel(); draw();                  // undo the snapshot we took for the create
     } else markDirty();
   }
-  drawing=false; lastImg=null; S.cloneOff=null; }   // drop the aligned offset so the next stroke re-anchors to the picked spot
+  drawing=false; lastImg=null; S.cloneOff=null; S._cleanSrc=null; }   // drop the aligned offset + clean-source cache; next stroke re-anchors to the picked spot
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('pointerleave', e=>{ if(!drawing)S.cursor=null; draw(); });
