@@ -141,12 +141,11 @@
         </div>
         <div id="cloneParams" style="display:none; margin-top:8px;">
           <div class="row">
-            <button class="sm" id="cloneSample">🎯 Set source spot</button>
-            <button class="sm go" id="autoHeal" title="Auto-fill every cut-out hole on this layer with the surrounding texture — a good start you can then refine by hand">✨ Auto-heal holes</button>
+            <button class="sm go" id="cloneSample">🎯 Set source spot</button>
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
-          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Picking this tool <b>lifts the movers so the holes glow magenta</b> (you can finally see the gap you're patching; the magenta recedes as you fill it). <b>Easiest:</b> just <b>tap or drag across the magenta</b> and it auto-fills with the surrounding texture. <b>For exact texture</b> (stripes/shading): tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the magenta; it clones real pixels from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>paint over the magenta</b>: every stroke copies that same spot's texture (it stays put until you pick a new spot). Painting is clipped to the area behind the mover + the figure, so you can't smear outside it. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -906,13 +905,14 @@ function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.m
   m.fillStyle = l.color; m.beginPath(); m.arc(ix,iy,S.brush/2,0,7); m.fill();
   m.globalCompositeOperation='source-over'; }
 
-// 🩹 clone-stamp one soft dab: copy a brush-sized patch of ORIGINAL source texture,
-// translated by the locked source→dest offset, onto the layer's backfill — radially
-// feathered AND clipped to the layer's own silhouette (so you can't smear outside it).
-function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc||!S.cloneOff)return;
+// 🩹 clone-stamp one soft dab: copy a brush-sized patch of ORIGINAL source texture from the FIXED
+// source spot (non-aligned — the spot stays put until you pick a new one, so you keep laying down
+// the same belt/coat pattern), onto the layer's backfill — radially feathered AND clipped to the
+// work area (so you can't smear outside the area behind the mover + the figure).
+function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
   const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
   const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
-  const sx0=dx0+S.cloneOff.dx, sy0=dy0+S.cloneOff.dy;               // matching source patch top-left
+  const sx0=Math.round(S.cloneSrc.x-r), sy0=Math.round(S.cloneSrc.y-r);   // source ALWAYS centred on the picked spot
   const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
   tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the source spot
   tc.globalCompositeOperation='destination-in';                    // ∩ radial soft brush
@@ -1039,9 +1039,11 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
       const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
       draw(); toast('🎯 Source set — now paint over the hole'); return; }
-    if(!S.cloneSrc){ autoHealHoles(); return; }   // no source set → just content-aware heal the holes (so tapping the magenta "fills the gap" works without the 🎯 step)
+    if(!S.cloneSrc){                               // no source yet → arm source-picking so the first tap sets the spot
+      S.cloneSampling=true; const b=document.getElementById('cloneSample'); if(b)b.classList.add('on');
+      toast('🎯 First tap a clean patch of belt/coat to copy from, then paint over the magenta'); return; }
     const l=patchTarget(); if(!l)return;           // paint the SHEET the hole lives in, never the selected mover
-    drawing=true; S.cloneOff={dx:S.cloneSrc.x-ip.x, dy:S.cloneSrc.y-ip.y};   // lock aligned offset for this stroke
+    drawing=true;
     S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
   }
@@ -1104,19 +1106,18 @@ document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
   if(S.tool==='clone'){                                   // Patch heals the SHEET the hole LIVES in — auto-jump there so the holes show
-    const target = patchTarget();                          // same target the brush + auto-heal paint (the base, never the selected mover)
+    const target = patchTarget();                          // same target the brush paints (the base, never the selected mover)
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
     const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
-    toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta. Tap/drag the magenta to auto-fill it, or 🎯 Set source to clone exact texture.')
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' area'+(n>1?'s':'')+' glow magenta. Tap 🎯 Set source on clean belt/coat, then paint over the magenta.')
           : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
-          : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
+          : '🩹 No holes yet — tick “cut out” on a mover first, then Patch rebuilds what’s behind it');
   } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
   draw(); });
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
-  toast(S.cloneSampling?'Tap a clean patch of coat to set the clone source':'Sampling off'); };
-document.getElementById('autoHeal').onclick=autoHealHoles;
+  toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
 { const se=document.getElementById('soft'); if(se) se.oninput=()=>{ S.cloneSoft=+se.value/100; document.getElementById('softVal').textContent=se.value; }; }
 const brushEl=document.getElementById('brush'), tolEl=document.getElementById('tol'), bgEl=document.getElementById('bg');
 brushEl.oninput=()=>{S.brush=+brushEl.value; document.getElementById('brushVal').textContent=brushEl.value;};
