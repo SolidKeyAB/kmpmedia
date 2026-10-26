@@ -618,6 +618,15 @@ function punchKids(l){ return S.layers.filter(k=>k!==l && k.punch && k.parent===
 // export punches and the Patch/Auto-heal tools fill, so a layer "has holes" iff this is non-empty.
 function holeKids(l){ return punchKids(l).concat(l.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[]); }
 function openHoleKids(l){ return holeKids(l).filter(k=>!k.seeThrough); }   // the ones that actually need healing (not see-through)
+// The layer 🩹 Patch / ✨ Auto-heal operate ON — always the SHEET a piece was cut FROM (the one
+// holding the hole), NEVER the mover you have selected. You heal the belt that the ARM hides, so
+// the brush must paint the BASE, not the arm layer. Prefer the active layer only if IT has holes;
+// otherwise the first layer that does; otherwise the base. (Was activeLayer() → patching the arm.)
+function patchTarget(){ const a=activeLayer();
+  if(a && openHoleKids(a).length) return a;
+  return S.layers.find(l=>openHoleKids(l).length)
+      || (a && a.role==='base' ? a : S.layers.find(l=>l.role==='base'))
+      || a || null; }
 // Split a set of cut-out child layers into the holes that get SKIN vs the holes left
 // SEE-THROUGH (real transparent hole — so a video/background behind the image shows
 // through). A hole is see-through if that child is marked see-through, OR skin-fill is
@@ -766,11 +775,7 @@ function draw(){
   // holes (eye cut off the head → reveal the HEAD, not the base), else any layer that does, else
   // fall back to the base. (Previously it only ever revealed the base, so head/mouth holes stayed
   // invisible — the exact "I can't see the holes" problem.)
-  const revealBase = (S.tool==='clone') ? (
-      (activeLayer() && openHoleKids(activeLayer()).length) ? activeLayer()
-      : (S.layers.find(l=>openHoleKids(l).length)
-         || (activeLayer()&&activeLayer().role==='base'?activeLayer():S.layers.find(l=>l.role==='base')))
-    ) : null;
+  const revealBase = (S.tool==='clone') ? patchTarget() : null;
   if(revealBase){
     // lift the pieces off this layer so the hole they leave is actually visible: punch each
     // cut-out footprint transparent, tint the empty hole magenta, then show the patched pixels
@@ -894,7 +899,7 @@ function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.m
 // 🩹 clone-stamp one soft dab: copy a brush-sized patch of ORIGINAL source texture,
 // translated by the locked source→dest offset, onto the layer's backfill — radially
 // feathered AND clipped to the layer's own silhouette (so you can't smear outside it).
-function paintCloneDab(ix,iy){ const l=activeLayer(); if(!l||!S.cloneSrc||!S.cloneOff)return;
+function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc||!S.cloneOff)return;
   const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
   const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
   const sx0=dx0+S.cloneOff.dx, sy0=dy0+S.cloneOff.dy;               // matching source patch top-left
@@ -911,7 +916,7 @@ function paintCloneDab(ix,iy){ const l=activeLayer(); if(!l||!S.cloneSrc||!S.clo
 
 // ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
 // this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
-function autoHealHoles(){ if(!S.img)return; let l=activeLayer();
+function autoHealHoles(){ if(!S.img)return; let l=patchTarget();
   // the hole set the export punches lives on whatever the piece was cut FROM. If the selected
   // layer has none, auto-jump to a layer that does — so a wrong selection heals instead of scolding.
   if(!l || !openHoleKids(l).length){ const alt=S.layers.find(L=>openHoleKids(L).length);
@@ -1083,14 +1088,8 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
-  if(S.tool==='clone'){                                   // Patch heals the layer the hole LIVES in — auto-jump there so the holes show
-    const cur=activeLayer();
-    // if a mover is selected, patch the layer it was cut FROM (its parent, or the base);
-    // otherwise find any layer that actually has holes; fall back to the base.
-    let target = (cur&&cur.role==='mover') ? (cur.parent!=null?layerById(cur.parent):S.layers.find(l=>l.role==='base')) : cur;
-    if(!target || !openHoleKids(target).length){
-      target = S.layers.find(l=>openHoleKids(l).length) || S.layers.find(l=>l.role==='base') || cur;
-    }
+  if(S.tool==='clone'){                                   // Patch heals the SHEET the hole LIVES in — auto-jump there so the holes show
+    const target = patchTarget();                          // same target the brush + auto-heal paint (the base, never the selected mover)
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
     const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
