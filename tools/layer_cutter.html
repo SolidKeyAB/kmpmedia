@@ -133,6 +133,13 @@
       <div id="toolParams">
         <label class="sld">Brush size <span id="brushVal">120</span>px</label>
         <input type="range" id="brush" min="3" max="600" value="120">
+        <div id="eraseParams" style="display:none; margin:8px 0;">
+          <label class="sld" style="margin-top:0;">🧽 Erase removes colour to…</label>
+          <div class="row">
+            <button class="sm on" id="eraseTrans" title="Cut the painted area OUT of this layer — it becomes a real transparent gap (what the old Erase did).">⌫ Transparent</button>
+            <button class="sm" id="eraseWhite" title="Paint the painted area WHITE over the colour — the layer keeps its shape, the colour is wiped to white.">▢ White</button>
+          </div>
+        </div>
         <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
         <input type="range" id="tol" min="2" max="120" value="40">
         <div class="row" id="wandMode" style="margin-top:8px;">
@@ -288,6 +295,7 @@ const S = {
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
   tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
+  eraseTo:'transparent',                // 🧽 real erase target: 'transparent' (cut from layer) | 'white' (paint white over colour)
   cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
   cloneMode:'box', clonePatch:null, boxCapturing:false, boxDrag:null,   // ▭ box copy-paste: grab a rectangle of texture, then stamp that exact patch
   patTarget:null, patPainted:false,     // 🧵 pattern-fill: freeform target mask you paint, filled with the sampled pattern on release
@@ -1072,7 +1080,13 @@ document.querySelectorAll('#wandMode button').forEach(b=>b.onclick=()=>{
 window.addEventListener('keydown', e=>{ const mod=e.metaKey||e.ctrlKey; if(!mod)return; const k=e.key.toLowerCase();
   if(k==='z'){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); } else if(k==='y'){ e.preventDefault(); doRedo(); } });
 
-function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.mctx;
+function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return;
+  // 🧽 Erase → White: wipe the COLOUR to white without cutting the shape — paint opaque white onto
+  // the layer's backfill (which composites over the source in both the edit view and the export).
+  if(erase && S.eraseTo==='white'){ layerBackfill(l); const b=l.bfctx;
+    b.globalCompositeOperation='source-over'; b.fillStyle='#ffffff';
+    b.beginPath(); b.arc(ix,iy,S.brush/2,0,7); b.fill(); l._cut=null; return; }
+  const m=l.mctx;
   m.globalCompositeOperation = erase?'destination-out':'source-over';
   m.fillStyle = l.color; m.beginPath(); m.arc(ix,iy,S.brush/2,0,7); m.fill();
   m.globalCompositeOperation='source-over'; }
@@ -1365,7 +1379,10 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
   }
   // brush / erase
-  drawing=true; pushUndo(); paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
+  drawing=true;
+  if(S.tool==='erase' && S.eraseTo==='white'){ pushBackfillUndo(activeLayer()); }   // white erase edits the backfill
+  else pushUndo();                                                                  // brush + transparent erase edit the mask
+  paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
 });
 cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   if(S.pointers.has(e.pointerId)) S.pointers.set(e.pointerId, evPos(e));
@@ -1436,6 +1453,7 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
+  const ep=document.getElementById('eraseParams'); if(ep) ep.style.display = (S.tool==='erase')?'block':'none';
   if(S.tool==='clone'){                                   // Patch heals the SHEET the hole LIVES in — auto-jump there so the holes show
     const target = patchTarget();                          // same target the brush paints (the base, never the selected mover)
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
@@ -1448,6 +1466,10 @@ document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
     const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
     const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); }
   draw(); });
+{ const et=document.getElementById('eraseTrans'), ew=document.getElementById('eraseWhite');
+  const setErase=(mode)=>{ S.eraseTo=mode; et.classList.toggle('on',mode==='transparent'); ew.classList.toggle('on',mode==='white');
+    toast(mode==='white'?'🧽 Erase → paints colour to WHITE (keeps the shape)':'🧽 Erase → cuts the area out (transparent gap)'); };
+  if(et) et.onclick=()=>setErase('transparent'); if(ew) ew.onclick=()=>setErase('white'); }
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
   toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
