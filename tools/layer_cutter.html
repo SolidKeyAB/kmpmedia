@@ -141,13 +141,23 @@
         </div>
         <div id="cloneParams" style="display:none; margin-top:8px;">
           <div class="row">
+            <button class="sm on" id="modeBox">▭ Copy a box</button>
+            <button class="sm" id="modeBrush">🖌 Brush stamp</button>
+          </div>
+          <div class="row" id="boxRow" style="margin-top:6px;">
+            <button class="sm go" id="boxGrab">▭ Grab a box</button>
+          </div>
+          <div class="row" id="brushRow" style="margin-top:6px; display:none;">
             <button class="sm go" id="cloneSample">🎯 Set source spot</button>
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
           <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
           <input type="range" id="infuse" min="0" max="100" value="0">
-          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you paint). Tap <b>🎯 Set source spot</b> → tap a clean patch of belt/coat → then <b>stamp over the magenta</b> (tap, or drag to lay a trail). Every stamp copies <b>that same picked area</b> (a brush-sized chunk — the green ring shows exactly what's copied), dropped at each point you touch — so the source stays put on the clean belt and never drifts into the arm. Make the <b>brush big</b> so each stamp grabs a real swath of texture (small brush = tiny patch tiled = looks flat). Re-tap 🎯 on a different clean spot to grab a different bit (buckle vs strap). <b>Softness</b> feathers each stamp so overlapping ones connect smoothly. <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches each stamp to the <i>real coat bordering the hole</i> (the lifted arm's pixels are excluded, so it never tints toward the arm) — nudge it up only if a patch's tone looks off. Painting is clipped to the area behind the mover + the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. ↩︎ / ⌘Z undoes any patch.</p>
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you fill it).<br>
+          <b>▭ Copy a box (recommended):</b> tap <b>▭ Grab a box</b>, then <b>drag a rectangle over a clean bit of belt/coat</b> — that whole rectangle (buckle, strap, weave and all) is copied. Then <b>tap or drag over the magenta</b> to stamp that exact patch at each point; a live ghost shows what will land. Overlapping stamps blend via <b>Softness</b>. Tap <b>▭ Grab a box</b> again to copy a different piece. This keeps the real detail — not one averaged tone.<br>
+          <b>🖌 Brush stamp:</b> the older round brush — tap <b>🎯 Set source spot</b> on clean belt, then paint; each dab copies that spot at the brush size (make the brush big).<br>
+          <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches to the real coat bordering the hole (the lifted arm is excluded). Painting is clipped to the area behind the mover + the figure, onto a non-destructive back-layer <i>under</i> the base. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -270,6 +280,7 @@ const S = {
   layers:[], active:-1,
   tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
   cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
+  cloneMode:'box', clonePatch:null, boxCapturing:false, boxDrag:null,   // ▭ box copy-paste: grab a rectangle of texture, then stamp that exact patch
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
@@ -836,7 +847,24 @@ function draw(){
   // 🩹 clone: show EXACTLY what's copied. The source spot is ringed at brush size (= the patch that
   // gets copied), and a live ghost of those very pixels is previewed under the cursor so you can see
   // what will land where before you drag. Both rings are the same size = the copy footprint.
-  if(S.tool==='clone'){
+  if(S.tool==='clone' && S.cloneMode==='box'){
+    // ▭ box copy-paste overlay: the rectangle being grabbed, then a ghost of the grabbed patch under the cursor
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom;
+      const w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else if(S.clonePatch && S.cursor){                          // ghost of the grabbed patch, centred on the cursor
+      const pw=S.clonePatch.width*v.zoom, ph=S.clonePatch.height*v.zoom;
+      ctx.save(); ctx.globalAlpha=0.7; ctx.imageSmoothingEnabled=true;
+      ctx.drawImage(S.clonePatch, S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.restore();
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]);
+      ctx.strokeRect(S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.setLineDash([]);
+    } else if(S.cursor && S.boxCapturing){                        // armed to grab → amber hint crosshair
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(S.cursor.x-12,S.cursor.y); ctx.lineTo(S.cursor.x+12,S.cursor.y);
+      ctx.moveTo(S.cursor.x,S.cursor.y-12); ctx.lineTo(S.cursor.x,S.cursor.y+12); ctx.stroke();
+    }
+  } else if(S.tool==='clone'){
     const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
     if(S.cloneSrc){
       const scx = S.cloneSrc.x, scy = S.cloneSrc.y;      // fixed source — the picked spot you stamp from
@@ -986,6 +1014,35 @@ function cleanSrcFor(l){
   cx.globalCompositeOperation='destination-out'; for(const k of kids) cx.drawImage(k.mc,0,0);
   cx.globalCompositeOperation='source-over'; return c; }
 
+// ▭ Grab the dragged rectangle of ORIGINAL texture into S.clonePatch (the thing you then stamp).
+// This copies a real rectangle — buckle, strap, weave and all — so what you stamp keeps its detail,
+// not a single averaged tone. Too-small drags are rejected (an accidental tap).
+function captureBox(b){
+  const x0=Math.min(b.x0,b.x1), y0=Math.min(b.y0,b.y1);
+  const w=Math.round(Math.abs(b.x1-b.x0)), h=Math.round(Math.abs(b.y1-b.y0));
+  if(w<6||h<6){ toast('Box too small — drag a rectangle over a clean bit of belt/coat'); return false; }
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(S.src, Math.round(x0),Math.round(y0),w,h, 0,0,w,h);
+  S.clonePatch=c; S.cloneMode='box';
+  toast('▭ Grabbed a '+w+'×'+h+' patch — now tap or drag over the magenta to stamp it'); return true; }
+
+// ▭ Stamp the grabbed patch centred at (ix,iy), with feathered edges so overlapping stamps connect
+// smoothly, clipped to the work area (base ∪ hole footprints). Onto the non-destructive backfill.
+function pasteClonePatch(ix,iy){ const l=patchTarget(); if(!l||!S.clonePatch)return;
+  const pw=S.clonePatch.width, ph=S.clonePatch.height;
+  const dx0=Math.round(ix-pw/2), dy0=Math.round(iy-ph/2);
+  const t=document.createElement('canvas'); t.width=pw; t.height=ph; const tc=t.getContext('2d');
+  tc.drawImage(S.clonePatch,0,0);
+  // feather: a blurred inset rectangle as the alpha mask → soft edges incl. corners (smooth joins)
+  const f=Math.max(0, Math.min(Math.min(pw,ph)/2-1, (S.cloneSoft||0)*Math.min(pw,ph)*0.45));
+  tc.globalCompositeOperation='destination-in';
+  tc.filter = f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.fillStyle='#000';
+  tc.fillRect(f,f, pw-2*f, ph-2*f); tc.filter='none';
+  const clip=S._strokeClip||l.mc;                                  // ∩ base ∪ footprints (still destination-in → intersect)
+  tc.drawImage(clip, dx0,dy0,pw,ph, 0,0,pw,ph);
+  tc.globalCompositeOperation='source-over';
+  layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
+
 // ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
 // this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
 function autoHealHoles(){ if(!S.img)return; let l=patchTarget();
@@ -1097,6 +1154,16 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
   if(S.tool==='clone'){
+    // ▭ box mode: grab a rectangle, or stamp the grabbed patch
+    if(S.boxCapturing){ S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; return; }
+    if(S.cloneMode==='box'){
+      if(!S.clonePatch){ S.boxCapturing=true; const gb=document.getElementById('boxGrab'); if(gb)gb.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true;
+        toast('Drag a rectangle over a clean bit of belt/coat to copy it'); return; }
+      const l=patchTarget(); if(!l)return; drawing=true;
+      S._strokeClip=grownSheet(l);
+      pushBackfillUndo(l); l._cut=null; pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
     if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
       const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
       draw(); toast('🎯 Source set — now paint over the hole'); return; }
@@ -1130,6 +1197,13 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
   if(S.tool==='clone'){
+    if(S.boxDrag){ S.boxDrag.x1=ip.x; S.boxDrag.y1=ip.y; draw(); return; }   // ▭ sizing the grab rectangle
+    if(S.cloneMode==='box'){                                                  // ▭ stamp the patch along the drag trail
+      if(S.clonePatch){ const sp2=Math.max(6,Math.min(S.clonePatch.width,S.clonePatch.height)/3);
+        if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/sp2);
+          for(let s=1;s<=steps;s++)pasteClonePatch(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+        else pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); }
+      return; }
     if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
       for(let s=1;s<=steps;s++)paintCloneDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
     else paintCloneDab(ip.x,ip.y);
@@ -1143,6 +1217,8 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
 });
 function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
+  if(S.boxDrag){ captureBox(S.boxDrag); S.boxDrag=null; S.boxCapturing=false;   // ▭ finish grabbing the rectangle
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); drawing=false; lastImg=null; draw(); return; }
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
   if(S.faceDrag){ S.faceDrag=null; markDirty(); }
   if(S.warpDrag){ const wd=S.warpDrag; S.warpDrag=null;
@@ -1172,14 +1248,28 @@ document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
     const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
-    toast(n ? ('🩹 Patching '+target.name+' — '+n+' area'+(n>1?'s':'')+' glow magenta. Tap 🎯 Set source on clean belt/coat, then paint over the magenta.')
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' area'+(n>1?'s':'')+' glow magenta. Tap ▭ Grab a box, drag a rectangle over clean belt/coat, then stamp it over the magenta.')
           : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
           : '🩹 No holes yet — tick “cut out” on a mover first, then Patch rebuilds what’s behind it');
-  } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
+  } else { S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+    const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); }
   draw(); });
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
   toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
+function setCloneMode(m){ S.cloneMode=m; S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+  document.getElementById('modeBox').classList.toggle('on', m==='box');
+  document.getElementById('modeBrush').classList.toggle('on', m==='brush');
+  document.getElementById('boxRow').style.display  = m==='box'  ? 'flex':'none';
+  document.getElementById('brushRow').style.display= m==='brush'? 'flex':'none';
+  const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+  const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); draw(); }
+document.getElementById('modeBox').onclick=()=>setCloneMode('box');
+document.getElementById('modeBrush').onclick=()=>setCloneMode('brush');
+document.getElementById('boxGrab').onclick=()=>{ const gb=document.getElementById('boxGrab');
+  S.cloneMode='box'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; gb.classList.add('on');
+  toast('Drag a rectangle over a clean bit of belt/coat to copy it'); draw(); };
 { const se=document.getElementById('soft'); if(se) se.oninput=()=>{ S.cloneSoft=+se.value/100; document.getElementById('softVal').textContent=se.value; }; }
 { const ie=document.getElementById('infuse'); if(ie) ie.oninput=()=>{ S.cloneHeal=+ie.value/100; document.getElementById('infuseVal').textContent=ie.value; }; }
 const brushEl=document.getElementById('brush'), tolEl=document.getElementById('tol'), bgEl=document.getElementById('bg');
