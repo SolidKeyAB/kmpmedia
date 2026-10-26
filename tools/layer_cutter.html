@@ -929,7 +929,8 @@ function draw(){
       ctx.globalCompositeOperation='destination-over'; ctx.drawImage(mh,0,0); ctx.globalCompositeOperation='source-over';
     }
     if(revealBase.backfill) ctx.drawImage(revealBase.backfill,0,0);  // patched texture covers the magenta where you've healed
-    ctx.globalAlpha=0.30; ctx.drawImage(revealBase.mc,0,0); ctx.globalAlpha=1;   // faint tint of the base you're patching
+    // (no base-colour veil here — it cast a 30% purple tint over the whole figure and read as a
+    //  mysterious "dark colour". The real source pixels + magenta holes already show what's going on.)
   } else {
     for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
     for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
