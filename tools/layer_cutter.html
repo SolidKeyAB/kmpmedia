@@ -146,12 +146,17 @@
           <div class="row">
             <button class="sm on" id="modeBox">▭ Copy a box</button>
             <button class="sm" id="modeBrush">🖌 Brush stamp</button>
+            <button class="sm" id="modePattern">🧵 Pattern fill</button>
           </div>
           <div class="row" id="boxRow" style="margin-top:6px;">
             <button class="sm go" id="boxGrab">▭ Grab a box</button>
           </div>
           <div class="row" id="brushRow" style="margin-top:6px; display:none;">
             <button class="sm go" id="cloneSample">🎯 Set source spot</button>
+          </div>
+          <div class="row" id="patRow" style="margin-top:6px; display:none;">
+            <button class="sm go" id="patPick">⬚ Pick pattern</button>
+            <button class="sm" id="patClear">🧽 Clear area</button>
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
@@ -160,6 +165,7 @@
           <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you fill it).<br>
           <b>▭ Copy a box (recommended):</b> tap <b>▭ Grab a box</b>, then <b>drag a rectangle over a clean bit of belt/coat</b> — that whole rectangle (buckle, strap, weave and all) is copied. Then <b>tap or drag over the magenta</b> to stamp that exact patch at each point; a live ghost shows what will land. Overlapping stamps blend via <b>Softness</b>. Tap <b>▭ Grab a box</b> again to copy a different piece. This keeps the real detail — not one averaged tone.<br>
           <b>🖌 Brush stamp:</b> the older round brush — tap <b>🎯 Set source spot</b> on clean belt, then paint; each dab copies that spot at the brush size (make the brush big).<br>
+          <b>🧵 Pattern fill (for a bending belt/strap):</b> tap <b>⬚ Pick pattern</b> and <b>drag a box over the texture you want</b> (a clean bit of belt). Then <b>paint the area to fill</b> — any flexible shape, e.g. the belt curving behind the arm. Lift your finger and it's filled with that pattern, seamlessly extended (no visible tiling) and feathered into the edges by <b>Softness</b>. Paint more to keep going; <b>🧽 Clear area</b> drops an un-filled painted area.<br>
           <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches to the real coat bordering the hole (the lifted arm is excluded). Painting is clipped to the area behind the mover + the figure, onto a non-destructive back-layer <i>under</i> the base. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
@@ -284,6 +290,7 @@ const S = {
   tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
   cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
   cloneMode:'box', clonePatch:null, boxCapturing:false, boxDrag:null,   // ▭ box copy-paste: grab a rectangle of texture, then stamp that exact patch
+  patTarget:null, patPainted:false,     // 🧵 pattern-fill: freeform target mask you paint, filled with the sampled pattern on release
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
@@ -965,6 +972,18 @@ function draw(){
       ctx.beginPath(); ctx.moveTo(S.cursor.x-12,S.cursor.y); ctx.lineTo(S.cursor.x+12,S.cursor.y);
       ctx.moveTo(S.cursor.x,S.cursor.y-12); ctx.lineTo(S.cursor.x,S.cursor.y+12); ctx.stroke();
     }
+  } else if(S.tool==='clone' && S.cloneMode==='pattern'){
+    // 🧵 pattern: show the grab box while sampling, the painted fill-area tinted, and a brush ring
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom, w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else {
+      if(S.patTarget && S.patPainted){ ctx.save(); ctx.globalAlpha=0.45; ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(S.patTarget, v.x, v.y, S.iw*v.zoom, S.ih*v.zoom); ctx.restore(); }   // the area you've painted
+      if(S.cursor){ const rz=Math.max(3,S.brush*v.zoom/2);
+        ctx.strokeStyle=S.clonePatch?'#39d98a':'#ffd166cc'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); }
+    }
   } else if(S.tool==='clone'){
     const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
     if(S.cloneSrc){
@@ -1098,6 +1117,53 @@ function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
   tc.globalCompositeOperation='source-over';
   layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
 
+// ── 🧵 Pattern fill ────────────────────────────────────────────────────────────
+// A controllable (not auto) fill: you SAMPLE a pattern from a picked region (S.clonePatch),
+// then PAINT a freeform area (S.patTarget) — e.g. a bending belt — and on release that area
+// is filled with the sampled pattern, seamlessly synthesised (no visible tiling) and feathered
+// into its surroundings. Uses the verified PatchMatch core to extend the swatch over the area.
+function patTargetBegin(){ if(!S.patTarget){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih; S.patTarget=c; S.patTargetCtx=c.getContext('2d',{willReadFrequently:true}); }
+  S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
+function patTargetDab(ix,iy){ if(!S.patTarget)patTargetBegin(); const m=S.patTargetCtx;
+  m.fillStyle='#fff'; m.beginPath(); m.arc(ix,iy,Math.max(2,S.brush/2),0,7); m.fill(); S.patPainted=true; }
+// Seamlessly extend `swatch` to cover a bw×bh rectangle via PatchMatch (swatch = source band on
+// top, the rectangle below = hole synthesised from it). Returns a bw×bh canvas. ≤300px working res.
+function synthFromSwatch(swatch,bw,bh){ const P=7, WORK=300, sc=Math.min(1,WORK/Math.max(bw,bh));
+  const tw=Math.max(16,Math.round(bw*sc)), th=Math.max(16,Math.round(bh*sc));
+  const bandH=Math.min(140,Math.max(P*5,Math.round(th*0.6))), W2=tw, H2=bandH+th;
+  const cv=document.createElement('canvas'); cv.width=W2; cv.height=H2; const cx=cv.getContext('2d',{willReadFrequently:true});
+  const ss=Math.max(tw/swatch.width,bandH/swatch.height), sdw=swatch.width*ss, sdh=swatch.height*ss;  // cover-scale, tile to fill the source band
+  for(let ty=0;ty<bandH;ty+=sdh)for(let tx=0;tx<W2;tx+=sdw) cx.drawImage(swatch,tx,ty,sdw,sdh);
+  const id=cx.getImageData(0,0,W2,H2).data, rgb=new Float32Array(W2*H2*3), hole=new Uint8Array(W2*H2);
+  for(let p=0,i=0;p<W2*H2;p++,i+=4){ if(p>=bandH*W2) hole[p]=1; else { rgb[p*3]=id[i];rgb[p*3+1]=id[i+1];rgb[p*3+2]=id[i+2]; } }
+  const filled=pmComplete(rgb,hole,W2,H2,P,777);
+  const o=document.createElement('canvas'); o.width=tw; o.height=th; const oc=o.getContext('2d'), od=oc.createImageData(tw,th);
+  for(let y=0;y<th;y++)for(let x=0;x<tw;x++){ const sp=(y+bandH)*W2+x, dp=(y*tw+x)*4; od.data[dp]=filled[sp*3];od.data[dp+1]=filled[sp*3+1];od.data[dp+2]=filled[sp*3+2];od.data[dp+3]=255; }
+  oc.putImageData(od,0,0);
+  const full=document.createElement('canvas'); full.width=bw; full.height=bh; const fc=full.getContext('2d'); fc.imageSmoothingEnabled=true; fc.drawImage(o,0,0,bw,bh); return full; }
+// Fill the painted S.patTarget area with the sampled pattern, feathered (infused) at the edges,
+// clipped to the sheet, onto the layer's non-destructive backfill. Undoable.
+function fillPatternTarget(){ const l=patchTarget(); if(!l){ toast('No layer to fill'); return; }
+  if(!S.clonePatch){ toast('Pick a pattern first — tap ⬚ Pick pattern and drag over the texture'); return; }
+  if(!S.patTarget||!S.patPainted){ return; }
+  const W=S.iw,H=S.ih, td=S.patTargetCtx.getImageData(0,0,W,H).data;
+  let x0=W,y0=H,x1=-1,y1=-1; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(td[(y*W+x)*4+3]>8){ if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y; } }
+  if(x1<0){ return; } const bw=x1-x0+1, bh=y1-y0+1;
+  toast('🧵 Filling the area with the pattern…');
+  requestAnimationFrame(()=>{ setTimeout(()=>{                              // defer so the toast + painted overlay paint first
+    const synth=synthFromSwatch(S.clonePatch, bw, bh);
+    const t=document.createElement('canvas'); t.width=bw; t.height=bh; const tc=t.getContext('2d',{willReadFrequently:true});
+    tc.drawImage(synth,0,0);
+    // mask to the painted shape, blurred by Softness → feathered/infused edges
+    const f=Math.max(0, (S.cloneSoft||0)*Math.min(bw,bh)*0.14);
+    tc.globalCompositeOperation='destination-in';
+    tc.filter=f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.drawImage(S.patTarget, x0,y0,bw,bh, 0,0,bw,bh); tc.filter='none';
+    tc.drawImage(grownSheet(l), x0,y0,bw,bh, 0,0,bw,bh);   // ∩ sheet (base ∪ footprints) — stay on the figure
+    tc.globalCompositeOperation='source-over';
+    pushBackfillUndo(l); layerBackfill(l); l.bfctx.drawImage(t, x0,y0); l._cut=null;
+    S.patTargetCtx.clearRect(0,0,W,H); S.patPainted=false; draw(); markDirty();
+    toast('🧵 Filled with the pattern — paint more, ⬚ to re-pick, ↩︎ to undo');
+  },0); }); }
 // mean RGB of an area of an image/canvas, over its OPAQUE pixels only (transparent hole pixels ignored).
 // Returns [r,g,b] or null if nothing opaque. Used by Infuse to read the hole's real surrounding tone.
 let _meanCv=null;
@@ -1130,7 +1196,10 @@ function captureBox(b){
   if(w<6||h<6){ toast('Box too small — drag a rectangle over a clean bit of belt/coat'); return false; }
   const c=document.createElement('canvas'); c.width=w; c.height=h;
   c.getContext('2d').drawImage(S.src, Math.round(x0),Math.round(y0),w,h, 0,0,w,h);
-  S.clonePatch=c; S.cloneMode='box';
+  S.clonePatch=c;
+  if(S.cloneMode==='pattern'){ const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+    toast('🧵 Pattern sampled ('+w+'×'+h+') — now PAINT the area to fill (a bending belt, any shape)'); return true; }
+  S.cloneMode='box';
   toast('▭ Grabbed a '+w+'×'+h+' patch — now tap or drag over the magenta to stamp it'); return true; }
 
 // ▭ Stamp the grabbed patch centred at (ix,iy), with feathered edges so overlapping stamps connect
@@ -1269,6 +1338,11 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
   if(S.tool==='clone'){
     // ▭ box mode: grab a rectangle, or stamp the grabbed patch
     if(S.boxCapturing){ S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; return; }
+    if(S.cloneMode==='pattern'){                                     // 🧵 pattern: sample a box, else paint the fill area
+      if(!S.clonePatch){ S.boxCapturing=true; const pp=document.getElementById('patPick'); if(pp)pp.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; toast('Drag a box over the pattern to sample it'); return; }
+      drawing=true; patTargetBegin(); patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
     if(S.cloneMode==='box'){
       if(!S.clonePatch){ S.boxCapturing=true; const gb=document.getElementById('boxGrab'); if(gb)gb.classList.add('on');
         S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true;
@@ -1311,6 +1385,10 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
   if(S.tool==='clone'){
     if(S.boxDrag){ S.boxDrag.x1=ip.x; S.boxDrag.y1=ip.y; draw(); return; }   // ▭ sizing the grab rectangle
+    if(S.cloneMode==='pattern'){                                             // 🧵 paint the fill-area trail
+      if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
+        for(let s=1;s<=steps;s++)patTargetDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+      else patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return; }
     if(S.cloneMode==='box'){                                                  // ▭ stamp the patch along the drag trail
       if(S.clonePatch){ const sp2=Math.max(6,Math.min(S.clonePatch.width,S.clonePatch.height)/3);
         if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/sp2);
@@ -1332,6 +1410,7 @@ function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
   if(S.boxDrag){ captureBox(S.boxDrag); S.boxDrag=null; S.boxCapturing=false;   // ▭ finish grabbing the rectangle
     const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); drawing=false; lastImg=null; draw(); return; }
+  if(S.tool==='clone'&&S.cloneMode==='pattern'&&drawing&&S.patPainted){ fillPatternTarget(); }   // 🧵 fill the painted area with the pattern
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
   if(S.faceDrag){ S.faceDrag=null; markDirty(); }
   if(S.warpDrag){ const wd=S.warpDrag; S.warpDrag=null;
@@ -1372,15 +1451,25 @@ document.getElementById('cloneSample').onclick=()=>{ const b=document.getElement
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
   toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
 function setCloneMode(m){ S.cloneMode=m; S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+  if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
   document.getElementById('modeBox').classList.toggle('on', m==='box');
   document.getElementById('modeBrush').classList.toggle('on', m==='brush');
+  document.getElementById('modePattern').classList.toggle('on', m==='pattern');
   document.getElementById('boxRow').style.display  = m==='box'  ? 'flex':'none';
   document.getElementById('brushRow').style.display= m==='brush'? 'flex':'none';
+  document.getElementById('patRow').style.display  = m==='pattern'? 'flex':'none';
   const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
-  const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); draw(); }
+  const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on');
+  const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+  if(m==='pattern') toast('🧵 Pattern fill: ⬚ Pick pattern, then paint the area to fill'); draw(); }
 document.getElementById('autoHeal').onclick=()=>autoHealHoles();
 document.getElementById('modeBox').onclick=()=>setCloneMode('box');
 document.getElementById('modeBrush').onclick=()=>setCloneMode('brush');
+document.getElementById('modePattern').onclick=()=>setCloneMode('pattern');
+document.getElementById('patPick').onclick=()=>{ const pp=document.getElementById('patPick');
+  S.cloneMode='pattern'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; pp.classList.add('on');
+  toast('Drag a box over the pattern/texture you want to sample'); draw(); };
+document.getElementById('patClear').onclick=()=>{ if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; draw(); } toast('Painted area cleared'); };
 document.getElementById('boxGrab').onclick=()=>{ const gb=document.getElementById('boxGrab');
   S.cloneMode='box'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; gb.classList.add('on');
   toast('Drag a rectangle over a clean bit of belt/coat to copy it'); draw(); };
@@ -2261,7 +2350,7 @@ applyMode();
 window.__lc = { S, loadImage, buildExport, buildHostPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
   draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
   mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer,
-  inpaintRGB, patchMatchInpaint, pmComplete, layerBackfill, paintCloneDab, autoHealHoles };
+  inpaintRGB, patchMatchInpaint, pmComplete, synthFromSwatch, fillPatternTarget, patTargetBegin, patTargetDab, layerBackfill, paintCloneDab, autoHealHoles };
 </script>
 </body>
 </html>
