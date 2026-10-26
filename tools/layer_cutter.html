@@ -777,12 +777,19 @@ function draw(){
     // filling it — so you can see the gap AND watch it fill as you clone/heal.
     const W0=S.iw,H0=S.ih;
     const kids=holeKids(revealBase).filter(k=>!k.seeThrough && k.visible);
-    ctx.globalCompositeOperation='destination-out';                 // lift movers → holes go transparent
-    for(const k of kids) ctx.drawImage(k.mc,0,0);
+    // The REAL hole is only where a cut-out overlaps the sheet it was cut FROM — a raised limb's
+    // silhouette can hang far outside the figure (84% of the elf's arm did), and that overhang is
+    // NOT figure material: it can't be healed (nothing to fill from). So clip the footprint to
+    // revealBase's own mask — otherwise the overhang glows magenta forever ("pink that patching
+    // won't remove"). hole = union(kids) ∩ revealBase.mc.
+    const hole=document.createElement('canvas'); hole.width=W0; hole.height=H0; const hx=hole.getContext('2d');
+    for(const k of kids) hx.drawImage(k.mc,0,0);
+    hx.globalCompositeOperation='destination-in'; hx.drawImage(revealBase.mc,0,0); hx.globalCompositeOperation='source-over';
+    ctx.globalCompositeOperation='destination-out'; ctx.drawImage(hole,0,0);  // lift movers → holes go transparent
     ctx.globalCompositeOperation='source-over';
     if(kids.length){                                                // magenta backdrop BEHIND, so it shows only in the empty holes
       const mh=document.createElement('canvas'); mh.width=W0; mh.height=H0; const mx=mh.getContext('2d');
-      for(const k of kids) mx.drawImage(k.mc,0,0);
+      mx.drawImage(hole,0,0);
       mx.globalCompositeOperation='source-in'; mx.fillStyle='rgba(255,45,170,0.80)'; mx.fillRect(0,0,W0,H0);
       ctx.globalCompositeOperation='destination-over'; ctx.drawImage(mh,0,0); ctx.globalCompositeOperation='source-over';
     }
