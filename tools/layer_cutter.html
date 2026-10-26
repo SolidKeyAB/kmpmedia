@@ -140,6 +140,9 @@
           <button class="sm" data-wm="sub">✖ Wand removes</button>
         </div>
         <div id="cloneParams" style="display:none; margin-top:8px;">
+          <div class="row" style="margin-bottom:6px;">
+            <button class="sm go" id="autoHeal" style="width:100%;" title="One-tap PatchMatch content-aware fill — rebuilds the whole magenta area from the real texture around it. Refine afterwards with the tools below.">✨ Auto-heal (fill the magenta)</button>
+          </div>
           <div class="row">
             <button class="sm on" id="modeBox">▭ Copy a box</button>
             <button class="sm" id="modeBrush">🖌 Brush stamp</button>
@@ -1375,6 +1378,7 @@ function setCloneMode(m){ S.cloneMode=m; S.cloneSampling=false; S.boxCapturing=f
   document.getElementById('brushRow').style.display= m==='brush'? 'flex':'none';
   const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
   const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); draw(); }
+document.getElementById('autoHeal').onclick=()=>autoHealHoles();
 document.getElementById('modeBox').onclick=()=>setCloneMode('box');
 document.getElementById('modeBrush').onclick=()=>setCloneMode('brush');
 document.getElementById('boxGrab').onclick=()=>{ const gb=document.getElementById('boxGrab');
