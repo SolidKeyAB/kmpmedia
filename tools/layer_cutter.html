@@ -828,13 +828,32 @@ function draw(){
   if(S.lasso && S.lasso.length){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
     ctx.beginPath(); for(let k=0;k<S.lasso.length;k++){ const p=S.lasso[k]; const sx=v.x+p.x*v.zoom, sy=v.y+p.y*v.zoom;
       k?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);} ctx.stroke(); ctx.setLineDash([]); }
-  // brush cursor
-  if(S.cursor && (S.tool==='brush'||S.tool==='erase'||S.tool==='clone')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
+  // brush cursor (brush/erase only — clone draws its own source-preview cursor below)
+  if(S.cursor && (S.tool==='brush'||S.tool==='erase')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,S.brush*v.zoom/2,0,7); ctx.stroke(); }
-  // 🩹 clone source marker (green crosshair)
-  if(S.tool==='clone' && S.cloneSrc){ const px=v.x+S.cloneSrc.x*v.zoom, py=v.y+S.cloneSrc.y*v.zoom;
-    ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px,py,8,0,7);
-    ctx.moveTo(px-12,py); ctx.lineTo(px+12,py); ctx.moveTo(px,py-12); ctx.lineTo(px,py+12); ctx.stroke(); }
+  // 🩹 clone: show EXACTLY what's copied. The source spot is ringed at brush size (= the patch that
+  // gets copied), and a live ghost of those very pixels is previewed under the cursor so you can see
+  // what will land where before you drag. Both rings are the same size = the copy footprint.
+  if(S.tool==='clone'){
+    const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
+    if(S.cloneSrc){ const px=v.x+S.cloneSrc.x*v.zoom, py=v.y+S.cloneSrc.y*v.zoom;
+      // the copy footprint at the source (solid green ring + centre dot)
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px,py,rz,0,7); ctx.stroke();
+      ctx.fillStyle='#39d98a'; ctx.beginPath(); ctx.arc(px,py,2.5,0,7); ctx.fill();
+      // live ghost preview of the copied pixels under the cursor
+      if(S.cursor){ const ri=Math.max(2,S.brush/2), di=Math.ceil(ri*2)+2;
+        const t=document.createElement('canvas'); t.width=di; t.height=di; const tc=t.getContext('2d');
+        tc.drawImage(S.src, Math.round(S.cloneSrc.x-ri),Math.round(S.cloneSrc.y-ri),di,di, 0,0,di,di);
+        tc.globalCompositeOperation='destination-in'; tc.fillStyle='#000';
+        tc.beginPath(); tc.arc(di/2,di/2,ri,0,7); tc.fill();
+        ctx.save(); ctx.globalAlpha=0.75; ctx.imageSmoothingEnabled=true;
+        ctx.drawImage(t, S.cursor.x-rz,S.cursor.y-rz, rz*2,rz*2); ctx.restore();
+        ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+    } else if(S.cursor){                                          // no source yet → dashed amber ring hinting to pick one
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+  }
 }
 
 /* ---------- history: one timeline covering BOTH mask edits and expression poses ----------
