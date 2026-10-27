@@ -41,18 +41,21 @@
   label.sld{display:block; font-size:12px; color:var(--dim); margin:8px 0 2px;}
   input[type=range]{width:100%; accent-color:var(--accent);}
   .hint{font-size:11px; color:var(--dim); line-height:1.45; margin:6px 0 0;}
-  .layer{display:flex; align-items:center; gap:7px; padding:7px 8px; border:1px solid var(--line);
-    border-radius:9px; margin-bottom:6px; background:var(--panel2);}
-  .layer.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
-  .layer .sw{width:16px; height:16px; border-radius:4px; flex:0 0 auto; border:1px solid #0006;}
-  .layer input.nm{flex:1; min-width:0; background:transparent; border:none; color:var(--txt);
-    font:inherit; font-size:13px; padding:2px;}
-  .layer input.nm:focus{outline:1px solid var(--line); border-radius:4px;}
+  .layer{display:flex; flex-direction:column; align-items:stretch; gap:6px; padding:8px; border:1px solid var(--line);
+    border-radius:9px; margin-bottom:6px; background:var(--panel2); cursor:pointer;}
+  .layer.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; background:#242c52;}
+  .lrow{display:flex; align-items:center; gap:7px;}
+  .lrow .grow{flex:1;}
+  .layer .sw{width:22px; height:22px; border-radius:6px; flex:0 0 auto; border:1px solid #0006; cursor:pointer;}
+  .layer input.nm{flex:1; min-width:0; background:#0b0f1e66; border:1px solid var(--line); color:var(--txt);
+    font:inherit; font-size:14px; padding:7px 9px; border-radius:7px;}
+  .layer input.nm:focus{outline:none; border-color:var(--accent); background:#0b0f1e;}
   .layer select{background:var(--panel); color:var(--txt); border:1px solid var(--line);
-    border-radius:6px; font-size:11px; padding:3px;}
-  .layer .mini{background:transparent; border:none; min-height:28px; padding:3px 5px; flex:0 0 auto; font-size:14px;}
+    border-radius:6px; font-size:12px; padding:5px 6px;}
+  .layer .mini{background:transparent; border:none; min-height:30px; padding:3px 7px; flex:0 0 auto; font-size:15px;}
   .mini[disabled]{opacity:.28; pointer-events:none;}
   .pill{font-size:10px; padding:1px 6px; border-radius:20px; background:#0005; color:var(--dim);}
+  .hbadge{font-size:10px; font-weight:600; padding:1px 7px; border-radius:20px; background:#d81b9433; color:#ff6fc4; border:1px solid #ff6fc455; flex:0 0 auto; white-space:nowrap;}
   .mrow{display:flex; align-items:center; gap:8px; margin:6px 0;}
   .mrow label{font-size:11px; color:var(--dim); flex:0 0 78px;}
   .mrow input[type=range]{flex:1 1 auto; min-width:60px;}
@@ -106,8 +109,18 @@
   </div>
 
   <aside class="side">
-    <!-- Tools -->
+    <!-- Mode -->
     <div class="group">
+      <h2>What are you making?</h2>
+      <div class="row" id="modeSw">
+        <button class="sm on" data-mode="rig">🧍 Puppet rig</button>
+        <button class="sm" data-mode="face">😀 Face expressions</button>
+      </div>
+      <p class="hint"><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut a face's features (brows, eyes, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them. Cut in Puppet-rig mode, then switch here to pose the faces.</p>
+    </div>
+
+    <!-- Tools -->
+    <div class="group" id="toolsGroup">
       <h2>Tool</h2>
       <div class="row" id="tools">
         <button data-tool="wand"  class="on">🪄 Wand</button>
@@ -115,22 +128,59 @@
         <button data-tool="erase">🧽 Erase</button>
         <button data-tool="lasso">➰ Lasso</button>
         <button data-tool="pivot">🎯 Pivot</button>
+        <button data-tool="clone">🩹 Patch base</button>
       </div>
       <div id="toolParams">
-        <label class="sld">Brush size <span id="brushVal">40</span>px</label>
-        <input type="range" id="brush" min="3" max="200" value="40">
+        <label class="sld">Brush size <span id="brushVal">120</span>px</label>
+        <input type="range" id="brush" min="3" max="600" value="120">
+        <div id="eraseParams" style="display:none; margin:8px 0;">
+          <label class="sld" style="margin-top:0;">🧽 Erase removes colour to…</label>
+          <div class="row">
+            <button class="sm on" id="eraseTrans" title="Cut the painted area OUT of this layer — it becomes a real transparent gap (what the old Erase did).">⌫ Transparent</button>
+            <button class="sm" id="eraseWhite" title="Paint the painted area WHITE over the colour — the layer keeps its shape, the colour is wiped to white.">▢ White</button>
+          </div>
+        </div>
         <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
         <input type="range" id="tol" min="2" max="120" value="40">
         <div class="row" id="wandMode" style="margin-top:8px;">
           <button class="sm on" data-wm="add">✚ Wand adds</button>
           <button class="sm" data-wm="sub">✖ Wand removes</button>
         </div>
+        <div id="cloneParams" style="display:none; margin-top:8px;">
+          <div class="row" style="margin-bottom:6px;">
+            <button class="sm go" id="autoHeal" style="width:100%;" title="One-tap PatchMatch content-aware fill — rebuilds the whole magenta area from the real texture around it. Refine afterwards with the tools below.">✨ Auto-heal (fill the magenta)</button>
+          </div>
+          <div class="row">
+            <button class="sm on" id="modeBox">▭ Copy a box</button>
+            <button class="sm" id="modeBrush">🖌 Brush stamp</button>
+            <button class="sm" id="modePattern">🧵 Pattern fill</button>
+          </div>
+          <div class="row" id="boxRow" style="margin-top:6px;">
+            <button class="sm go" id="boxGrab">▭ Grab a box</button>
+          </div>
+          <div class="row" id="brushRow" style="margin-top:6px; display:none;">
+            <button class="sm go" id="cloneSample">🎯 Set source spot</button>
+          </div>
+          <div class="row" id="patRow" style="margin-top:6px; display:none;">
+            <button class="sm go" id="patPick">⬚ Pick pattern</button>
+            <button class="sm" id="patClear">🧽 Clear area</button>
+          </div>
+          <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
+          <input type="range" id="soft" min="0" max="100" value="60">
+          <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
+          <input type="range" id="infuse" min="0" max="100" value="0">
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you fill it).<br>
+          <b>▭ Copy a box (recommended):</b> tap <b>▭ Grab a box</b>, then <b>drag a rectangle over a clean bit of belt/coat</b> — that whole rectangle (buckle, strap, weave and all) is copied. Then <b>tap or drag over the magenta</b> to stamp that exact patch at each point; a live ghost shows what will land. Overlapping stamps blend via <b>Softness</b>. Tap <b>▭ Grab a box</b> again to copy a different piece. This keeps the real detail — not one averaged tone.<br>
+          <b>🖌 Brush stamp:</b> the older round brush — tap <b>🎯 Set source spot</b> on clean belt, then paint; each dab copies that spot at the brush size (make the brush big).<br>
+          <b>🧵 Pattern fill (for a bending belt/strap):</b> tap <b>⬚ Pick pattern</b> and <b>drag a box over the texture you want</b> (a clean bit of belt). Then <b>paint the area to fill</b> — any flexible shape, e.g. the belt curving behind the arm. Lift your finger and it's filled with that pattern, seamlessly extended (no visible tiling) and feathered into the edges by <b>Softness</b>. Paint more to keep going; <b>🧽 Clear area</b> drops an un-filled painted area.<br>
+          <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches to the real coat bordering the hole (the lifted arm is excluded). Painting is clipped to the area behind the mover + the figure, onto a non-destructive back-layer <i>under</i> the base. ↩︎ / ⌘Z undoes any patch.</p>
+        </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
     </div>
 
     <!-- Selection ops -->
-    <div class="group">
+    <div class="group" id="cleanupGroup">
       <h2>Clean up the selection</h2>
       <div class="row">
         <button class="sm" id="knock">⬜→✂ Knock out white</button>
@@ -159,21 +209,66 @@
         <button class="sm" id="addLayer">＋ Add part layer</button>
         <button class="sm go" id="preview">▶ Preview motion</button>
       </div>
-      <p class="hint"><b>base</b> = the body, stays still &amp; joined. <b>mover</b> = a limb you'll animate — cut it OFF the body itself (not a separate study, or it won't line up), tick “punch” so its shape is removed from the base, and pin its 🎯 joint (shoulder/hip/neck). Use <b>▲▼</b> on a row to order front/back. Then <b>▶ Preview motion</b> to watch the whole figure assemble + swing.</p>
+      <label class="pill" id="skinFillPill" title="When a part is cut out of the head/body, fill the empty hole it leaves with the surrounding skin colour — so when the mouth/eye moves for an expression you see skin underneath, not a transparent gap"><input type="checkbox" id="skinFill" checked> 🩹 fill cut-out holes with skin</label>
+      <p class="hint"><b>base</b> = the body, stays still &amp; joined. <b>mover</b> = a limb you'll animate — cut it OFF the body itself (not a separate study, or it won't line up), tick “cut out” so its shape is lifted off whatever it sits on (the base, or the layer it <b>Swings with</b>), and pin its 🎯 joint (shoulder/hip/neck). Use <b>▲▼</b> on a row to order front/back. Then <b>▶ Preview motion</b> to watch the whole figure assemble + swing.</p>
     </div>
 
     <!-- Motion -->
-    <div class="group">
+    <div class="group" id="motionGroup">
       <h2>Motion (selected mover)</h2>
       <div id="motion"></div>
       <p class="hint"><b>Angle</b> = how far it swings, <b>Speed</b> = how fast. <b>Tuck to body</b> nudges the part a few px toward the torso so the empty cut area (e.g. behind the right hand) stays hidden. Changes show live in ▶ Preview.</p>
     </div>
 
+    <!-- Face expressions -->
+    <div class="group" id="faceGroup" style="display:none">
+      <h2>Expressions</h2>
+      <div class="row" id="exprChips"></div>
+      <div class="row" id="facsRow" style="margin-top:6px; align-items:center; gap:8px;">
+        <button class="sm go" id="facsAuto" title="Auto-pose the whole face for this expression using FACS action units — a believable starting face you then tweak">✨ FACS auto-pose</button>
+        <span style="font-size:11px;color:var(--dim)">whole face, one tap · MLS-rigid mouth curl</span>
+      </div>
+      <div id="exprPose"></div>
+      <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
+        <span style="font-size:11px;color:var(--dim)">Edit:</span>
+        <button class="sm on" data-edit="box">▦ Box (whole part)</button>
+        <button class="sm" data-edit="warp">🫠 Warp an area</button>
+        <button class="sm" data-edit="lips">👄 Lip line</button>
+      </div>
+      <div id="lipTools" style="display:none; margin-top:6px;">
+        <div class="row" style="align-items:center; gap:8px;">
+          <span style="font-size:11px;color:var(--dim)"><b>Pick an expression, then draw its mouth</b> — tap left→right along the lip you want (green).</span>
+          <button class="mini" id="lipUndo" title="remove the last lip point" style="margin-left:auto">⌫ point</button>
+          <button class="mini" id="lipClear" title="remove this expression's lip line">⟲ clear</button>
+        </div>
+        <p class="hint" style="margin-top:4px"><b>Draw each expression's mouth directly:</b> tap 🙂 <b>Happy</b> → draw the smile; tap ☹️ <b>Sad</b> → draw the frown; etc. The mouth warps to the line you draw, live. <b>Neutral</b> = trace where the mouth rests (the source the others bend from) — optional; if you skip it a straight baseline is used. 3–6 points. Needs the mouth named <b>mouth / lip / dudak</b>. (The ✨ FACS auto-pose button still auto-shapes any expression you'd rather not draw by hand.)</p>
+      </div>
+      <div id="warpTools" style="display:none; margin-top:6px;">
+        <div class="row" style="align-items:center; gap:8px;">
+          <span style="font-size:11px;color:var(--dim)">Tool:</span>
+          <button class="sm on" data-warptool="region">⭕ Region</button>
+          <button class="sm" data-warptool="point">📍 Point</button>
+          <button class="mini" id="warpClear" title="remove all warp on this feature" style="margin-left:auto">⟲ clear</button>
+        </div>
+        <div id="warpPanel"></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="sm go" id="previewExpr">▶ Preview expressions</button>
+        <button class="sm" id="exportFaceFrames" title="Bake each expression's posed head into a transparent PNG (neutral + happy/sad/angry/shocked), same framing as superx_head.png — drop straight into the WordStorm SUPER X watcher">📸 Export face frames</button>
+      </div>
+      <p class="hint">Pick an expression, then tap <b>✨ FACS auto-pose</b> for a believable whole-face start (needs features named brow / eye / mouth), and tweak from there. Or pose by hand: <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>cut out</b> (on the feature's row) so it's lifted off the head — its old spot won't ghost when it moves.</p>
+    </div>
+
     <!-- Export -->
     <div class="group">
       <h2>Export</h2>
+      <div class="row" style="align-items:center; gap:6px;">
+        <label style="font-size:12px;color:var(--dim)">Name</label>
+        <input id="charName" type="text" placeholder="character" style="flex:1; min-width:0; padding:5px 7px; font-size:12px;">
+      </div>
+      <p class="hint" style="margin-top:2px">Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;_face_frames.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
       <div class="row">
-        <button class="go" id="toNexum">📡 Send to app (nexum)</button>
+        <button class="go" id="toApp">📡 Send to app</button>
       </div>
       <div class="row" style="margin-top:6px;">
         <button class="sm" id="export">⬇ Export .zip</button>
@@ -181,7 +276,7 @@
         <button class="sm" id="showJson">{ } rig JSON</button>
       </div>
       <textarea id="json" style="display:none" readonly></textarea>
-      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the app over nexum (I bake the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
+      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the host app (it bakes the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
     </div>
   </aside>
 </div>
@@ -199,13 +294,36 @@ const S = {
   img:null, iw:0, ih:0,
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
-  tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
+  tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
+  eraseTo:'transparent',                // 🧽 real erase target: 'transparent' (cut from layer) | 'white' (paint white over colour)
+  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
+  cloneMode:'box', clonePatch:null, boxCapturing:false, boxDrag:null,   // ▭ box copy-paste: grab a rectangle of texture, then stamp that exact patch
+  patTarget:null, patPainted:false,     // 🧵 pattern-fill: freeform target mask you paint, filled with the sampled pattern on release
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
   pointers:new Map(), pinch:null, lastPan:null, cursor:null,
   preview:false, previewT:0,            // live assembled-motion preview
+  skinFill:true,                        // fill cut-out holes with the parent's own colour (skin) so a moved part reveals skin, not a transparent gap
+  mode:'rig',                           // 'rig' = cut + swing puppet; 'face' = expression authoring
+  expr:'neutral',                       // the expression being posed / shown
+  exprPreview:false, exprT:0,           // morph-cycle preview through the expressions
+  faceDrag:null,                        // in-progress feature drag in face mode
+  faceWarp:false,                       // face edit sub-mode: false = affine box, true = local warp
+  lipEdit:false,                        // face edit sub-mode: tap to trace the mouth's lip line (guides the morph)
+  warpTool:'region',                    // 'region' = circle zoom/rotate an area · 'point' = pull a spot
+  warpRadius:60,                        // default reach (image px) for a new point / region feather
+  warpSel:null,                         // the currently selected warp operator (for the side panel)
+  warpDrag:null,                        // in-progress warp gesture {op, mode, ...}
 };
+const WARP_COLS=4, WARP_ROWS=4;         // legacy 5×5 grid — only used to migrate old grid-warps to points
+const WARP_MESH=10;                     // render mesh density (cells per side) for a warped feature
+// The fixed expression set (neutral is the base/identity). Each is a named POSE: per-feature offset,
+// rotate and scale relative to neutral — brows + eyelids + mouth carry the emotion.
+const EXPRS = [
+  {id:'neutral', label:'😐 Neutral'}, {id:'happy', label:'😄 Happy'}, {id:'sad', label:'😢 Sad'},
+  {id:'angry', label:'😠 Angry'},     {id:'shocked', label:'😲 Shocked'},
+];
 let nextId = 1;
 
 /* ---------- utilities ---------- */
@@ -213,15 +331,19 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1600); }
 function f3(v){ return (Math.round(v*1000)/1000); }
 function sanitize(n){ return (n||'layer').toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,'')||'layer'; }
+// The character/project name that drives export filenames (defaults to "character" when the field is blank).
+function charSlug(){ const el=document.getElementById('charName'); return sanitize((el&&el.value)||'character'); }
 function hexToRgb(h){ const n=parseInt(h.slice(1),16); return [n>>16&255, n>>8&255, n&255]; }
 
 /* ---------- layer model ---------- */
 function makeLayer(name, role){
   const mc = document.createElement('canvas'); mc.width=S.iw; mc.height=S.ih;
   const color = PALETTE[S.layers.length % PALETTE.length];
-  return { id:nextId++, name, role:role||'mover', punch:role!=='base', visible:true, color,
+  return { id:nextId++, name, role:role||'mover', punch:role!=='base', seeThrough:false, visible:true, color,
            mc, mctx:mc.getContext('2d', {willReadFrequently:true}), pivot:null,
-           swingDeg:10, speed:1, tuckX:0, tuckY:0 };   // per-mover motion: angle, speed, inward-tuck (px)
+           swingDeg:10, speed:1, tuckX:0, tuckY:0,   // per-mover motion: angle, speed, inward-tuck (px)
+           parent:null,  // id of a layer this one SWINGS WITH (e.g. eye → head): rides its motion + adds its own
+           poses:{} };   // per-expression pose {dx,dy,rot,scale} keyed by expression id (face mode)
 }
 function activeLayer(){ return S.layers[S.active] || null; }
 function renderLayerList(){
@@ -229,29 +351,103 @@ function renderLayerList(){
   // show front-most at top
   for(let i=S.layers.length-1;i>=0;i--){
     const l=S.layers[i];
-    const row=document.createElement('div'); row.className='layer'+(i===S.active?' sel':'');
+    const row=document.createElement('div'); row.className='layer'+(i===S.active?' sel':''); row.dataset.idx=i;
+    // two rows: name (full-width, always readable) on top; role/punch/order below
     row.innerHTML=`
-      <span class="sw" style="background:${l.color}"></span>
-      <input class="nm" value="${l.name}">
-      <select class="role"><option value="base"${l.role==='base'?' selected':''}>base</option>
-        <option value="mover"${l.role==='mover'?' selected':''}>mover</option></select>
-      <label class="pill" title="punch hole in base"><input type="checkbox" class="pn" ${l.punch?'checked':''}> punch</label>
-      <button class="mini up" title="bring forward (toward front)" ${i===S.layers.length-1?'disabled':''}>▲</button>
-      <button class="mini dn" title="send back (toward back)" ${i===0?'disabled':''}>▼</button>
-      <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
-      <button class="mini del danger" title="delete">🗑</button>`;
-    row.onclick=(e)=>{ if(e.target.closest('input,select,button'))return; S.active=i; renderLayerList(); draw(); };
-    row.querySelector('.nm').onchange=e=>{ l.name=e.target.value; markDirty(); };
-    row.querySelector('.role').onchange=e=>{ l.role=e.target.value; l.punch=(l.role!=='base'); renderLayerList(); markDirty(); };
-    row.querySelector('.pn').onchange=e=>{ l.punch=e.target.checked; markDirty(); };
+      <div class="lrow">
+        <span class="sw" style="background:${l.color}" title="tap to select this layer"></span>
+        <input class="nm" value="${l.name}" title="layer name — tap to rename">
+        ${holeKids(l).length?`<span class="hbadge" title="${holeKids(l).length} piece(s) cut out of this layer — it has ${holeKids(l).length} hole(s). Pick 🩹 Patch base to heal them.">◳ ${holeKids(l).length}</span>`:''}
+        <button class="mini editcut" title="change this layer's cut — jumps to the Wand / Brush / Erase tools for it">✏️</button>
+        <button class="mini lk" title="${l.locked?'locked — touching the canvas won\'t move this layer; tap to unlock':'lock so you can\'t accidentally move it on the canvas'}">${l.locked?'🔒':'🔓'}</button>
+        <button class="mini vis" title="show/hide">${l.visible?'👁':'🚫'}</button>
+        <button class="mini del danger" title="delete (you can undo)">🗑</button>
+      </div>
+      <div class="lrow">
+        <select class="role"><option value="base"${l.role==='base'?' selected':''}>base</option>
+          <option value="mover"${l.role==='mover'?' selected':''}>mover</option></select>
+        <label class="pill" title="cut this piece OUT of its parent (the layer it 'Swings with'), or the base — so it animates on its own with no ghost left behind"><input type="checkbox" class="pn" ${l.punch?'checked':''}> cut out</label>
+        ${l.punch?`<label class="pill" title="leave the hole this cut-out leaves in its parent as a REAL transparent hole — so a video or background behind the image shows through it. Off = fill the hole with skin."><input type="checkbox" class="st" ${l.seeThrough?'checked':''}> 🔲 see-through</label>`:''}
+        <span class="grow"></span>
+        <button class="mini rst" title="reset this layer — Face mode: clears its pose for the current expression; Rig mode: clears its tuck">⟲</button>
+        <button class="mini up" title="bring forward (toward front)" ${i===S.layers.length-1?'disabled':''}>▲</button>
+        <button class="mini dn" title="send back (toward back)" ${i===0?'disabled':''}>▼</button>
+      </div>`;
+    // tap anywhere on the row (except a control) to select it — lightweight, no rebuild
+    row.onclick=(e)=>{ if(e.target.closest('button,select,input,.pill'))return; setActive(i); };
+    const nm=row.querySelector('.nm');
+    nm.onfocus=()=>{ if(S.active!==i) setActive(i); };           // tapping the name also selects
+    nm.onchange=e=>{ l.name=e.target.value; markDirty(); };
+    row.querySelector('.role').onchange=e=>{ l.role=e.target.value;
+      if(l.role==='base'){ const old=S.layers.filter(k=>k!==l&&k.role==='base'); old.forEach(k=>{ k.role='mover'; k.punch=true; });   // exactly one base per image
+        if(old.length) toast('🧍 '+l.name+' is now the base — '+old.map(k=>k.name).join(', ')+' became mover'+(old.length>1?'s':'')); }
+      l.punch=(l.role!=='base'); S.layers.forEach(k=>{k._cut=null;}); renderLayerList(); draw(); markDirty(); };
+    row.querySelector('.pn').onchange=e=>{ l.punch=e.target.checked; S.layers.forEach(k=>{k._cut=null;}); renderLayerList(); draw(); markDirty(); };
+    const stEl=row.querySelector('.st');
+    if(stEl) stEl.onchange=e=>{ l.seeThrough=e.target.checked; S.layers.forEach(k=>{k._cut=null;}); draw(); markDirty();
+      toast(l.seeThrough?('🔲 '+l.name+' cut-out is see-through — video/background shows through'):('🩹 '+l.name+' cut-out filled with skin')); };
     row.querySelector('.up').onclick=()=>moveLayer(i,+1);
     row.querySelector('.dn').onclick=()=>moveLayer(i,-1);
     row.querySelector('.vis').onclick=()=>{ l.visible=!l.visible; renderLayerList(); draw(); markDirty(); };
-    row.querySelector('.del').onclick=()=>{ if(S.layers.length<=1){toast('Keep at least one layer');return;}
-      S.layers.splice(i,1); S.active=Math.min(S.active, S.layers.length-1); renderLayerList(); draw(); markDirty(); };
+    row.querySelector('.lk').onclick=()=>{ l.locked=!l.locked; renderLayerList(); markDirty(); toast(l.locked?('🔒 '+l.name+' locked — it won’t move when you touch the canvas'):('🔓 '+l.name+' unlocked')); };
+    row.querySelector('.rst').onclick=()=>resetLayer(i);
+    row.querySelector('.editcut').onclick=()=>editLayerCut(i);
+    row.querySelector('.del').onclick=()=>deleteLayer(i);
     box.appendChild(row);
   }
   renderMotion();
+  if(typeof renderExprPose==='function') renderExprPose();
+  if(typeof renderWarpPanel==='function') renderWarpPanel();
+}
+// Per-layer reset from its row. Face mode: clears this expression's pose (undoable).
+// Rig mode: zeroes its tuck (same as the Motion-panel ⟲).
+function resetLayer(i){
+  const l=S.layers[i]; if(!l) return;
+  if(S.mode==='face'){
+    if(S.expr==='neutral'){ toast('Pick an expression first — Neutral is the rest pose (nothing to reset)'); return; }
+    if(!(l.poses && l.poses[S.expr])){ toast(l.name+': no pose to reset for this expression'); return; }
+    pushPoseUndo(l, S.expr);                              // undoable (↩︎ / ⌘Z)
+    delete l.poses[S.expr];
+    if(S.active===i) S.warpSel=null;
+    renderLayerList(); if(typeof renderExprPose==='function') renderExprPose();
+    if(typeof renderWarpPanel==='function') renderWarpPanel(); draw(); markDirty();
+    toast('↺ '+l.name+' reset to neutral for '+S.expr);
+  } else {
+    if(!(l.tuckX||l.tuckY)){ toast(l.name+': nothing to reset (tuck already 0)'); return; }
+    l.tuckX=0; l.tuckY=0; renderMotion(); draw(); markDirty();
+    toast('↺ '+l.name+' tuck reset to 0');
+  }
+}
+// select a layer WITHOUT rebuilding the whole list (keeps a focused name field alive, feels instant)
+function setActive(i){
+  if(i<0 || i>=S.layers.length) return;
+  S.active=i; S.warpSel=null;
+  const box=document.getElementById('layerList');
+  for(const row of box.children) row.classList.toggle('sel', (+row.dataset.idx)===i);
+  renderMotion();
+  if(typeof renderExprPose==='function') renderExprPose();
+  if(typeof renderWarpPanel==='function') renderWarpPanel();
+  draw();
+}
+// one tap to RE-EDIT a layer's cut: leave the Face view if needed, select the layer, and bring the cut tools into view
+function editLayerCut(i){
+  if(i<0 || i>=S.layers.length) return;
+  if(S.mode!=='rig'){ S.mode='rig'; applyMode(); markDirty(); renderLayerList(); }
+  setActive(i);
+  const tg=document.getElementById('toolsGroup');
+  if(tg && tg.scrollIntoView) tg.scrollIntoView({behavior:'smooth', block:'nearest'});
+  toast('Editing "'+S.layers[i].name+'" — Wand ✚/✖, Brush or Erase to change its area');
+}
+// delete a layer, but keep it in the undo stack so an accidental 🗑 is one tap to recover
+function deleteLayer(i){
+  if(S.layers.length<=1){ toast('Keep at least one layer'); return; }
+  const removed=S.layers[i];
+  pushHist({k:'layerdel', idx:i, id:removed.id, layer:removed});   // whole layer object (canvas + poses) is preserved
+  S.layers.splice(i,1);
+  if(S.active===i) S.active=Math.min(i, S.layers.length-1);
+  else if(S.active>i) S.active--;
+  S.warpSel=null; renderLayerList(); draw(); markDirty();
+  toast('Deleted “'+removed.name+'” — tap ↩︎ to undo');
 }
 // front/back z-order: dir +1 = toward front (higher index = drawn later = on top)
 function moveLayer(i, dir){ const j=i+dir; if(j<0||j>=S.layers.length) return;
@@ -263,12 +459,25 @@ function renderMotion(){
   const box=document.getElementById('motion'); if(!box) return;
   const l=activeLayer();
   if(!l || l.role!=='mover'){ box.innerHTML='<p class="hint">Select a <b>mover</b> layer to set its swing <b>angle</b>, <b>speed</b>, and nudge it <b>toward the body</b> so the cut gap doesn\'t show.</p>'; return; }
+  // layers this one may ride: anything except itself and its own descendants (no cycles)
+  const parents=S.layers.filter(x=> x.id!==l.id && !ancestorsOf(x).some(a=>a.id===l.id));
   box.innerHTML=`
+    <div class="mrow"><label>Swings with</label>
+      <select class="mPar" title="make this part ride another layer's motion (e.g. eye → head) and add its own on top">
+        <option value="">— on its own —</option>
+        ${parents.map(x=>`<option value="${x.id}"${l.parent===x.id?' selected':''}>${x.name}${x.role==='base'?' (base)':''}</option>`).join('')}
+      </select></div>
     <div class="mrow"><label>Angle</label><input type="range" class="mAng" min="0" max="40" step="1" value="${l.swingDeg}"><span class="mval">${l.swingDeg}°</span></div>
     <div class="mrow"><label>Speed</label><input type="range" class="mSpd" min="0.2" max="3" step="0.1" value="${l.speed}"><span class="mval">${(+l.speed).toFixed(1)}×</span></div>
     <div class="mrow"><label>Tuck to body</label>
       <span class="nudge"><button class="mini nL" title="left">◀</button><button class="mini nU" title="up">▲</button><button class="mini nD" title="down">▼</button><button class="mini nR" title="right">▶</button></span>
-      <button class="mini nRst" title="reset">⟲</button><span class="mval mOff">${l.tuckX|0},${l.tuckY|0}</span></div>`;
+      <button class="mini nRst" title="reset">⟲</button><span class="mval mOff">${l.tuckX|0},${l.tuckY|0}</span></div>
+    <p class="hint" style="margin-top:4px">${l.parent!=null && layerById(l.parent) ? '↳ rides <b>'+layerById(l.parent).name+'</b>’s position AND swing (incl. its Tuck) — keep <b>Tuck to body</b> here at 0 unless you want an EXTRA nudge within '+layerById(l.parent).name+'. Set Angle 0 to <i>only</i> follow it.'+(l.punch?' With <b>cut out</b> on, this piece is removed from <b>'+layerById(l.parent).name+'</b> so it animates on its own (no ghost).':' Tick <b>cut out</b> in its row to remove it from '+layerById(l.parent).name+' so it can move on its own.') : 'Tip: set <b>Swings with → head</b> so eyes/brows/mouth travel with the head — and tick <b>cut out</b> to lift them off it so they animate freely.'}</p>`;
+  box.querySelector('.mPar').onchange=e=>{ const was=l.parent; l.parent = e.target.value ? +e.target.value : null;
+    // a freshly-wired part already RIDES its parent's tuck — so clear its own, or it double-shifts off its socket
+    if(was==null && l.parent!=null && (l.tuckX||l.tuckY)){ l.tuckX=0; l.tuckY=0;
+      toast('Cleared its own tuck — it now rides '+(layerById(l.parent)||{name:'the parent'}).name+"'s position (add tuck only for an extra nudge)"); }
+    renderMotion(); draw(); markDirty(); };
   const upd=()=>{ box.querySelector('.mOff').textContent=`${l.tuckX|0},${l.tuckY|0}`; draw(); markDirty(); };
   box.querySelector('.mAng').oninput=e=>{ l.swingDeg=+e.target.value; box.querySelector('.mAng').nextElementSibling.textContent=l.swingDeg+'°'; draw(); markDirty(); };
   box.querySelector('.mSpd').oninput=e=>{ l.speed=+e.target.value; box.querySelector('.mSpd').nextElementSibling.textContent=l.speed.toFixed(1)+'×'; draw(); markDirty(); };
@@ -289,6 +498,7 @@ function loadImage(src){
     const sctx=S.src.getContext('2d', {willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
     S.layers=[]; S.active=-1; S.undo=[]; S.redo=[]; nextId=1;
+    S.cloneSrc=null; S.cloneOff=null; S.cloneSampling=false;
     S.layers.push(makeLayer('fig','base'));
     S.layers.push(makeLayer('arm_r','mover'));
     S.active=1;
@@ -301,6 +511,9 @@ function loadImage(src){
   img.src=src;
 }
 function loadFile(file){ if(!file || !file.type.startsWith('image/')){ toast('That is not an image'); return; }
+  // Prefill the export name from the file name (e.g. "snowman.png" → "snowman"), if not already set.
+  const ci=document.getElementById('charName');
+  if(ci && !ci.value && file.name){ ci.value=sanitize(file.name.replace(/\.[^.]+$/,'')); }
   const r=new FileReader(); r.onload=()=>loadImage(r.result); r.readAsDataURL(file); }
 const pick=()=>document.getElementById('file').click();
 document.getElementById('loadBtn').onclick=pick;
@@ -319,18 +532,23 @@ stageWrap.addEventListener('drop',e=>{ const f=e.dataTransfer && e.dataTransfer.
 const AUTOSAVE_KEY='ogcut:autosave:v1';
 function serializeProject(){
   return { kind:'og-cutter-project', v:1, savedAt:new Date().toISOString(),
-    iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId,
+    iw:S.iw, ih:S.ih, bg:S.bg, active:S.active, nextId, skinFill:S.skinFill,
     image:S.src.toDataURL('image/png'),
-    layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch,
-      visible:l.visible, color:l.color, pivot:l.pivot||null,
+    mode:S.mode, expr:S.expr, name:((document.getElementById('charName')||{}).value||''),
+    layers:S.layers.map(l=>({ id:l.id, name:l.name, role:l.role, punch:l.punch, seeThrough:!!l.seeThrough,
+      visible:l.visible, locked:!!l.locked, color:l.color, pivot:l.pivot||null,
       swingDeg:l.swingDeg??10, speed:l.speed??1, tuckX:l.tuckX||0, tuckY:l.tuckY||0,
-      mask:l.mc.toDataURL('image/png') })) };
+      parent:l.parent??null,
+      lips:(Array.isArray(l.lips)&&l.lips.length)?l.lips:null,
+      poses:l.poses||{},
+      mask:l.mc.toDataURL('image/png'),
+      backfill:l.backfill?l.backfill.toDataURL('image/png'):null })) };
 }
 function saveProject(){
   if(!S.img){ toast('Load + cut something first'); return; }
   const blob=new Blob([JSON.stringify(serializeProject())],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='layercutter_cut.ogcut.json'; document.body.appendChild(a); a.click();
+  a.download=charSlug()+'.ogcut.json'; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
   toast('Saved — reopen it with 📂 Open to keep cutting');
 }
@@ -340,32 +558,41 @@ function restoreProject(proj, quiet){
   img.onload=()=>{
     S.img=img; S.iw=proj.iw||img.naturalWidth; S.ih=proj.ih||img.naturalHeight;
     if(typeof proj.bg==='number') S.bg=proj.bg;
+    if(typeof proj.skinFill==='boolean'){ S.skinFill=proj.skinFill; const sf=document.getElementById('skinFill'); if(sf) sf.checked=proj.skinFill; }
     S.src=document.createElement('canvas'); S.src.width=S.iw; S.src.height=S.ih;
     const sctx=S.src.getContext('2d',{willReadFrequently:true}); sctx.drawImage(img,0,0);
     S.srcData=sctx.getImageData(0,0,S.iw,S.ih);
     S.layers=[]; S.undo=[]; S.redo=[]; S.preview=false;
+    S.cloneSrc=null; S.cloneOff=null; S.cloneSampling=false;
     const pls=proj.layers||[];
     nextId=Math.max(proj.nextId||1, ...pls.map(l=>(l.id||0)+1), 1);
     S.active=Math.max(0, Math.min(proj.active??0, pls.length-1));
-    let pending=pls.length;
+    let pending=0;
     const finish=()=>{ document.getElementById('dims').textContent=`${S.iw}×${S.ih}`;
       document.getElementById('empty').style.display='none';
-      fitView(); renderLayerList(); draw(); markDirty();
+      S.mode=proj.mode||'rig'; S.expr=proj.expr||'neutral';
+      { const ci=document.getElementById('charName'); if(ci && typeof proj.name==='string') ci.value=proj.name; }
+      fitView(); renderLayerList(); applyMode(); draw(); markDirty();
       if(!quiet) toast('Project opened — pick up where you left off'); };
-    if(!pls.length){ finish(); return; }
+    const done=()=>{ if(--pending===0) finish(); };
     pls.forEach((pl,idx)=>{
       const mc=document.createElement('canvas'); mc.width=S.iw; mc.height=S.ih;
       const mctx=mc.getContext('2d',{willReadFrequently:true});
       const L={ id:pl.id||(idx+1), name:pl.name||('layer'+(idx+1)), role:pl.role||'mover',
-        punch:pl.punch!==undefined?pl.punch:(pl.role!=='base'), visible:pl.visible!==false,
+        punch:pl.punch!==undefined?pl.punch:(pl.role!=='base'), seeThrough:!!pl.seeThrough, visible:pl.visible!==false,
+        locked:!!pl.locked,
         color:pl.color||PALETTE[idx%PALETTE.length], mc, mctx, pivot:pl.pivot||null,
-        swingDeg:pl.swingDeg??10, speed:pl.speed??1, tuckX:pl.tuckX||0, tuckY:pl.tuckY||0 };
+        swingDeg:pl.swingDeg??10, speed:pl.speed??1, tuckX:pl.tuckX||0, tuckY:pl.tuckY||0,
+        parent:(pl.parent??null),
+        lips:(Array.isArray(pl.lips)&&pl.lips.length)?pl.lips:null,
+        poses:pl.poses||{} };
       S.layers[idx]=L;
-      if(pl.mask){ const mi=new Image();
-        mi.onload=()=>{ mctx.drawImage(mi,0,0); if(--pending===0) finish(); };
-        mi.onerror=()=>{ if(--pending===0) finish(); }; mi.src=pl.mask; }
-      else if(--pending===0) finish();
+      if(pl.mask){ pending++; const mi=new Image();
+        mi.onload=()=>{ mctx.drawImage(mi,0,0); done(); }; mi.onerror=done; mi.src=pl.mask; }
+      if(pl.backfill){ pending++; layerBackfill(L); const bi=new Image();
+        bi.onload=()=>{ L.bfctx.drawImage(bi,0,0); done(); }; bi.onerror=done; bi.src=pl.backfill; }
     });
+    if(pending===0) finish();
   };
   img.onerror=()=>toast('Project image failed to load');
   img.src=proj.image;
@@ -397,6 +624,16 @@ if(resumeBtn && hasAutosave()){ resumeBtn.style.display='inline-block';
 function resizeCanvas(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
   cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
   ctx.setTransform(dpr,0,0,dpr,0,0); draw(); }
+// Keep the canvas BUFFER in lockstep with its on-screen CSS box. On mobile the viewport
+// changes (URL bar show/hide, panel relayout after a project loads) resize the canvas's CSS
+// box without always firing a 'resize' event — leaving a stale buffer. The image then renders
+// vertically scaled, so it sits OFFSET from where touches map (touch uses view + live rect,
+// which stay correct) → you tap the magenta hole but the fill lands below it. Re-syncing here,
+// before every draw, guarantees render and touch-mapping share one coordinate space.
+function syncCanvasSize(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(w>1 && h>1 && (cv.width!==w || cv.height!==h)){ cv.width=w; cv.height=h; ctx.setTransform(dpr,0,0,dpr,0,0); return true; }
+  return false; }
 function fitView(){ const r=stageWrap.getBoundingClientRect();
   const z=Math.min(r.width/S.iw, r.height/S.ih)*0.95;
   S.view.zoom=z; S.view.x=(r.width-S.iw*z)/2; S.view.y=(r.height-S.ih*z)/2; }
@@ -404,33 +641,247 @@ function s2i(sx,sy){ return {x:(sx-S.view.x)/S.view.zoom, y:(sy-S.view.y)/S.view
 
 /* ---------- draw ---------- */
 /* ---------- live assembled-motion preview: base still, movers swing about their pinned joint ---------- */
+// child layers 'punch'ed OUT of layer l (e.g. an eye cut out of the head it rides)
+function punchKids(l){ return S.layers.filter(k=>k!==l && k.punch && k.parent===l.id); }
+// every mover cut OUT of layer l — the pieces that leave holes in it: its own punch-children
+// PLUS, for the base, the unparented limbs cut straight off the torso. This is the hole-set the
+// export punches and the Patch/Auto-heal tools fill, so a layer "has holes" iff this is non-empty.
+function holeKids(l){ return punchKids(l).concat(l.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[]); }
+function openHoleKids(l){ return holeKids(l).filter(k=>!k.seeThrough); }   // the ones that actually need healing (not see-through)
+// The layer 🩹 Patch / ✨ Auto-heal operate ON — always the SHEET a piece was cut FROM (the one
+// holding the hole), NEVER the mover you have selected. You heal the belt that the ARM hides, so
+// the brush must paint the BASE, not the arm layer. Prefer the active layer only if IT has holes;
+// otherwise the first layer that does; otherwise the base. (Was activeLayer() → patching the arm.)
+function patchTarget(){ const a=activeLayer();
+  if(a && openHoleKids(a).length) return a;
+  return S.layers.find(l=>openHoleKids(l).length)
+      || (a && a.role==='base' ? a : S.layers.find(l=>l.role==='base'))
+      || a || null; }
+// The sheet GROWN to include the footprints of the pieces cut from it — the base plus the holes it
+// must fill when those movers swing away. This is the region Patch/Auto-heal may paint into (so you
+// can rebuild the belt UNDER the arm, not just the sliver where the arm overlapped the figure).
+function grownSheet(l){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(l.mc,0,0);
+  for(const k of holeKids(l).filter(k=>!k.seeThrough && k.visible)) x.drawImage(k.mc,0,0);
+  return c; }
+// Split a set of cut-out child layers into the holes that get SKIN vs the holes left
+// SEE-THROUGH (real transparent hole — so a video/background behind the image shows
+// through). A hole is see-through if that child is marked see-through, OR skin-fill is
+// globally off. Returns {skin:[maskData…], clear:[maskData…]}.
+function splitHoles(childLayers){
+  const dat=k=>k.mctx.getImageData(0,0,S.iw,S.ih).data, skin=[], clear=[];
+  for(const k of childLayers){ ((!S.skinFill||k.seeThrough)?clear:skin).push(dat(k)); }
+  return {skin, clear};
+}
+// Inpaint a layer's punched-out holes with its OWN surrounding colour/texture, so a
+// moved cut-out (mouth/eye/limb) reveals coat, not a transparent gap. Two-step:
+//  (1) multi-source BFS so every hole pixel takes the colour of its NEAREST known pixel
+//      — this carries real boundary colour (stripes, shading) inward instead of washing
+//      the whole hole to one grey mean (the old 8-neighbour-average did the latter);
+//  (2) a few light smoothing passes over hole pixels only, to melt the nearest-colour
+//      seams while keeping the texture gradient.
+// For a solid region (e.g. the bee body) nearest-colour == the one colour everywhere, so
+// the result is byte-for-byte what the old average produced — safe, strictly better on texture.
+// smoothPasses: 2 for the live skin-fill, less to keep more texture for a baked heal.
+// Returns {out:Uint8ClampedArray(W*H*3), hole:Uint8Array, filled:Uint8Array} or null.
+function inpaintRGB(ownMask, holeMasks, smoothPasses){
+  const W=S.iw,H=S.ih, sd=S.srcData.data, N=W*H;
+  const hole=new Uint8Array(N), known=new Uint8Array(N), filled=new Uint8Array(N);
+  let a=new Float32Array(N*3);
+  let hx0=W,hy0=H,hx1=-1,hy1=-1, anyHole=false, sr=0,sg=0,sb=0,sn=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const p=y*W+x,o=p*4;
+    if(ownMask[o+3]<=8) continue;
+    let hf=1; for(const kd of holeMasks) hf*=(1-kd[o+3]/255);
+    if(hf<0.5){ hole[p]=1; anyHole=true; if(x<hx0)hx0=x;if(x>hx1)hx1=x;if(y<hy0)hy0=y;if(y>hy1)hy1=y; }
+    else { a[p*3]=sd[o]; a[p*3+1]=sd[o+1]; a[p*3+2]=sd[o+2]; known[p]=1; filled[p]=1; sr+=sd[o];sg+=sd[o+1];sb+=sd[o+2];sn++; }
+  }
+  if(!anyHole || !sn) return null;
+  // (1) multi-source BFS from all known pixels → nearest-colour assignment over the holes
+  const q=new Int32Array(N); let head=0,tail=0;
+  for(let p=0;p<N;p++){ if(known[p]) q[head++]=p; }
+  while(tail<head){ const p=q[tail++]; const x=p%W,y=(p/W)|0;
+    const cr=a[p*3],cg=a[p*3+1],cb=a[p*3+2];
+    const nb=[p-1,p+1,p-W,p+W], ok=[x>0,x<W-1,y>0,y<H-1];
+    for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d];
+      if(hole[np] && !filled[np]){ filled[np]=1; a[np*3]=cr;a[np*3+1]=cg;a[np*3+2]=cb; q[head++]=np; } }
+  }
+  // (2) light smoothing over hole pixels only (bounded to the hole bbox), ping-pong buffers
+  hx0=Math.max(0,hx0);hy0=Math.max(0,hy0);hx1=Math.min(W-1,hx1);hy1=Math.min(H-1,hy1);
+  let b=new Float32Array(N*3); const passes=smoothPasses==null?2:smoothPasses;
+  for(let pass=0;pass<passes;pass++){ b.set(a);
+    for(let y=hy0;y<=hy1;y++)for(let x=hx0;x<=hx1;x++){ const p=y*W+x; if(!hole[p])continue;
+      let r=a[p*3],g=a[p*3+1],bl=a[p*3+2],n=1;
+      const nb=[p-1,p+1,p-W,p+W], ok=[x>0,x<W-1,y>0,y<H-1];
+      for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d]; r+=a[np*3];g+=a[np*3+1];bl+=a[np*3+2];n++; }
+      b[p*3]=r/n;b[p*3+1]=g/n;b[p*3+2]=bl/n; }
+    const t=a;a=b;b=t; }
+  const mr=sr/sn,mg=sg/sn,mb=sb/sn;   // fallback mean for any pocket BFS couldn't reach
+  const out=new Uint8ClampedArray(N*3);
+  for(let p=0;p<N;p++){ if(hole[p]&&!filled[p]){ out[p*3]=mr;out[p*3+1]=mg;out[p*3+2]=mb; }
+    else { out[p*3]=a[p*3];out[p*3+1]=a[p*3+1];out[p*3+2]=a[p*3+2]; } }
+  return {out, hole, filled};
+}
+
+// ── Multi-scale PatchMatch content-aware fill ──────────────────────────────────
+// Reconstructs a BIG structured hole (a face/coat behind a lifted limb) by copying real
+// PATCHES of the surrounding texture — not a radial nearest-colour smear. Barnes 2009
+// PatchMatch NNF (propagation + random search) + Wexler/Simakov coherence voting, run
+// coarse→fine over an image pyramid so structure propagates into the hole centre.
+// Pure typed arrays; verified in Node (reconstructs a stripe pattern to ~0 error).
+function _mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function _downRGB(rgb,w,h,nw,nh){ const out=new Float32Array(nw*nh*3);
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){ const sx=Math.min(w-1,x*2),sy=Math.min(h-1,y*2),sx1=Math.min(w-1,sx+1),sy1=Math.min(h-1,sy+1);
+    for(let c=0;c<3;c++) out[(y*nw+x)*3+c]=0.25*(rgb[(sy*w+sx)*3+c]+rgb[(sy*w+sx1)*3+c]+rgb[(sy1*w+sx)*3+c]+rgb[(sy1*w+sx1)*3+c]); }
+  return out; }
+function _downHole(hole,w,h,nw,nh){ const out=new Uint8Array(nw*nh);
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){ const sx=Math.min(w-1,x*2),sy=Math.min(h-1,y*2),sx1=Math.min(w-1,sx+1),sy1=Math.min(h-1,sy+1);
+    out[y*nw+x]=(hole[sy*w+sx]+hole[sy*w+sx1]+hole[sy1*w+sx]+hole[sy1*w+sx1])>=2?1:0; }
+  return out; }
+function _bfsInit(content,hole,W,H){ const Nn=W*H,fl=new Uint8Array(Nn),q=new Int32Array(Nn); let hd=0,tl=0,sr=0,sg=0,sb=0,sn=0;
+  for(let p=0;p<Nn;p++) if(!hole[p]){ fl[p]=1; q[hd++]=p; sr+=content[p*3];sg+=content[p*3+1];sb+=content[p*3+2];sn++; }
+  if(!sn) return; while(tl<hd){ const p=q[tl++],x=p%W,y=(p/W)|0,nb=[p-1,p+1,p-W,p+W],ok=[x>0,x<W-1,y>0,y<H-1];
+    for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d]; if(hole[np]&&!fl[np]){ fl[np]=1; content[np*3]=content[p*3];content[np*3+1]=content[p*3+1];content[np*3+2]=content[p*3+2]; q[hd++]=np; } } }
+  const mr=sr/sn,mg=sg/sn,mb=sb/sn; for(let p=0;p<Nn;p++) if(hole[p]&&!fl[p]){ content[p*3]=mr;content[p*3+1]=mg;content[p*3+2]=mb; } }
+function _upInto(prev,pw,ph,content,w,h,hole){ for(let y=0;y<h;y++)for(let x=0;x<w;x++){ const p=y*w+x; if(!hole[p])continue;
+    const fx=(x+0.5)*pw/w-0.5,fy=(y+0.5)*ph/h-0.5; let x0=Math.floor(fx),y0=Math.floor(fy);
+    x0=x0<0?0:(x0>pw-1?pw-1:x0); y0=y0<0?0:(y0>ph-1?ph-1:y0); const x1=Math.min(pw-1,x0+1),y1=Math.min(ph-1,y0+1);
+    let tx=fx-x0; tx=tx<0?0:(tx>1?1:tx); let ty=fy-y0; ty=ty<0?0:(ty>1?1:ty);
+    for(let c=0;c<3;c++){ const a=prev[(y0*pw+x0)*3+c],b=prev[(y0*pw+x1)*3+c],cc=prev[(y1*pw+x0)*3+c],dd=prev[(y1*pw+x1)*3+c];
+      content[p*3+c]=(a*(1-tx)+b*tx)*(1-ty)+(cc*(1-tx)+dd*tx)*ty; } } }
+function _emLevel(content,real,hole,W,H,P,emIters,rng){ const Nn=W*H,posW=W-P+1,posH=H-P+1; if(posW<=0||posH<=0) return;
+  const integ=new Int32Array((W+1)*(H+1));
+  for(let y=0;y<H;y++){ let rs=0; for(let x=0;x<W;x++){ rs+=hole[y*W+x]; integ[(y+1)*(W+1)+(x+1)]=integ[y*(W+1)+(x+1)]+rs; } }
+  const hcount=(x,y)=>{ const x2=x+P,y2=y+P; return integ[y2*(W+1)+x2]-integ[y*(W+1)+x2]-integ[y2*(W+1)+x]+integ[y*(W+1)+x]; };
+  const srcList=[],srcValid=new Uint8Array(posW*posH),tgtActive=new Uint8Array(posW*posH);
+  for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x,hc=hcount(x,y); if(hc===0){ srcValid[pp]=1; srcList.push(pp);} else tgtActive[pp]=1; }
+  if(!srcList.length) return;
+  const nnf=new Int32Array(posW*posH).fill(-1), dcur=new Float64Array(posW*posH);
+  function dist(tx,ty,sx,sy,best){ let s=0; for(let dy=0;dy<P;dy++){ let ti=((ty+dy)*W+tx)*3, si=((sy+dy)*W+sx)*3;
+      for(let dx=0;dx<P;dx++){ const dr=content[ti]-real[si],dg=content[ti+1]-real[si+1],db=content[ti+2]-real[si+2]; s+=dr*dr+dg*dg+db*db; ti+=3; si+=3; }
+      if(s>=best) return s; } return s; }
+  for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x; if(!tgtActive[pp])continue;
+    const sp=srcList[(rng()*srcList.length)|0]; nnf[pp]=sp; dcur[pp]=dist(x,y,sp%posW,(sp/posW)|0,Infinity); }
+  for(let em=0;em<emIters;em++){
+    for(let pass=0;pass<2;pass++){ const rev=pass===1,xs=rev?posW-1:0,xe=rev?-1:posW,ys=rev?posH-1:0,ye=rev?-1:posH,step=rev?-1:1;
+      for(let y=ys;y!==ye;y+=step)for(let x=xs;x!==xe;x+=step){ const pp=y*posW+x; if(!tgtActive[pp])continue;
+        let bestSp=nnf[pp],bestD=dcur[pp];
+        const nbx=x-step; if(nbx>=0&&nbx<posW){ const sp=nnf[y*posW+nbx]; if(sp>=0){ const sx=sp%posW+step,sy=(sp/posW)|0;
+          if(sx>=0&&sx<posW){ const cand=sy*posW+sx; if(srcValid[cand]){ const d=dist(x,y,sx,sy,bestD); if(d<bestD){bestD=d;bestSp=cand;} } } } }
+        const nby=y-step; if(nby>=0&&nby<posH){ const sp=nnf[nby*posW+x]; if(sp>=0){ const sx=sp%posW,sy=((sp/posW)|0)+step;
+          if(sy>=0&&sy<posH){ const cand=sy*posW+sx; if(srcValid[cand]){ const d=dist(x,y,sx,sy,bestD); if(d<bestD){bestD=d;bestSp=cand;} } } } }
+        let radius=Math.max(posW,posH),bsx=bestSp%posW,bsy=(bestSp/posW)|0;
+        while(radius>=1){ const rx=bsx+(((rng()*2-1)*radius)|0),ry=bsy+(((rng()*2-1)*radius)|0);
+          if(rx>=0&&rx<posW&&ry>=0&&ry<posH){ const cand=ry*posW+rx; if(srcValid[cand]){ const d=dist(x,y,rx,ry,bestD); if(d<bestD){bestD=d;bestSp=cand;bsx=rx;bsy=ry;} } }
+          radius=(radius/2)|0; }
+        nnf[pp]=bestSp; dcur[pp]=bestD; } }
+    const acc=new Float64Array(Nn*3),wgt=new Float64Array(Nn);
+    for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x; if(!tgtActive[pp])continue; const sp=nnf[pp]; if(sp<0)continue; const sx=sp%posW,sy=(sp/posW)|0;
+      for(let dy=0;dy<P;dy++){ let tp=(y+dy)*W+x, si=((sy+dy)*W+sx)*3; for(let dx=0;dx<P;dx++){ acc[tp*3]+=real[si];acc[tp*3+1]+=real[si+1];acc[tp*3+2]+=real[si+2]; wgt[tp]++; tp++; si+=3; } } }
+    for(let p=0;p<Nn;p++) if(hole[p]&&wgt[p]>0){ content[p*3]=acc[p*3]/wgt[p];content[p*3+1]=acc[p*3+1]/wgt[p];content[p*3+2]=acc[p*3+2]/wgt[p]; }
+  } }
+function pmComplete(fullRGB,fullHole,W,H,P,seed){ const rng=_mulberry32(seed>>>0||1);
+  const pyr=[{w:W,h:H,rgb:fullRGB,hole:fullHole}]; let w=W,h=H,rgb=fullRGB,hole=fullHole;
+  while(Math.min(w,h)>Math.max(24,P*2)){ const nw=Math.max(1,w>>1),nh=Math.max(1,h>>1); rgb=_downRGB(rgb,w,h,nw,nh); hole=_downHole(hole,w,h,nw,nh); pyr.unshift({w:nw,h:nh,rgb,hole}); w=nw;h=nh; }
+  let prev=null;
+  for(let i=0;i<pyr.length;i++){ const lv=pyr[i]; const content=lv.rgb.slice();
+    if(prev) _upInto(prev.content,prev.w,prev.h,content,lv.w,lv.h,lv.hole); else _bfsInit(content,lv.hole,lv.w,lv.h);
+    _emLevel(content,lv.rgb,lv.hole,lv.w,lv.h,P, i===0?10:(i<pyr.length-1?6:4), rng);
+    prev={content,w:lv.w,h:lv.h}; }
+  return prev.content; }
+// ✨ Auto-heal engine: PatchMatch a layer's footprint holes using the real coat/face around
+// them. Works on a downscaled crop (≤WORK px) around the hole for speed (<1s), then bilinear-
+// upscales the filled region back. Returns {out:Float32(N*3), hole} like inpaintRGB (only hole
+// pixels of `out` are meaningful). Falls back to null if there's no clean source to sample.
+function patchMatchInpaint(ownMask, holeMasks){
+  const W=S.iw,H=S.ih, sd=S.srcData.data, N=W*H;
+  const hole=new Uint8Array(N), sheet=new Uint8Array(N);
+  let hx0=W,hy0=H,hx1=-1,hy1=-1, any=false;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const p=y*W+x,o=p*4;
+    if(ownMask[o+3]>8){ sheet[p]=1; let hf=1; for(const kd of holeMasks) hf*=(1-kd[o+3]/255);
+      if(hf<0.5){ hole[p]=1; any=true; if(x<hx0)hx0=x;if(x>hx1)hx1=x;if(y<hy0)hy0=y;if(y>hy1)hy1=y; } } }
+  if(!any) return null;
+  const MARG=Math.round(Math.max(W,H)*0.05)+10;                           // context ring of real coat to sample from
+  const rx0=Math.max(0,hx0-MARG), ry0=Math.max(0,hy0-MARG), rx1=Math.min(W-1,hx1+MARG), ry1=Math.min(H-1,hy1+MARG);
+  const rw=rx1-rx0+1, rh=ry1-ry0+1, WORK=384, sc=Math.min(1,WORK/Math.max(rw,rh));
+  const ww=Math.max(8,Math.round(rw*sc)), wh=Math.max(8,Math.round(rh*sc)), P=7;
+  const wrgb=new Float32Array(ww*wh*3), whole=new Uint8Array(ww*wh);
+  for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){ const fx=Math.min(W-1,rx0+Math.round((x+0.5)*rw/ww-0.5)), fy=Math.min(H-1,ry0+Math.round((y+0.5)*rh/wh-0.5));
+    const fp=fy*W+fx, wp=y*ww+x;
+    if(!sheet[fp]||hole[fp]) whole[wp]=1;                                 // outside sheet OR real hole → PM target (outside ignored on writeback)
+    else { const o=fp*4; wrgb[wp*3]=sd[o];wrgb[wp*3+1]=sd[o+1];wrgb[wp*3+2]=sd[o+2]; } }
+  const filled=pmComplete(wrgb,whole,ww,wh,P,1234567);
+  const out=new Float32Array(N*3);
+  for(let Y=ry0;Y<=ry1;Y++)for(let X=rx0;X<=rx1;X++){ const p=Y*W+X; if(!hole[p])continue;
+    const gx=((X-rx0+0.5)*ww/rw)-0.5, gy=((Y-ry0+0.5)*wh/rh)-0.5; let x0=Math.floor(gx),y0=Math.floor(gy);
+    x0=x0<0?0:(x0>ww-1?ww-1:x0); y0=y0<0?0:(y0>wh-1?wh-1:y0); const x1=Math.min(ww-1,x0+1),y1=Math.min(wh-1,y0+1);
+    let tx=gx-x0;tx=tx<0?0:(tx>1?1:tx); let ty=gy-y0;ty=ty<0?0:(ty>1?1:ty);
+    for(let c=0;c<3;c++){ const a=filled[(y0*ww+x0)*3+c],b=filled[(y0*ww+x1)*3+c],cc=filled[(y1*ww+x0)*3+c],dd=filled[(y1*ww+x1)*3+c];
+      out[p*3+c]=(a*(1-tx)+b*tx)*(1-ty)+(cc*(1-tx)+dd*tx)*ty; } }
+  return {out, hole};
+}
+// Live skin-fill poured into the cut-out holes at composite time (gated by the 🩹 checkbox).
+function skinFillRGB(ownMask, holeMasks){
+  if(!S.skinFill || !holeMasks || !holeMasks.length) return null;
+  const r=inpaintRGB(ownMask, holeMasks, 2); return r ? r.out : null;
+}
+// Lazily give a layer a non-destructive BACKFILL canvas — real pixels painted UNDER the
+// base by the 🩹 clone-stamp / ✨ auto-heal. It overrides the live skin-fill wherever it
+// has alpha, is re-editable + undoable, and never touches the mover's own pixels.
+function layerBackfill(l){ if(!l.backfill){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih;
+    l.backfill=c; l.bfctx=c.getContext('2d',{willReadFrequently:true}); } return l.backfill; }
 function buildCut(l){
   if(l._cut!==undefined && l._cut!==null) return l._cut;
   const W=S.iw,H=S.ih,sd=S.srcData.data; const md=l.mctx.getImageData(0,0,W,H).data;
   let any=false; for(let p=3;p<md.length;p+=4){ if(md[p]>8){ any=true; break; } }
   if(!any){ l._cut=null; return null; }
+  const {skin:skinMasks, clear:clearMasks}=splitHoles(punchKids(l));   // skin-filled holes vs see-through holes
+  const skin=skinFillRGB(md, skinMasks);   // skin to pour into the skin-filled holes (null when none)
   const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
   const out=cx.createImageData(W,H); const od=out.data;
-  for(let p=0;p<W*H;p++){ const o=p*4; const a=md[o+3]; if(!a) continue;
-    od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(a/255)); }
-  cx.putImageData(out,0,0); l._cut=c; return c;
+  for(let p=0;p<W*H;p++){ const o=p*4; const ma=md[o+3]; if(!ma) continue;
+    let hfClear=1; for(const kd of clearMasks) hfClear*=(1-kd[o+3]/255);   // see-through holes punch the alpha
+    if(skin){ let hfSkin=1; for(const kd of skinMasks) hfSkin*=(1-kd[o+3]/255); const t=1-hfSkin;
+      od[o]=sd[o]*(1-t)+skin[p*3]*t; od[o+1]=sd[o+1]*(1-t)+skin[p*3+1]*t; od[o+2]=sd[o+2]*(1-t)+skin[p*3+2]*t;
+      od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
+    else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
+  }
+  cx.putImageData(out,0,0);
+  // 🩹 clone-stamped / auto-healed pixels composite OVER the base — and because they can extend
+  // BEYOND the figure mask (rebuilt belt under where the arm swings away), drawImage them whole so
+  // the base GROWS to include the healed footprint, not just the pixels already inside md.
+  if(l.backfill) cx.drawImage(l.backfill,0,0);
+  l._cut=c; return c;
 }
+function layerById(id){ return S.layers.find(x=>x.id===id) || null; }
+// a layer's own swing angle at the current preview time
+function swingAngle(l){ if(!l.pivot) return 0;
+  const amp=(l.swingDeg??10)*Math.PI/180, spd=l.speed??1; return amp*Math.sin(S.previewT*2.2*spd+(l._phase||0)); }
+// apply ONE layer's own transform (tuck + swing about its pivot) to the current ctx
+function applyLayerXform(l){ ctx.translate(l.tuckX||0, l.tuckY||0);
+  if(l.pivot){ const a=swingAngle(l); ctx.translate(l.pivot.x,l.pivot.y); ctx.rotate(a); ctx.translate(-l.pivot.x,-l.pivot.y); } }
+// the parent chain (root-most first), cycle-guarded — so a child rides every ancestor's motion
+function ancestorsOf(l){ const out=[]; const seen=new Set([l.id]);
+  let p=(l.parent!=null)?layerById(l.parent):null;
+  while(p && !seen.has(p.id)){ out.unshift(p); seen.add(p.id); p=(p.parent!=null)?layerById(p.parent):null; }
+  return out; }
 function renderPreview(W,H){
   ctx.fillStyle='#0f1326'; ctx.fillRect(0,0,W,H);
   ctx.save(); ctx.translate(S.view.x,S.view.y); ctx.scale(S.view.zoom,S.view.zoom); ctx.imageSmoothingEnabled=true;
   for(const l of S.layers){ if(!l.visible) continue; const cut=buildCut(l); if(!cut) continue;
-    if(l.role==='mover'){ const tx=l.tuckX||0, ty=l.tuckY||0;
-      ctx.save(); ctx.translate(tx,ty);                      // tuck toward body (hide the cut gap)
-      if(l.pivot){ const amp=(l.swingDeg??10)*Math.PI/180, spd=l.speed??1;
-        const ang=amp*Math.sin(S.previewT*2.2*spd+(l._phase||0));
-        ctx.translate(l.pivot.x,l.pivot.y); ctx.rotate(ang); ctx.translate(-l.pivot.x,-l.pivot.y); }
+    if(l.role==='mover'){
+      ctx.save();
+      for(const anc of ancestorsOf(l)) applyLayerXform(anc);  // ride the parent chain (e.g. the head)
+      applyLayerXform(l);                                     // + this layer's own tuck/swing
       ctx.drawImage(cut,0,0); ctx.restore();
     } else ctx.drawImage(cut,0,0);
   }
   ctx.restore();
-  // mark un-pinned movers so she knows to pin a joint
-  if(S.layers.some(l=>l.role==='mover'&&!l.pivot)){ ctx.fillStyle='#ffd166'; ctx.font='13px sans-serif';
-    ctx.fillText('⚠ pin a 🎯 joint on each mover so it swings', 12, H-14); }
+  // a mover only needs its OWN 🎯 joint if it isn't wired to a parent — one riding the head (Swings with)
+  // uses the head's joint, so don't nag about it. Warn only about movers that won't move at all.
+  const stuck=S.layers.filter(l=>l.role==='mover' && !l.pivot && l.parent==null);
+  if(stuck.length){ ctx.fillStyle='#ffd166'; ctx.font='13px sans-serif';
+    const who=stuck.length<=3 ? stuck.map(l=>l.name).join(', ') : stuck.length+' movers';
+    ctx.fillText('⚠ '+who+': pin a 🎯 joint — or wire it to the head via "Swings with" — so it moves', 12, H-14); }
 }
 let previewRAF=0, previewStart=0;
 function setPreview(on){
@@ -448,18 +899,52 @@ function setPreview(on){
 }
 
 function draw(){
+  syncCanvasSize();                                   // buffer must match its CSS box or render drifts from touch-mapping
   const dpr=window.devicePixelRatio||1; const W=cv.width/dpr, H=cv.height/dpr;
   ctx.clearRect(0,0,W,H);
   if(!S.img) return;
   if(S.preview){ renderPreview(W,H); return; }
+  if(S.mode==='face'){ renderFace(W,H); return; }
   const v=S.view;
   ctx.save();
   ctx.translate(v.x,v.y); ctx.scale(v.zoom,v.zoom);
   ctx.imageSmoothingEnabled=true;
   ctx.drawImage(S.src,0,0);
-  for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
-    ctx.globalAlpha = (i===S.active)?0.55:0.20; ctx.drawImage(l.mc,0,0); }
-  ctx.globalAlpha=1;
+  // 🩹 PATCH MODE reveals the holes on the layer you're patching — the ACTIVE layer if it has
+  // holes (eye cut off the head → reveal the HEAD, not the base), else any layer that does, else
+  // fall back to the base. (Previously it only ever revealed the base, so head/mouth holes stayed
+  // invisible — the exact "I can't see the holes" problem.)
+  const revealBase = (S.tool==='clone') ? patchTarget() : null;
+  if(revealBase){
+    // lift the pieces off this layer so the hole they leave is actually visible: punch each
+    // cut-out footprint transparent, tint the empty hole magenta, then show the patched pixels
+    // filling it — so you can see the gap AND watch it fill as you clone/heal.
+    const W0=S.iw,H0=S.ih;
+    const kids=holeKids(revealBase).filter(k=>!k.seeThrough && k.visible);
+    // The hole = the mover's WHOLE footprint. When the arm swings away the base must have coat/belt
+    // behind it, so the base has to GROW to cover the full footprint — even the part hanging outside
+    // the current figure mask (84% of the elf's arm). We lift the whole mover off (so it stops
+    // hiding what's below) and glow the footprint magenta; ✨ Auto-heal then rebuilds base texture
+    // there (sampled from the real belt/coat around it) and the magenta recedes as it fills.
+    const hole=document.createElement('canvas'); hole.width=W0; hole.height=H0; const hx=hole.getContext('2d');
+    for(const k of kids) hx.drawImage(k.mc,0,0);
+    ctx.globalCompositeOperation='destination-out'; ctx.drawImage(hole,0,0);  // lift movers → holes go transparent
+    ctx.globalCompositeOperation='source-over';
+    if(kids.length){                                                // magenta backdrop BEHIND, so it shows only in the empty holes
+      const mh=document.createElement('canvas'); mh.width=W0; mh.height=H0; const mx=mh.getContext('2d');
+      mx.drawImage(hole,0,0);
+      mx.globalCompositeOperation='source-in'; mx.fillStyle='rgba(255,45,170,0.80)'; mx.fillRect(0,0,W0,H0);
+      ctx.globalCompositeOperation='destination-over'; ctx.drawImage(mh,0,0); ctx.globalCompositeOperation='source-over';
+    }
+    if(revealBase.backfill) ctx.drawImage(revealBase.backfill,0,0);  // patched texture covers the magenta where you've healed
+    // (no base-colour veil here — it cast a 30% purple tint over the whole figure and read as a
+    //  mysterious "dark colour". The real source pixels + magenta holes already show what's going on.)
+  } else {
+    for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
+    for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
+      ctx.globalAlpha = (i===S.active)?0.55:0.20; ctx.drawImage(l.mc,0,0); }
+    ctx.globalAlpha=1;
+  }
   ctx.restore();
 
   // pivots (screen space)
@@ -473,21 +958,113 @@ function draw(){
   if(S.lasso && S.lasso.length){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
     ctx.beginPath(); for(let k=0;k<S.lasso.length;k++){ const p=S.lasso[k]; const sx=v.x+p.x*v.zoom, sy=v.y+p.y*v.zoom;
       k?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);} ctx.stroke(); ctx.setLineDash([]); }
-  // brush cursor
+  // brush cursor (brush/erase only — clone draws its own source-preview cursor below)
   if(S.cursor && (S.tool==='brush'||S.tool==='erase')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,S.brush*v.zoom/2,0,7); ctx.stroke(); }
+  // 🩹 clone: show EXACTLY what's copied. The source spot is ringed at brush size (= the patch that
+  // gets copied), and a live ghost of those very pixels is previewed under the cursor so you can see
+  // what will land where before you drag. Both rings are the same size = the copy footprint.
+  if(S.tool==='clone' && S.cloneMode==='box'){
+    // ▭ box copy-paste overlay: the rectangle being grabbed, then a ghost of the grabbed patch under the cursor
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom;
+      const w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else if(S.clonePatch && S.cursor){                          // ghost of the grabbed patch, centred on the cursor
+      const pw=S.clonePatch.width*v.zoom, ph=S.clonePatch.height*v.zoom;
+      ctx.save(); ctx.globalAlpha=0.7; ctx.imageSmoothingEnabled=true;
+      ctx.drawImage(S.clonePatch, S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.restore();
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]);
+      ctx.strokeRect(S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.setLineDash([]);
+    } else if(S.cursor && S.boxCapturing){                        // armed to grab → amber hint crosshair
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(S.cursor.x-12,S.cursor.y); ctx.lineTo(S.cursor.x+12,S.cursor.y);
+      ctx.moveTo(S.cursor.x,S.cursor.y-12); ctx.lineTo(S.cursor.x,S.cursor.y+12); ctx.stroke();
+    }
+  } else if(S.tool==='clone' && S.cloneMode==='pattern'){
+    // 🧵 pattern: show the grab box while sampling, the painted fill-area tinted, and a brush ring
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom, w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else {
+      if(S.patTarget && S.patPainted){ ctx.save(); ctx.globalAlpha=0.45; ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(S.patTarget, v.x, v.y, S.iw*v.zoom, S.ih*v.zoom); ctx.restore(); }   // the area you've painted
+      if(S.cursor){ const rz=Math.max(3,S.brush*v.zoom/2);
+        ctx.strokeStyle=S.clonePatch?'#39d98a':'#ffd166cc'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); }
+    }
+  } else if(S.tool==='clone'){
+    const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
+    if(S.cloneSrc){
+      const scx = S.cloneSrc.x, scy = S.cloneSrc.y;      // fixed source — the picked spot you stamp from
+      const px=v.x+scx*v.zoom, py=v.y+scy*v.zoom;
+      // the copy footprint at the source (solid green ring + centre dot)
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px,py,rz,0,7); ctx.stroke();
+      ctx.fillStyle='#39d98a'; ctx.beginPath(); ctx.arc(px,py,2.5,0,7); ctx.fill();
+      // live ghost preview of the copied pixels under the cursor
+      if(S.cursor){ const ri=Math.max(2,S.brush/2), di=Math.ceil(ri*2)+2;
+        const t=document.createElement('canvas'); t.width=di; t.height=di; const tc=t.getContext('2d');
+        tc.drawImage(S.src, Math.round(scx-ri),Math.round(scy-ri),di,di, 0,0,di,di);
+        tc.globalCompositeOperation='destination-in'; tc.fillStyle='#000';
+        tc.beginPath(); tc.arc(di/2,di/2,ri,0,7); tc.fill();
+        ctx.save(); ctx.globalAlpha=0.75; ctx.imageSmoothingEnabled=true;
+        ctx.drawImage(t, S.cursor.x-rz,S.cursor.y-rz, rz*2,rz*2); ctx.restore();
+        ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+    } else if(S.cursor){                                          // no source yet → dashed amber ring hinting to pick one
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+  }
 }
 
-/* ---------- mask editing (canvas-op based) ---------- */
-function snap(l){ return {id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
-function pushUndo(){ const l=activeLayer(); if(!l)return;
-  S.undo.push(snap(l)); if(S.undo.length>40) S.undo.shift();
-  S.redo.length=0; markDirty(); }       // a new action forks history → clear redo (+ autosave)
+/* ---------- history: one timeline covering BOTH mask edits and expression poses ----------
+   Entry is either {k:'mask', id, data} or {k:'pose', id, expr, pose} (pose = pre-change clone | null). */
+function snap(l){ return {k:'mask', id:l.id, data:l.mctx.getImageData(0,0,S.iw,S.ih)}; }
+function snapBackfill(l){ layerBackfill(l); return {k:'backfill', id:l.id, data:l.bfctx.getImageData(0,0,S.iw,S.ih)}; }
+function pushBackfillUndo(l){ if(l) pushHist(snapBackfill(l)); }                   // 🩹 patch/heal edit
+function clonePose(p){ return p ? JSON.parse(JSON.stringify(p)) : null; }
+function snapPose(l, expr){ return {k:'pose', id:l.id, expr, pose:clonePose(l.poses&&l.poses[expr])}; }
+function pushHist(entry){ S.undo.push(entry); if(S.undo.length>60) S.undo.shift(); S.redo.length=0; markDirty(); }
+function pushUndo(){ const l=activeLayer(); if(!l)return; pushHist(snap(l)); }   // mask edit (brush/wand/…)
+function pushPoseUndo(l, expr){ if(l) pushHist(snapPose(l, expr)); }             // expression/warp edit
+// make a range slider take ONE pose snapshot per interaction, robust to touch/mouse/keyboard
+// (don't rely on pointerdown — some devices fire `input` with no pointerdown). Call BEFORE wiring oninput.
+function histSlider(el, l, expr){ let armed=true;
+  el.addEventListener('input', ()=>{ if(armed){ pushPoseUndo(l, expr); armed=false; } });  // snapshot on 1st input
+  el.addEventListener('change', ()=>{ armed=true; });                                       // drag ended → re-arm
+  el.addEventListener('pointerdown', ()=>{ armed=true; }); }                                // new drag → re-arm
 function restoreFrom(fromStack, toStack, verb){
   const u=fromStack.pop(); if(!u){ toast('Nothing to '+verb); return; }
+  if(u.k==='layerdel'){                                   // undo a deletion → re-insert the saved layer
+    toStack.push({k:'layeradd', id:u.id});               // inverse = delete it again on redo
+    const at=Math.min(u.idx, S.layers.length);
+    S.layers.splice(at, 0, u.layer); u.layer._cut=null;
+    S.active=at; S.warpSel=null; S.warpDrag=null; S.faceDrag=null;
+    renderLayerList(); draw(); toast('Layer restored'); return;
+  }
+  if(u.k==='layeradd'){                                   // redo a deletion → remove it again
+    const i=S.layers.findIndex(x=>x.id===u.id);
+    if(i>=0){ toStack.push({k:'layerdel', idx:i, id:u.id, layer:S.layers[i]});
+      S.layers.splice(i,1);
+      if(S.active===i) S.active=Math.min(i, S.layers.length-1); else if(S.active>i) S.active--; }
+    S.warpSel=null; renderLayerList(); draw(); toast('Layer deleted'); return;
+  }
   const l=S.layers.find(x=>x.id===u.id); if(!l){ toast('Layer gone'); return; }
-  toStack.push(snap(l));                // save current so the inverse can bring it back
-  l.mctx.putImageData(u.data,0,0); S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
+  if(u.k==='pose'){
+    toStack.push(snapPose(l, u.expr));                     // save current pose so the inverse restores it
+    if(u.pose) l.poses[u.expr]=clonePose(u.pose); else if(l.poses) delete l.poses[u.expr];
+    S.active=S.layers.indexOf(l); S.warpSel=null; S.warpDrag=null; S.faceDrag=null;
+    if(u.expr!==S.expr){ S.expr=u.expr; if(typeof renderExprChips==='function') renderExprChips(); }
+    l._cut=null; renderLayerList(); if(typeof renderExprPose==='function') renderExprPose();
+    if(typeof renderWarpPanel==='function') renderWarpPanel(); draw(); toast(verb==='undo'?'Undo':'Redo'); return;
+  }
+  if(u.k==='backfill'){
+    toStack.push(snapBackfill(l));                         // save current backfill so the inverse restores it
+    layerBackfill(l); l.bfctx.putImageData(u.data,0,0); l._cut=null;
+    S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo'); return;
+  }
+  toStack.push(snap(l));                                   // save current mask so the inverse restores it
+  l.mctx.putImageData(u.data,0,0); l._cut=null; S.active=S.layers.indexOf(l); renderLayerList(); draw(); toast(verb==='undo'?'Undo':'Redo');
 }
 function doUndo(){ restoreFrom(S.undo, S.redo, 'undo'); }
 function doRedo(){ restoreFrom(S.redo, S.undo, 'redo'); }
@@ -503,10 +1080,189 @@ document.querySelectorAll('#wandMode button').forEach(b=>b.onclick=()=>{
 window.addEventListener('keydown', e=>{ const mod=e.metaKey||e.ctrlKey; if(!mod)return; const k=e.key.toLowerCase();
   if(k==='z'){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); } else if(k==='y'){ e.preventDefault(); doRedo(); } });
 
-function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.mctx;
+function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return;
+  // 🧽 Erase → White: wipe the COLOUR to white without cutting the shape — paint opaque white onto
+  // the layer's backfill (which composites over the source in both the edit view and the export).
+  if(erase && S.eraseTo==='white'){ layerBackfill(l); const b=l.bfctx;
+    b.globalCompositeOperation='source-over'; b.fillStyle='#ffffff';
+    b.beginPath(); b.arc(ix,iy,S.brush/2,0,7); b.fill(); l._cut=null; return; }
+  const m=l.mctx;
   m.globalCompositeOperation = erase?'destination-out':'source-over';
   m.fillStyle = l.color; m.beginPath(); m.arc(ix,iy,S.brush/2,0,7); m.fill();
   m.globalCompositeOperation='source-over'; }
+
+// 🩹 clone/heal one soft dab. Like GIMP's clone brush: the picked spot is an ANCHOR, and while you
+// drag within a stroke the source MOVES in parallel (S.cloneOff, set on pointer-down) — so a drag
+// copies a real moving region of belt/coat, not the same dot tiled. Each new stroke re-anchors to
+// the picked spot (non-aligned across strokes → no drift). With Infuse>0 the copied patch is also
+// tone-matched to the REAL pixels bordering the hole (sampled from the original around the dest), so
+// it melds in seamlessly instead of looking like a pasted square. Feathered + clipped to the work area.
+function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
+  const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
+  const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
+  // FIXED source: every dab copies the SAME picked area ("stamp the set area at the clicked points").
+  // Non-aligned on purpose — over a big hole an aligned source sweeps off the clean belt into the arm.
+  const srcCx = S.cloneSrc.x, srcCy = S.cloneSrc.y;
+  const sx0=Math.round(srcCx-r), sy0=Math.round(srcCy-r);
+  const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
+  tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the (moving) source
+  // ✨ Infuse: shift the patch's mean colour toward the REAL coat bordering the hole so it blends in.
+  // Dest tone comes from S._cleanSrc (original with the hole punched out) → the lifted mover's own
+  // pixels (the arm) are transparent there and can't be averaged in. Default heal 0 = clean raw copy.
+  const heal=S.cloneHeal||0;
+  if(heal>0){ try{
+      // Tone-match COAT→COAT: skip near-black ink outline / dark hair pixels (INK_DARK) so the border
+      // mean reflects the coat colour, not the outline — else patching near the top of the figure drags
+      // the whole patch dark. Fall back to the plain mean if a region is entirely dark.
+      const INK_DARK=48;
+      const sMean=meanRGB(S.src, sx0,sy0,d,d, INK_DARK) || meanRGB(S.src, sx0,sy0,d,d); // tone of the copied texture
+      const dMean=meanRGB(S._cleanSrc||S.src, dx0,dy0,d,d, INK_DARK) || meanRGB(S._cleanSrc||S.src, dx0,dy0,d,d) || sMean; // REAL coat around the hole (arm + ink outline excluded)
+      if(sMean&&dMean){ const img=tc.getImageData(0,0,d,d), p=img.data;
+        const kr=heal*(dMean[0]-sMean[0]), kg=heal*(dMean[1]-sMean[1]), kb=heal*(dMean[2]-sMean[2]);
+        for(let i=0;i<p.length;i+=4){ p[i]=clamp8(p[i]+kr); p[i+1]=clamp8(p[i+1]+kg); p[i+2]=clamp8(p[i+2]+kb); }
+        tc.putImageData(img,0,0); }
+    }catch(e){} }
+  tc.globalCompositeOperation='destination-in';                    // ∩ radial soft brush
+  const inner=r*(1-Math.min(0.95,(S.cloneSoft||0)*0.95));
+  const g=tc.createRadialGradient(d/2,d/2,Math.max(0,inner), d/2,d/2,r);
+  g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  tc.fillStyle=g; tc.fillRect(0,0,d,d);
+  const clip=S._strokeClip||l.mc;                                   // ∩ base ∪ hole footprints (so you can paint belt UNDER the arm, not just on the figure)
+  tc.drawImage(clip, dx0,dy0,d,d, 0,0,d,d);
+  tc.globalCompositeOperation='source-over';
+  layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
+
+// ── 🧵 Pattern fill ────────────────────────────────────────────────────────────
+// A controllable (not auto) fill: you SAMPLE a pattern from a picked region (S.clonePatch),
+// then PAINT a freeform area (S.patTarget) — e.g. a bending belt — and on release that area
+// is filled with the sampled pattern, seamlessly synthesised (no visible tiling) and feathered
+// into its surroundings. Uses the verified PatchMatch core to extend the swatch over the area.
+function patTargetBegin(){ if(!S.patTarget){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih; S.patTarget=c; S.patTargetCtx=c.getContext('2d',{willReadFrequently:true}); }
+  S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
+function patTargetDab(ix,iy){ if(!S.patTarget)patTargetBegin(); const m=S.patTargetCtx;
+  m.fillStyle='#fff'; m.beginPath(); m.arc(ix,iy,Math.max(2,S.brush/2),0,7); m.fill(); S.patPainted=true; }
+// Seamlessly extend `swatch` to cover a bw×bh rectangle via PatchMatch (swatch = source band on
+// top, the rectangle below = hole synthesised from it). Returns a bw×bh canvas. ≤300px working res.
+function synthFromSwatch(swatch,bw,bh){ const P=7, WORK=300, sc=Math.min(1,WORK/Math.max(bw,bh));
+  const tw=Math.max(16,Math.round(bw*sc)), th=Math.max(16,Math.round(bh*sc));
+  const bandH=Math.min(140,Math.max(P*5,Math.round(th*0.6))), W2=tw, H2=bandH+th;
+  const cv=document.createElement('canvas'); cv.width=W2; cv.height=H2; const cx=cv.getContext('2d',{willReadFrequently:true});
+  const ss=Math.max(tw/swatch.width,bandH/swatch.height), sdw=swatch.width*ss, sdh=swatch.height*ss;  // cover-scale, tile to fill the source band
+  for(let ty=0;ty<bandH;ty+=sdh)for(let tx=0;tx<W2;tx+=sdw) cx.drawImage(swatch,tx,ty,sdw,sdh);
+  const id=cx.getImageData(0,0,W2,H2).data, rgb=new Float32Array(W2*H2*3), hole=new Uint8Array(W2*H2);
+  for(let p=0,i=0;p<W2*H2;p++,i+=4){ if(p>=bandH*W2) hole[p]=1; else { rgb[p*3]=id[i];rgb[p*3+1]=id[i+1];rgb[p*3+2]=id[i+2]; } }
+  const filled=pmComplete(rgb,hole,W2,H2,P,777);
+  const o=document.createElement('canvas'); o.width=tw; o.height=th; const oc=o.getContext('2d'), od=oc.createImageData(tw,th);
+  for(let y=0;y<th;y++)for(let x=0;x<tw;x++){ const sp=(y+bandH)*W2+x, dp=(y*tw+x)*4; od.data[dp]=filled[sp*3];od.data[dp+1]=filled[sp*3+1];od.data[dp+2]=filled[sp*3+2];od.data[dp+3]=255; }
+  oc.putImageData(od,0,0);
+  const full=document.createElement('canvas'); full.width=bw; full.height=bh; const fc=full.getContext('2d'); fc.imageSmoothingEnabled=true; fc.drawImage(o,0,0,bw,bh); return full; }
+// Fill the painted S.patTarget area with the sampled pattern, feathered (infused) at the edges,
+// clipped to the sheet, onto the layer's non-destructive backfill. Undoable.
+function fillPatternTarget(){ const l=patchTarget(); if(!l){ toast('No layer to fill'); return; }
+  if(!S.clonePatch){ toast('Pick a pattern first — tap ⬚ Pick pattern and drag over the texture'); return; }
+  if(!S.patTarget||!S.patPainted){ return; }
+  const W=S.iw,H=S.ih, td=S.patTargetCtx.getImageData(0,0,W,H).data;
+  let x0=W,y0=H,x1=-1,y1=-1; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(td[(y*W+x)*4+3]>8){ if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y; } }
+  if(x1<0){ return; } const bw=x1-x0+1, bh=y1-y0+1;
+  toast('🧵 Filling the area with the pattern…');
+  requestAnimationFrame(()=>{ setTimeout(()=>{                              // defer so the toast + painted overlay paint first
+    const synth=synthFromSwatch(S.clonePatch, bw, bh);
+    const t=document.createElement('canvas'); t.width=bw; t.height=bh; const tc=t.getContext('2d',{willReadFrequently:true});
+    tc.drawImage(synth,0,0);
+    // mask to the painted shape, blurred by Softness → feathered/infused edges
+    const f=Math.max(0, (S.cloneSoft||0)*Math.min(bw,bh)*0.14);
+    tc.globalCompositeOperation='destination-in';
+    tc.filter=f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.drawImage(S.patTarget, x0,y0,bw,bh, 0,0,bw,bh); tc.filter='none';
+    tc.drawImage(grownSheet(l), x0,y0,bw,bh, 0,0,bw,bh);   // ∩ sheet (base ∪ footprints) — stay on the figure
+    tc.globalCompositeOperation='source-over';
+    pushBackfillUndo(l); layerBackfill(l); l.bfctx.drawImage(t, x0,y0); l._cut=null;
+    S.patTargetCtx.clearRect(0,0,W,H); S.patPainted=false; draw(); markDirty();
+    toast('🧵 Filled with the pattern — paint more, ⬚ to re-pick, ↩︎ to undo');
+  },0); }); }
+// mean RGB of an area of an image/canvas, over its OPAQUE pixels only (transparent hole pixels ignored).
+// Returns [r,g,b] or null if nothing opaque. Used by Infuse to read the hole's real surrounding tone.
+let _meanCv=null;
+function meanRGB(srcImg, x,y,w,h, minLuma){
+  if(!_meanCv){ _meanCv=document.createElement('canvas'); }
+  _meanCv.width=w; _meanCv.height=h; const c=_meanCv.getContext('2d');
+  c.clearRect(0,0,w,h); c.drawImage(srcImg, x,y,w,h, 0,0,w,h);
+  const p=c.getImageData(0,0,w,h).data; let r=0,g=0,b=0,n=0;
+  for(let i=0;i<p.length;i+=4){ const a=p[i+3]; if(a<=24) continue;              // transparent → skip
+    if(minLuma){ const lum=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2]; if(lum<minLuma) continue; } // near-black ink outline → skip
+    r+=p[i]; g+=p[i+1]; b+=p[i+2]; n++; }
+  return n? [r/n,g/n,b/n] : null; }
+function clamp8(v){ return v<0?0:v>255?255:v; }
+// A copy of the original source with the layer's hole footprints (the lifted movers, e.g. the arm)
+// punched OUT (transparent). Infuse reads dest tone from this so it matches the real coat bordering
+// the hole and never averages in the mover's own pixels. Built once per stroke, cleared on pointer-up.
+function cleanSrcFor(l){
+  const w=S.src.width,h=S.src.height; const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d'); cx.drawImage(S.src,0,0);
+  const kids=holeKids(l).filter(k=>!k.seeThrough && k.visible);
+  cx.globalCompositeOperation='destination-out'; for(const k of kids) cx.drawImage(k.mc,0,0);
+  cx.globalCompositeOperation='source-over'; return c; }
+
+// ▭ Grab the dragged rectangle of ORIGINAL texture into S.clonePatch (the thing you then stamp).
+// This copies a real rectangle — buckle, strap, weave and all — so what you stamp keeps its detail,
+// not a single averaged tone. Too-small drags are rejected (an accidental tap).
+function captureBox(b){
+  const x0=Math.min(b.x0,b.x1), y0=Math.min(b.y0,b.y1);
+  const w=Math.round(Math.abs(b.x1-b.x0)), h=Math.round(Math.abs(b.y1-b.y0));
+  if(w<6||h<6){ toast('Box too small — drag a rectangle over a clean bit of belt/coat'); return false; }
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(S.src, Math.round(x0),Math.round(y0),w,h, 0,0,w,h);
+  S.clonePatch=c;
+  if(S.cloneMode==='pattern'){ const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+    toast('🧵 Pattern sampled ('+w+'×'+h+') — now PAINT the area to fill (a bending belt, any shape)'); return true; }
+  S.cloneMode='box';
+  toast('▭ Grabbed a '+w+'×'+h+' patch — now tap or drag over the magenta to stamp it'); return true; }
+
+// ▭ Stamp the grabbed patch centred at (ix,iy), with feathered edges so overlapping stamps connect
+// smoothly, clipped to the work area (base ∪ hole footprints). Onto the non-destructive backfill.
+function pasteClonePatch(ix,iy){ const l=patchTarget(); if(!l||!S.clonePatch)return;
+  const pw=S.clonePatch.width, ph=S.clonePatch.height;
+  const dx0=Math.round(ix-pw/2), dy0=Math.round(iy-ph/2);
+  const t=document.createElement('canvas'); t.width=pw; t.height=ph; const tc=t.getContext('2d');
+  tc.drawImage(S.clonePatch,0,0);
+  // feather: a blurred inset rectangle as the alpha mask → soft edges incl. corners (smooth joins)
+  const f=Math.max(0, Math.min(Math.min(pw,ph)/2-1, (S.cloneSoft||0)*Math.min(pw,ph)*0.45));
+  tc.globalCompositeOperation='destination-in';
+  tc.filter = f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.fillStyle='#000';
+  tc.fillRect(f,f, pw-2*f, ph-2*f); tc.filter='none';
+  const clip=S._strokeClip||l.mc;                                  // ∩ base ∪ footprints (still destination-in → intersect)
+  tc.drawImage(clip, dx0,dy0,pw,ph, 0,0,pw,ph);
+  tc.globalCompositeOperation='source-over';
+  layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
+
+// ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
+// this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
+function autoHealHoles(){ if(!S.img)return; let l=patchTarget();
+  // the hole set the export punches lives on whatever the piece was cut FROM. If the selected
+  // layer has none, auto-jump to a layer that does — so a wrong selection heals instead of scolding.
+  if(!l || !openHoleKids(l).length){ const alt=S.layers.find(L=>openHoleKids(L).length);
+    if(alt){ l=alt; S.active=S.layers.indexOf(alt); renderLayerList(); toast('✨ Healing '+alt.name+' — that’s where the holes are'); } }
+  const kids=l?openHoleKids(l):[];
+  if(!kids.length){
+    const stOnly = S.layers.flatMap(L=>holeKids(L)).filter(k=>k.seeThrough);
+    toast(stOnly.length ? ('🔲 '+stOnly[0].name+'’s hole is SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on it to heal it')
+                        : 'No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
+  // Inpaint over the GROWN sheet (base ∪ hole footprints): the whole footprint is the hole to fill,
+  // the surrounding real base pixels (belt/coat) are the source. This rebuilds the base UNDER the
+  // mover — including the part outside the original figure mask — instead of only the thin overlap.
+  const md=grownSheet(l).getContext('2d',{willReadFrequently:true}).getImageData(0,0,S.iw,S.ih).data;
+  const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
+  toast('✨ Reconstructing texture with PatchMatch…');
+  // defer the heavy fill one frame so the toast paints first (it's a ~0.5–1s synchronous pass)
+  requestAnimationFrame(()=>{ setTimeout(()=>{
+    let res=null; try{ res=patchMatchInpaint(md, holeMasks); }catch(e){ res=null; }   // PatchMatch content-aware fill
+    if(!res) res=inpaintRGB(md, holeMasks, 1);                                         // fallback: nearest-colour fill
+    if(!res){ toast('Nothing to heal'); return; }
+    pushBackfillUndo(l); layerBackfill(l);
+    const img=l.bfctx.getImageData(0,0,S.iw,S.ih), dd=img.data, {out,hole}=res;
+    for(let p=0;p<S.iw*S.ih;p++){ if(hole[p]){ const o=p*4; dd[o]=out[p*3];dd[o+1]=out[p*3+1];dd[o+2]=out[p*3+2];dd[o+3]=255; } }
+    l.bfctx.putImageData(img,0,0); l._cut=null; draw(); markDirty();
+    toast('✨ Holes healed with PatchMatch — 🩹 Patch to refine, ↩︎ to undo');
+  },0); }); }
 
 function fillLasso(pts){ const l=activeLayer(); if(!l||pts.length<3)return; pushUndo();
   const m=l.mctx; m.fillStyle=l.color; m.beginPath(); m.moveTo(pts[0].x,pts[0].y);
@@ -588,12 +1344,45 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
     S.pinch={ d:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),
       mid:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}, zoom:S.view.zoom, vx:S.view.x, vy:S.view.y }; return; }
   if(S.preview) return;                 // preview is play-only; single-finger does nothing
+  if(S.mode==='face'){ faceDown(evPos(e)); return; }   // drag a feature to pose the current expression
   const sp=evPos(e); const ip=s2i(sp.x,sp.y);
+  { const al=activeLayer(); if(al && al.locked){ toast('🔒 '+al.name+' is locked — tap 🔓 in the Layers list to edit it'); return; } }
   if(S.tool==='pivot'){ const l=activeLayer(); if(l){ l.pivot={x:Math.round(ip.x),y:Math.round(ip.y)}; draw(); markDirty(); } return; }
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
+  if(S.tool==='clone'){
+    // ▭ box mode: grab a rectangle, or stamp the grabbed patch
+    if(S.boxCapturing){ S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; return; }
+    if(S.cloneMode==='pattern'){                                     // 🧵 pattern: sample a box, else paint the fill area
+      if(!S.clonePatch){ S.boxCapturing=true; const pp=document.getElementById('patPick'); if(pp)pp.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; toast('Drag a box over the pattern to sample it'); return; }
+      drawing=true; patTargetBegin(); patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
+    if(S.cloneMode==='box'){
+      if(!S.clonePatch){ S.boxCapturing=true; const gb=document.getElementById('boxGrab'); if(gb)gb.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true;
+        toast('Drag a rectangle over a clean bit of belt/coat to copy it'); return; }
+      const l=patchTarget(); if(!l)return; drawing=true;
+      S._strokeClip=grownSheet(l);
+      pushBackfillUndo(l); l._cut=null; pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
+    if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
+      const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
+      draw(); toast('🎯 Source set — now paint over the hole'); return; }
+    if(!S.cloneSrc){                               // no source yet → arm source-picking so the first tap sets the spot
+      S.cloneSampling=true; const b=document.getElementById('cloneSample'); if(b)b.classList.add('on');
+      toast('🎯 First tap a clean patch of belt/coat to copy from, then paint over the magenta'); return; }
+    const l=patchTarget(); if(!l)return;           // paint the SHEET the hole lives in, never the selected mover
+    drawing=true;
+    S._cleanSrc=cleanSrcFor(l);                    // original with the hole punched out — so Infuse tone-matches the real coat, never the lifted arm
+    S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
+    pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
+  }
   // brush / erase
-  drawing=true; pushUndo(); paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
+  drawing=true;
+  if(S.tool==='erase' && S.eraseTo==='white'){ pushBackfillUndo(activeLayer()); }   // white erase edits the backfill
+  else pushUndo();                                                                  // brush + transparent erase edit the mask
+  paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
 });
 cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   if(S.pointers.has(e.pointerId)) S.pointers.set(e.pointerId, evPos(e));
@@ -608,9 +1397,26 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
     S.view.y = mid.y - (S.pinch.mid.y - S.pinch.vy)*(nz/S.pinch.zoom);
     draw(); return; }
   if(S.preview) return;
-  if(!drawing){ if(S.tool==='brush'||S.tool==='erase')draw(); return; }
+  if(S.mode==='face'){ if(S.warpDrag) warpMove(sp); else if(S.faceDrag) faceMove(sp); return; }
+  if(!drawing){ if(S.tool==='brush'||S.tool==='erase'||S.tool==='clone')draw(); return; }
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
+  if(S.tool==='clone'){
+    if(S.boxDrag){ S.boxDrag.x1=ip.x; S.boxDrag.y1=ip.y; draw(); return; }   // ▭ sizing the grab rectangle
+    if(S.cloneMode==='pattern'){                                             // 🧵 paint the fill-area trail
+      if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
+        for(let s=1;s<=steps;s++)patTargetDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+      else patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return; }
+    if(S.cloneMode==='box'){                                                  // ▭ stamp the patch along the drag trail
+      if(S.clonePatch){ const sp2=Math.max(6,Math.min(S.clonePatch.width,S.clonePatch.height)/3);
+        if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/sp2);
+          for(let s=1;s<=steps;s++)pasteClonePatch(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+        else pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); }
+      return; }
+    if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
+      for(let s=1;s<=steps;s++)paintCloneDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+    else paintCloneDab(ip.x,ip.y);
+    lastImg=ip; draw(); return; }
   if(S.tool==='brush'||S.tool==='erase'){ const erase=S.tool==='erase';
     // interpolate between last and current for smooth stroke
     if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
@@ -620,8 +1426,19 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
 });
 function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
+  if(S.boxDrag){ captureBox(S.boxDrag); S.boxDrag=null; S.boxCapturing=false;   // ▭ finish grabbing the rectangle
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); drawing=false; lastImg=null; draw(); return; }
+  if(S.tool==='clone'&&S.cloneMode==='pattern'&&drawing&&S.patPainted){ fillPatternTarget(); }   // 🧵 fill the painted area with the pattern
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
-  drawing=false; lastImg=null; }
+  if(S.faceDrag){ S.faceDrag=null; markDirty(); }
+  if(S.warpDrag){ const wd=S.warpDrag; S.warpDrag=null;
+    if(wd.mode==='draw' && wd.op && wd.op.r<5){                 // a tiny region = an accidental tap → drop it
+      const ops=wd.layer.poses[S.expr]&&wd.layer.poses[S.expr].warp; const i=ops?ops.indexOf(wd.op):-1;
+      if(i>=0){ ops.splice(i,1); if(S.warpSel===wd.op) S.warpSel=null; }
+      S.undo.pop(); renderWarpPanel(); draw();                  // undo the snapshot we took for the create
+    } else markDirty();
+  }
+  drawing=false; lastImg=null; S.cloneOff=null; S._cleanSrc=null; }   // drop the aligned offset + clean-source cache; next stroke re-anchors to the picked spot
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('pointerleave', e=>{ if(!drawing)S.cursor=null; draw(); });
@@ -634,7 +1451,53 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 
 /* ---------- tool buttons & sliders ---------- */
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
-  S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b)); });
+  S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
+  const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
+  const ep=document.getElementById('eraseParams'); if(ep) ep.style.display = (S.tool==='erase')?'block':'none';
+  if(S.tool==='clone'){                                   // Patch heals the SHEET the hole LIVES in — auto-jump there so the holes show
+    const target = patchTarget();                          // same target the brush paints (the base, never the selected mover)
+    if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
+    const n = target?openHoleKids(target).length:0;
+    const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' area'+(n>1?'s':'')+' glow magenta. Tap ▭ Grab a box, drag a rectangle over clean belt/coat, then stamp it over the magenta.')
+          : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
+          : '🩹 No holes yet — tick “cut out” on a mover first, then Patch rebuilds what’s behind it');
+  } else { S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+    const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); }
+  draw(); });
+{ const et=document.getElementById('eraseTrans'), ew=document.getElementById('eraseWhite');
+  const setErase=(mode)=>{ S.eraseTo=mode; et.classList.toggle('on',mode==='transparent'); ew.classList.toggle('on',mode==='white');
+    toast(mode==='white'?'🧽 Erase → paints colour to WHITE (keeps the shape)':'🧽 Erase → cuts the area out (transparent gap)'); };
+  if(et) et.onclick=()=>setErase('transparent'); if(ew) ew.onclick=()=>setErase('white'); }
+document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
+  S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
+  toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
+function setCloneMode(m){ S.cloneMode=m; S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+  if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
+  document.getElementById('modeBox').classList.toggle('on', m==='box');
+  document.getElementById('modeBrush').classList.toggle('on', m==='brush');
+  document.getElementById('modePattern').classList.toggle('on', m==='pattern');
+  document.getElementById('boxRow').style.display  = m==='box'  ? 'flex':'none';
+  document.getElementById('brushRow').style.display= m==='brush'? 'flex':'none';
+  document.getElementById('patRow').style.display  = m==='pattern'? 'flex':'none';
+  const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+  const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on');
+  const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+  if(m==='pattern') toast('🧵 Pattern fill: ⬚ Pick pattern, then paint the area to fill'); draw(); }
+document.getElementById('autoHeal').onclick=()=>autoHealHoles();
+document.getElementById('modeBox').onclick=()=>setCloneMode('box');
+document.getElementById('modeBrush').onclick=()=>setCloneMode('brush');
+document.getElementById('modePattern').onclick=()=>setCloneMode('pattern');
+document.getElementById('patPick').onclick=()=>{ const pp=document.getElementById('patPick');
+  S.cloneMode='pattern'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; pp.classList.add('on');
+  toast('Drag a box over the pattern/texture you want to sample'); draw(); };
+document.getElementById('patClear').onclick=()=>{ if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; draw(); } toast('Painted area cleared'); };
+document.getElementById('boxGrab').onclick=()=>{ const gb=document.getElementById('boxGrab');
+  S.cloneMode='box'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; gb.classList.add('on');
+  toast('Drag a rectangle over a clean bit of belt/coat to copy it'); draw(); };
+{ const se=document.getElementById('soft'); if(se) se.oninput=()=>{ S.cloneSoft=+se.value/100; document.getElementById('softVal').textContent=se.value; }; }
+{ const ie=document.getElementById('infuse'); if(ie) ie.oninput=()=>{ S.cloneHeal=+ie.value/100; document.getElementById('infuseVal').textContent=ie.value; }; }
 const brushEl=document.getElementById('brush'), tolEl=document.getElementById('tol'), bgEl=document.getElementById('bg');
 brushEl.oninput=()=>{S.brush=+brushEl.value; document.getElementById('brushVal').textContent=brushEl.value;};
 tolEl.oninput=()=>{S.tol=+tolEl.value; document.getElementById('tolVal').textContent=tolEl.value;};
@@ -642,6 +1505,9 @@ bgEl.oninput=()=>{S.bg=+bgEl.value; document.getElementById('bgVal').textContent
 document.getElementById('addLayer').onclick=()=>{ if(!S.img){toast('Load an image first');return;}
   S.layers.push(makeLayer('part_'+(S.layers.length), 'mover')); S.active=S.layers.length-1; renderLayerList(); draw(); };
 document.getElementById('preview').onclick=()=>setPreview(!S.preview);
+document.getElementById('skinFill').onchange=e=>{ S.skinFill=e.target.checked;
+  S.layers.forEach(l=>{ l._cut=null; });   // rebuild cut images with/without skin fill
+  draw(); markDirty(); toast(S.skinFill?'🩹 Cut-out holes filled with skin':'Cut-out holes left transparent'); };
 
 /* ---------- bbox of a layer's alpha ---------- */
 function bboxOf(data){ const W=S.iw,H=S.ih,d=data.data; let minx=W,miny=H,maxx=-1,maxy=-1;
@@ -651,19 +1517,25 @@ function bboxOf(data){ const W=S.iw,H=S.ih,d=data.data; let minx=W,miny=H,maxx=-
 /* ---------- build PNG + rig for all layers ---------- */
 async function buildExport(){
   const W=S.iw,H=S.ih, sd=S.srcData.data;
-  // precompute mover alpha arrays for punching
-  const moverAlpha=[];
-  for(const l of S.layers){ if(l.role==='mover'&&l.punch){ const md=l.mctx.getImageData(0,0,W,H).data;
-      moverAlpha.push(md); } }
+  // unparented punch-movers are cut out of the base (limbs off the torso)
+  const baseKnockKids=S.layers.filter(l=>l.role==='mover'&&l.punch&&l.parent==null);
   const files=[]; const rig={ rig:'custom', v:2, imageW:W, imageH:H, note:'from KMPMedia Layer Cutter', layers:{} };
+  const parts=[];   // collected for the OGPuppet export (union-framed, drop-in for the lib primitive)
   for(const l of S.layers){
     const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box)continue;
+    const kids=punchKids(l).concat(l.role==='base'?baseKnockKids:[]);   // pieces cut OUT of this layer (eye out of head, limbs off torso)
+    const {skin:skinMasks, clear:clearMasks}=splitHoles(kids);
+    const skin=skinFillRGB(md.data, skinMasks);   // skin-fill the non-see-through holes
+    const bf=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;   // 🩹 clone/auto-heal pixels bake into the export
     const oc=document.createElement('canvas'); oc.width=box.w; oc.height=box.h; const octx=oc.getContext('2d');
     const out=octx.createImageData(box.w,box.h); const od=out.data; const mdd=md.data;
-    for(let y=0;y<box.h;y++)for(let x=0;x<box.w;x++){ const sx=box.x+x, sy=box.y+y; const si=(sy*W+sx)*4; const oi=(y*box.w+x)*4;
-      let a=mdd[si+3]/255;
-      if(l.role==='base'){ for(const mv of moverAlpha){ a*= (1 - mv[si+3]/255); } }
-      od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+    for(let y=0;y<box.h;y++)for(let x=0;x<box.w;x++){ const sx=box.x+x, sy=box.y+y; const sp=sy*W+sx, si=sp*4; const oi=(y*box.w+x)*4;
+      let hfClear=1; for(const kd of clearMasks){ hfClear*= (1 - kd[si+3]/255); }   // see-through holes punch the alpha
+      if(skin){ let hfSkin=1; for(const kd of skinMasks){ hfSkin*= (1 - kd[si+3]/255); } const t=1-hfSkin;
+        od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
+        od[oi+3]=Math.round(sd[si+3]*(mdd[si+3]/255)*hfClear); }
+      else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(mdd[si+3]/255)*hfClear); }
+      if(bf){ const bt=bf[si+3]/255; if(bt){ od[oi]=od[oi]*(1-bt)+bf[si]*bt; od[oi+1]=od[oi+1]*(1-bt)+bf[si+1]*bt; od[oi+2]=od[oi+2]*(1-bt)+bf[si+2]*bt; } }
     }
     octx.putImageData(out,0,0);
     const blob=await new Promise(res=>oc.toBlob(res,'image/png'));
@@ -671,77 +1543,127 @@ async function buildExport(){
     const fname=sanitize(l.name)+'.png';
     files.push({name:fname, data:buf});
     const pv=l.pivot||{x:box.x+box.w/2, y:box.y+box.h/2};
+    const par=(l.parent!=null)?layerById(l.parent):null;
     rig.layers[sanitize(l.name)]={ role:l.role, resource:sanitize(l.name),
       bbox:{x:box.x,y:box.y,w:box.w,h:box.h}, aspect:f3(box.h/box.w),
       x:f3(pv.x/W), y:f3(pv.y/H), size:f3(box.w/W), rot:0,
-      pivX:f3((pv.x-box.x)/box.w), pivY:f3((pv.y-box.y)/box.h) };
+      pivX:f3((pv.x-box.x)/box.w), pivY:f3((pv.y-box.y)/box.h),
+      ...(par?{parent:sanitize(par.name)}:{}) };
+    parts.push({ name:sanitize(l.name), box, oc, role:l.role,
+      swingDeg:+l.swingDeg||0, speed:+l.speed||1, tuckX:l.tuckX||0, tuckY:l.tuckY||0, pv });
   }
+  const exprs=collectExpressions(W,H); if(Object.keys(exprs).length) rig.expressions=exprs;
   const jsonStr=JSON.stringify(rig,null,2);
   files.push({name:'rig.json', data:new TextEncoder().encode(jsonStr)});
+  await addPuppetFiles(files, parts);   // also emit the OGPuppet pack (puppet.json + union-framed PNGs)
   return {files, jsonStr};
+}
+
+/* ---------- OGPuppet pack: every part composited onto ONE shared union frame + puppet.json, so the
+   export drops straight into the library's OGPuppet primitive (OGPuppetSpec / OGPuppetView) with no
+   reframing. Pivots/tuck are re-based from source pixels to fractions of that shared frame. ---------- */
+async function addPuppetFiles(files, parts){
+  if(!parts.length) return;
+  const base=parts.find(p=>p.role==='base'); if(!base) return;   // OGPuppet needs a still base
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const p of parts){ const b=p.box;
+    if(b.x<minx)minx=b.x; if(b.y<miny)miny=b.y; if(b.x+b.w>maxx)maxx=b.x+b.w; if(b.y+b.h>maxy)maxy=b.y+b.h; }
+  const UW=maxx-minx, UH=maxy-miny;
+  const head=parts.find(p=>p.name==='head');
+  const spec={ base:base.name, aspect:f3(UW/UH), grounded:false, parts:[] };
+  if(head){ spec.headCenterX=f3((head.box.x+head.box.w/2-minx)/UW);
+            spec.headCenterY=f3((head.box.y+head.box.h/2-miny)/UH); }
+  for(const p of parts){
+    // composite this part onto a shared union-sized canvas at its offset → a drop-in sprite
+    const uc=document.createElement('canvas'); uc.width=UW; uc.height=UH;
+    uc.getContext('2d').drawImage(p.oc, p.box.x-minx, p.box.y-miny);
+    const blob=await new Promise(res=>uc.toBlob(res,'image/png'));
+    files.push({name:'puppet/'+p.name+'.png', data:new Uint8Array(await blob.arrayBuffer())});
+    if(p.role==='base') continue;   // the base is the still backdrop, not a mover
+    const part={ res:p.name, pivotX:f3((p.pv.x-minx)/UW), pivotY:f3((p.pv.y-miny)/UH) };
+    if(p.swingDeg) part.swingDeg=p.swingDeg;
+    if(p.speed!==1) part.speed=f3(p.speed);
+    if(p.tuckX) part.tuckX=f3(p.tuckX/UW);
+    if(p.tuckY) part.tuckY=f3(p.tuckY/UH);
+    if(p.name==='head') part.head=true;
+    spec.parts.push(part);
+  }
+  files.push({name:'puppet.json', data:new TextEncoder().encode(JSON.stringify(spec,null,2))});
 }
 
 document.getElementById('export').onclick=async()=>{ if(!S.img){toast('Load an image first');return;}
   toast('Building zip…'); const {files,jsonStr}=await buildExport();
   const zip=zipStore(files); const blob=new Blob([zip],{type:'application/zip'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='superx_layers.zip';
+  const zipName=charSlug()+'_layers.zip';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=zipName;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  document.getElementById('json').value=jsonStr; toast('Exported superx_layers.zip'); };
+  document.getElementById('json').value=jsonStr; toast('Exported '+zipName); };
 
 document.getElementById('showJson').onclick=async()=>{ const ta=document.getElementById('json');
   if(ta.style.display==='none'){ const {jsonStr}=await buildExport(); ta.value=jsonStr; ta.style.display='block'; }
   else ta.style.display='none'; };
 
-/* ---------- nexum payload: an OGCutoutRig + the layer images, for the app host to bake ----------
+/* ---------- host payload: an OGCutoutRig + the layer images, for the app host to bake ----------
    The library's OGStageLayer rotates about the layer CENTRE, so each mover frame is drawn full-canvas
    with its JOINT shifted to the centre — then the bake rotates about centre (= the joint) and offsets
    x/y by (pivot − 0.5) to seat it. Base is full-canvas with the mover shapes punched out. */
-function fullCanvasDataURL(maskData, offsetX, offsetY, punchMasks){
+function fullCanvasDataURL(maskData, offsetX, offsetY, holes, bfData){
   const W=S.iw,H=S.ih, sd=S.srcData.data, md=maskData.data;
+  const {skin:skinMasks, clear:clearMasks}=holes||{skin:[],clear:[]};
+  const skin=skinFillRGB(md, skinMasks);   // pour skin into the skin-filled holes; see-through holes stay transparent (video behind)
   const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const octx=oc.getContext('2d');
   const out=octx.createImageData(W,H); const od=out.data;
   for(let dy=0;dy<H;dy++)for(let dx=0;dx<W;dx++){
     const sx=dx-offsetX, sy=dy-offsetY; if(sx<0||sy<0||sx>=W||sy>=H) continue;
-    const si=(sy*W+sx)*4; let a=md[si+3]/255; if(!a) continue;
-    if(punchMasks) for(const mv of punchMasks) a*=(1-mv[si+3]/255);
-    const oi=(dy*W+dx)*4; od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*a);
+    const sp=sy*W+sx, si=sp*4; if(!md[si+3]) continue;
+    let hfClear=1; for(const mv of clearMasks) hfClear*=(1-mv[si+3]/255);
+    const oi=(dy*W+dx)*4;
+    if(skin){ let hfSkin=1; for(const mv of skinMasks) hfSkin*=(1-mv[si+3]/255); const t=1-hfSkin;
+      od[oi]=sd[si]*(1-t)+skin[sp*3]*t; od[oi+1]=sd[si+1]*(1-t)+skin[sp*3+1]*t; od[oi+2]=sd[si+2]*(1-t)+skin[sp*3+2]*t;
+      od[oi+3]=Math.round(sd[si+3]*(md[si+3]/255)*hfClear); }
+    else { od[oi]=sd[si]; od[oi+1]=sd[si+1]; od[oi+2]=sd[si+2]; od[oi+3]=Math.round(sd[si+3]*(md[si+3]/255)*hfClear); }
+    if(bfData){ const bt=bfData[si+3]/255; if(bt){ od[oi]=od[oi]*(1-bt)+bfData[si]*bt; od[oi+1]=od[oi+1]*(1-bt)+bfData[si+1]*bt; od[oi+2]=od[oi+2]*(1-bt)+bfData[si+2]*bt; } }
   }
   octx.putImageData(out,0,0); return oc.toDataURL('image/png');
 }
-async function buildNexumPayload(){
+async function buildHostPayload(){
   if(!S.srcData) return null; const W=S.iw,H=S.ih;
-  const punchMasks=[]; // movers (with punch on) to cut out of the base
-  for(const l of S.layers){ if(l.role==='mover' && l.punch){ const md=l.mctx.getImageData(0,0,W,H);
-    if(bboxOf(md)) punchMasks.push(md.data); } }
+  const baseKnockKids=S.layers.filter(l=>l.role==='mover' && l.punch && l.parent==null && bboxOf(l.mctx.getImageData(0,0,W,H)));
   const images={}, rigLayers=[];
   for(const l of S.layers){ const md=l.mctx.getImageData(0,0,W,H); const box=bboxOf(md); if(!box) continue;
     const name=sanitize(l.name);
+    const bfData=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;   // 🩹 clone/auto-heal pixels bake into the host payload
+    const kids=punchKids(l).concat(l.role==='base'?baseKnockKids:[]);   // child pieces cut OUT of this layer (+ limbs off the base)
     if(l.role==='base'){
-      images[name]=fullCanvasDataURL(md, 0, 0, punchMasks);
+      images[name]=fullCanvasDataURL(md, 0, 0, splitHoles(kids), bfData);
       rigLayers.push({ id:name, resource:name, role:'base', pivotX:0.5, pivotY:0.5 });
     } else {
       const pv=l.pivot || {x:box.x+box.w/2, y:box.y+box.h/2};
       const offX=Math.round(W/2 - pv.x), offY=Math.round(H/2 - pv.y);
-      images[name]=fullCanvasDataURL(md, offX, offY, null);
-      rigLayers.push({ id:name, resource:name, role:'mover',
+      images[name]=fullCanvasDataURL(md, offX, offY, kids.length?splitHoles(kids):null, bfData);
+      const par=(l.parent!=null)?layerById(l.parent):null;
+      const ml={ id:name, resource:name, role:'mover',
         pivotX:+(pv.x/W).toFixed(4), pivotY:+(pv.y/H).toFixed(4),
         swingDeg:(l.swingDeg??10), speed:+(l.speed??1).toFixed(2),
-        offsetX:+((l.tuckX||0)/W).toFixed(4), offsetY:+((l.tuckY||0)/H).toFixed(4) });
+        offsetX:+((l.tuckX||0)/W).toFixed(4), offsetY:+((l.tuckY||0)/H).toFixed(4) };
+      if(par) ml.parent=sanitize(par.name);   // this part SWINGS WITH its parent (compose parent's motion first, then this one's)
+      rigLayers.push(ml);
     }
   }
   const rig={ width:W, height:H, durationMs:2600, fps:60, layers:rigLayers };
+  const exprs=collectExpressions(W,H); if(Object.keys(exprs).length) rig.expressions=exprs;
   return { kind:'og-rig-payload', v:1, rig, images };
 }
 // Deliver to the app host if one is attached (Android WebView bridge / RN / iframe), else save the payload file.
-async function sendToNexum(){ if(!S.img){toast('Load an image first');return;}
-  toast('Packing layers…'); const str=JSON.stringify(await buildNexumPayload());
-  if(window.NexumHost && window.NexumHost.receivePayload){ window.NexumHost.receivePayload(str); toast('Sent to app ✓'); return; }
+async function sendToHost(){ if(!S.img){toast('Load an image first');return;}
+  toast('Packing layers…'); const str=JSON.stringify(await buildHostPayload());
+  if(window.AppHost && window.AppHost.receivePayload){ window.AppHost.receivePayload(str); toast('Sent to app ✓'); return; }
   if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(str); toast('Sent to app ✓'); return; }
   if(window.parent && window.parent!==window){ window.parent.postMessage(str,'*'); toast('Sent to host ✓'); return; }
   const blob=new Blob([str],{type:'application/json'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='rig_payload.json'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('No app host — saved rig_payload.json'); }
-document.getElementById('toNexum').onclick=sendToNexum;
+document.getElementById('toApp').onclick=sendToHost;
 
 /* preview active layer isolated */
 document.getElementById('previewBtn').onclick=async()=>{ const l=activeLayer(); if(!l)return;
@@ -782,11 +1704,676 @@ function zipStore(files){
   out.set(end,p); return out;
 }
 
+/* ================= FACE EXPRESSIONS =================
+   The same cut layers, but each feature (brow / eye / mouth…) carries a per-expression POSE
+   {dx,dy,rot,scale} relative to neutral. The base face stays put; features nudge/rotate/scale to
+   read as happy / sad / angry / shocked. We composite the assembled face live and can morph through
+   the whole set. Authoring is here; the exported rig.expressions is what the app will later play. */
+// A pose = how a feature is transformed for one expression, RELATIVE to neutral:
+// move (dx,dy) · rotate (rot°) · stretch (sx = width×, sy = height×; sx≠sy = non-uniform stretch).
+function poseOf(l, exprId){
+  const d={dx:0,dy:0,rot:0,sx:1,sy:1};
+  if(exprId==='neutral' || !l.poses) return d;
+  const p=l.poses[exprId]; if(!p) return d;
+  const s=(p.scale==null?1:p.scale);   // migrate older uniform `scale` → sx/sy
+  return { dx:p.dx||0, dy:p.dy||0, rot:p.rot||0, sx:(p.sx==null?s:p.sx), sy:(p.sy==null?s:p.sy), warp:(p.warp||null), mls:(p.mls||null) };
+}
+// Get/create the stored pose object for the current expression, migrating a legacy `scale` to sx/sy.
+function ensurePose(l, exprId){
+  let p=l.poses[exprId]; if(!p){ p=l.poses[exprId]={dx:0,dy:0,rot:0,sx:1,sy:1}; }
+  if(p.sx==null){ const s=(p.scale==null?1:p.scale); p.sx=s; p.sy=s; } if('scale' in p) delete p.scale;
+  return p;
+}
+// Rotate/stretch pivot for a feature = its pinned joint if set, else the centre of its cut shape (cached).
+function featureCenter(l){
+  if(l._ctr) return l._ctr;
+  if(l.pivot){ return (l._ctr={x:l.pivot.x,y:l.pivot.y}); }
+  const box=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih));
+  return (l._ctr = box ? {x:box.x+box.w/2, y:box.y+box.h/2} : {x:S.iw/2,y:S.ih/2});
+}
+function featureBox(l){ if(l._box) return l._box;
+  const b=bboxOf(l.mctx.getImageData(0,0,S.iw,S.ih)); return (l._box = b || {x:0,y:0,w:S.iw,h:S.ih}); }
+// The feature's transform box corners + edge/corner handles, in IMAGE space (axis-aligned; rotation is
+// a slider, so the handle box ignores it). Scale is about featureCenter, then translated by dx,dy.
+function partHandles(l){ const p=poseOf(l,S.expr), b=featureBox(l), c=featureCenter(l);
+  const L=c.x+(b.x-c.x)*p.sx+p.dx, T=c.y+(b.y-c.y)*p.sy+p.dy, Wd=b.w*p.sx, Hd=b.h*p.sy;
+  const R=L+Wd, B=T+Hd, MX=L+Wd/2, MY=T+Hd/2;
+  return { L,T,R,B, tl:[L,T], tr:[R,T], bl:[L,B], br:[R,B], ml:[L,MY], mr:[R,MY], tc:[MX,T], bc:[MX,B] };
+}
+function hitHandle(l, sp){ const hs=partHandles(l), v=S.view;
+  for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [ix,iy]=hs[k];
+    if(Math.hypot(sp.x-(v.x+ix*v.zoom), sp.y-(v.y+iy*v.zoom))<=12) return k; }
+  return null;
+}
+/* ---- local warp: deform a sub-AREA or a POINT of one feature (not the whole part) ----
+   A feature carries, per expression, pose.warp = a list of OPERATORS; their displacement fields sum
+   and compose on top of the affine box pose:
+     {t:'rgn', cx,cy, r, feather, scale, rot}   a circle: zoom/rotate the content inside, feathered to 0 by r+feather
+     {t:'pin', ax,ay, dx,dy, r}                 a point at (ax,ay) pulled by (dx,dy), radial falloff r
+   Operator coords live in the DISPLAYED (posed) image space — what she sees. Rendering displaces a fine
+   mesh over the feature box by the field, then per-triangle texture-maps the cut. All px while authoring;
+   export normalizes. A plain affine draw is used when there are no operators. */
+function warpRestNodes(l){            // 5×5 grid — only used to migrate the old grid-warp format to points
+  if(l._rest) return l._rest;
+  const b=featureBox(l), nodes=[];
+  for(let j=0;j<=WARP_ROWS;j++) for(let i=0;i<=WARP_COLS;i++)
+    nodes.push({x:b.x+b.w*i/WARP_COLS, y:b.y+b.h*j/WARP_ROWS});
+  return (l._rest=nodes);
+}
+// map an image-space point through the feature's affine pose (same order as renderFace: scale→rotate→+d)
+function affinePt(p, pose, c){
+  const x=(p.x-c.x)*pose.sx, y=(p.y-c.y)*pose.sy, a=pose.rot*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+  return { x:c.x + (x*cs - y*sn) + pose.dx, y:c.y + (x*sn + y*cs) + pose.dy };
+}
+function bump(t){ if(t>=1) return 0; const u=1-t*t; return u*u; }   // 1 at centre → 0 at edge, smooth
+// displacement contributed by ONE operator at (image) point (x,y)
+function opDisp(op, x, y){
+  if(op.t==='rgn'){
+    const dx=x-op.cx, dy=y-op.cy, d=Math.hypot(dx,dy), inner=op.r, outer=op.r+(op.feather||0);
+    let w; if(d<=inner) w=1; else if(d>=outer) return [0,0]; else w=bump((d-inner)/Math.max(1,outer-inner));
+    const s=(op.scale==null?1:op.scale), a=(op.rot||0)*Math.PI/180, cs=Math.cos(a), sn=Math.sin(a);
+    const rx=dx*s*cs - dy*s*sn, ry=dx*s*sn + dy*s*cs;
+    return [ (op.cx+rx-x)*w, (op.cy+ry-y)*w ];
+  }
+  const g=bump(Math.hypot(x-op.ax, y-op.ay)/Math.max(1,op.r));
+  return [ (op.dx||0)*g, (op.dy||0)*g ];
+}
+function fieldDisp(ops, x, y){ let ax=0, ay=0; for(let i=0;i<ops.length;i++){ const d=opDisp(ops[i],x,y); ax+=d[0]; ay+=d[1]; } return [ax,ay]; }
+/* ---- MLS (Moving Least Squares) RIGID deformation — Schaefer, McPhail & Warren, SIGGRAPH 2006.
+   Fixed box-perimeter anchors pin the feature silhouette; the pose's `mls` handles (rest point +
+   pull) drag the interior. Each mesh node is mapped by a weighted RIGID (rotation+translation,
+   no shear) best-fit of ALL control points → a smooth, non-collapsing warp. Identity when every
+   handle rests (q==p). Handles live in REST image space {px,py}+pull{dx,dy}; affine applies first. */
+const MLS_ALPHA=1.2;              // weight falloff exponent: w_i = 1/|p_i - v|^(2·alpha)
+function mlsRigid(P, Q, vx, vy){
+  const n=P.length; if(!n) return [vx,vy];
+  let sw=0, psx=0,psy=0, qsx=0,qsy=0; const w=new Array(n);
+  for(let i=0;i<n;i++){ const dx=P[i][0]-vx, dy=P[i][1]-vy, d2=dx*dx+dy*dy;
+    if(d2<1e-8) return [Q[i][0],Q[i][1]];                   // v sits on a control point → exact
+    const wi=1/Math.pow(d2,MLS_ALPHA); w[i]=wi; sw+=wi;
+    psx+=wi*P[i][0]; psy+=wi*P[i][1]; qsx+=wi*Q[i][0]; qsy+=wi*Q[i][1]; }
+  const pX=psx/sw, pY=psy/sw, qX=qsx/sw, qY=qsy/sw, rx=vx-pX, ry=vy-pY;
+  let Fx=0, Fy=0;
+  for(let i=0;i<n;i++){ const ax=P[i][0]-pX, ay=P[i][1]-pY, bx=Q[i][0]-qX, by=Q[i][1]-qY;
+    const d=ax*rx+ay*ry, e=ax*ry-ay*rx;                     // phat·r , cross(phat,r)
+    Fx+=w[i]*(bx*d - by*e); Fy+=w[i]*(bx*e + by*d); }       // qhat · w·[[d,e],[-e,d]]
+  const fl=Math.hypot(Fx,Fy);
+  if(fl<1e-8) return [vx+(qX-pX), vy+(qY-pY)];               // degenerate (all phat≈0) → pure translation
+  const rl=Math.hypot(rx,ry); return [qX+Fx/fl*rl, qY+Fy/fl*rl];
+}
+// Build MLS control points (DISPLAYED space) for a feature: fixed perimeter anchors + the pull handles.
+function mlsControls(pose, l){
+  const b=featureBox(l), c=featureCenter(l), EXP=0.18, P=[], Q=[];
+  const xs=[b.x-b.w*EXP, b.x+b.w*0.5, b.x+b.w+b.w*EXP], ys=[b.y-b.h*EXP, b.y+b.h*0.5, b.y+b.h+b.h*EXP];
+  for(const gx of xs) for(const gy of ys){
+    if(gx===xs[1] && gy===ys[1]) continue;                  // skip centre — let handles own the interior
+    const d=affinePt({x:gx,y:gy},pose,c); P.push([d.x,d.y]); Q.push([d.x,d.y]); }
+  for(const h of pose.mls){ const d=affinePt({x:h.px,y:h.py},pose,c);
+    P.push([d.x,d.y]); Q.push([d.x+(h.dx||0), d.y+(h.dy||0)]); }
+  return {P,Q};
+}
+// draw source triangle s[0..2] (image coords in `cut`) onto dest triangle d[0..2]; tiny outward pad kills seams
+function texTri(img, s, d, g=ctx){
+  const cx=(d[0].x+d[1].x+d[2].x)/3, cy=(d[0].y+d[1].y+d[2].y)/3, PAD=0.6;
+  const dd=d.map(p=>{ const vx=p.x-cx, vy=p.y-cy, L=Math.hypot(vx,vy)||1; return {x:p.x+vx/L*PAD, y:p.y+vy/L*PAD}; });
+  g.save(); g.beginPath(); g.moveTo(dd[0].x,dd[0].y); g.lineTo(dd[1].x,dd[1].y); g.lineTo(dd[2].x,dd[2].y); g.closePath(); g.clip();
+  const x0=s[0].x,y0=s[0].y, x1=s[1].x-x0,y1=s[1].y-y0, x2=s[2].x-x0,y2=s[2].y-y0;
+  const u0=d[0].x,v0=d[0].y, u1=d[1].x-u0,v1=d[1].y-v0, u2=d[2].x-u0,v2=d[2].y-v0;
+  const det=x1*y2-x2*y1;
+  if(Math.abs(det)>1e-6){ const a=(u1*y2-u2*y1)/det, b=(v1*y2-v2*y1)/det, c=(u2*x1-u1*x2)/det, dC=(v2*x1-v1*x2)/det;
+    const e=u0-a*x0-c*y0, f=v0-b*x0-dC*y0; g.transform(a,b,c,dC,e,f); g.drawImage(img,0,0); }
+  g.restore();
+}
+// render a feature's cut: affine box pose, then warp ops via a fine mesh. No ops → fast direct affine draw.
+// [g] is the target context (defaults to the on-screen ctx; exportFaceFrames passes an off-screen one).
+function drawWarpedFeature(cut, pose, c, l, g=ctx){
+  const ops=pose.warp, hasField=!!(ops&&ops.length);
+  const hasMls=!!(pose.mls && pose.mls.length && pose.mls.some(h=>h.dx||h.dy));
+  if(!hasField && !hasMls){
+    g.save(); g.translate(pose.dx,pose.dy);
+    g.translate(c.x,c.y); g.rotate(pose.rot*Math.PI/180); g.scale(pose.sx,pose.sy); g.translate(-c.x,-c.y);
+    g.drawImage(cut,0,0); g.restore(); return;
+  }
+  const ctrl=hasMls?mlsControls(pose,l):null;
+  const b=featureBox(l), N=WARP_MESH, NC=N+1, id=(i,j)=>j*NC+i, V=[];
+  for(let j=0;j<=N;j++) for(let i=0;i<=N;i++){
+    const rx=b.x+b.w*i/N, ry=b.y+b.h*j/N, p=affinePt({x:rx,y:ry},pose,c);
+    let nx=p.x, ny=p.y;
+    if(hasMls){ const m=mlsRigid(ctrl.P, ctrl.Q, nx, ny); nx=m[0]; ny=m[1]; }  // rigid warp from anchors+handles
+    if(hasField){ const f=fieldDisp(ops,p.x,p.y); nx+=f[0]; ny+=f[1]; }        // region/point ops compose on top
+    V.push({ s:{x:rx,y:ry}, d:{x:nx, y:ny} });
+  }
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const a=V[id(i,j)], b2=V[id(i+1,j)], c2=V[id(i,j+1)], d2=V[id(i+1,j+1)];
+    texTri(cut, [a.s,b2.s,d2.s], [a.d,b2.d,d2.d], g);
+    texTri(cut, [a.s,d2.s,c2.s], [a.d,d2.d,c2.d], g);
+  }
+}
+/* ---------- EXPORT POSED HEAD FRAMES (for the WordStorm SUPER X watcher) ----------
+   For each expression, composite the HEAD cut + its posed face-feature children onto a transparent
+   full-canvas W×H PNG — same framing as superx_head.png, so the app can frame-swap them. The neutral
+   frame is the head's resource name itself (superx_head.png); the rest are <head>_<expr>.png. */
+function headLayerForFrames(){
+  // the mover that OWNS face features (eyes/brows/mouth parent) — the head; fall back to a name match.
+  const feat = S.layers.find(l=>{ const r=facsRole(l.name); return (r.part==='eye'||r.part==='brow'||r.part==='mouth') && l.parent!=null; });
+  if(feat){ const h=layerById(feat.parent); if(h) return h; }
+  return S.layers.find(l=>/head|face|kafa|yüz|yuz/i.test(l.name)) || null;
+}
+function renderPosedHead(headL, exprId){
+  const W=S.iw,H=S.ih;
+  const oc=document.createElement('canvas'); oc.width=W; oc.height=H; const g=oc.getContext('2d');
+  g.imageSmoothingEnabled=true;
+  const hcut=buildCut(headL); if(hcut) g.drawImage(hcut,0,0);           // head base (feature holes skin-filled)
+  // its face-feature children, posed for this expression, composited on top (back→front = list order)
+  for(const l of S.layers){ if(l.parent!==headL.id || !l.visible) continue;
+    const r=facsRole(l.name); if(!(r.part==='eye'||r.part==='brow'||r.part==='mouth')) continue;
+    const cut=buildCut(l); if(!cut) continue;
+    drawWarpedFeature(cut, poseOf(l, exprId), featureCenter(l), l, g);
+  }
+  return oc;
+}
+async function exportFaceFrames(){
+  if(!S.img){ toast('Load a project first'); return; }
+  const headL=headLayerForFrames();
+  if(!headL){ toast('No head layer found — name the head "head" and parent the eyes/brows/mouth to it'); return; }
+  S.layers.forEach(l=>{ l._cut=null; });   // rebuild cuts fresh (skin-fill current)
+  const base=sanitize(headL.name);
+  const files=[];
+  for(const ex of EXPRS){
+    const oc=renderPosedHead(headL, ex.id);
+    const blob=await new Promise(res=>oc.toBlob(res,'image/png'));
+    const buf=new Uint8Array(await blob.arrayBuffer());
+    files.push({ name:(ex.id==='neutral'? base : base+'_'+ex.id)+'.png', data:buf });
+  }
+  const zip=zipStore(files); const blob=new Blob([zip],{type:'application/zip'});
+  const ffName=charSlug()+'_face_frames.zip';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=ffName;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('Exported '+files.length+' face frames → '+ffName);
+}
+// an operator's grab handle in displayed image space (pin → its pulled tip; region → its centre)
+function opHandle(op){ return op.t==='rgn' ? {x:op.cx, y:op.cy} : {x:op.ax+(op.dx||0), y:op.ay+(op.dy||0)}; }
+// topmost operator whose handle (or region ring) is under the finger (screen pos sp); -1 if none
+function hitWarpOp(l, sp){ const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[], v=S.view;
+  for(let i=ops.length-1;i>=0;i--){ const h=opHandle(ops[i]);
+    if(Math.hypot(sp.x-(v.x+h.x*v.zoom), sp.y-(v.y+h.y*v.zoom))<=16) return i; }
+  return -1; }
+// migrate a feature's legacy grid-warp ({x,y}[] over the 5×5 grid) → point operators
+function migrateWarp(l, exprId){ const p=l.poses&&l.poses[exprId]; if(!p||!p.warp||!p.warp.length) return;
+  if(p.warp[0] && p.warp[0].t) return;                 // already operators
+  const rest=warpRestNodes(l), b=featureBox(l), r=Math.max(30, Math.min(b.w,b.h)/2), ops=[];
+  p.warp.forEach((d,i)=>{ if(d && (d.x||d.y) && rest[i]) ops.push({t:'pin', ax:rest[i].x, ay:rest[i].y, dx:d.x, dy:d.y, r}); });
+  p.warp = ops;
+}
+function migrateAllWarp(){ for(const l of S.layers){ if(!l.poses) continue; for(const id in l.poses) migrateWarp(l, id); } }
+function lerpPose(a,b,f){ const o={ dx:a.dx+(b.dx-a.dx)*f, dy:a.dy+(b.dy-a.dy)*f,
+  rot:a.rot+(b.rot-a.rot)*f, sx:a.sx+(b.sx-a.sx)*f, sy:a.sy+(b.sy-a.sy)*f };
+  // warp operator lists aren't linearly blendable → cross-fade their effect by scaling op strength
+  const wa=a.warp&&a.warp.length?a.warp:null, wb=b.warp&&b.warp.length?b.warp:null;
+  if(wa||wb){ o.warp=[];
+    if(wa) for(const op of wa) o.warp.push(scaleOp(op, 1-f));
+    if(wb) for(const op of wb) o.warp.push(scaleOp(op, f)); }
+  // MLS handles cross-fade by scaling their pull (rest point fixed) — smooth morph in/out
+  const ma=a.mls&&a.mls.length?a.mls:null, mb=b.mls&&b.mls.length?b.mls:null;
+  if(ma||mb){ o.mls=[];
+    if(ma) for(const h of ma) o.mls.push({px:h.px, py:h.py, dx:(h.dx||0)*(1-f), dy:(h.dy||0)*(1-f)});
+    if(mb) for(const h of mb) o.mls.push({px:h.px, py:h.py, dx:(h.dx||0)*f, dy:(h.dy||0)*f}); }
+  return o; }
+// a copy of an operator at reduced strength (f in 0..1) — used only for morph-preview cross-fades
+function scaleOp(op, f){ if(op.t==='rgn') return { t:'rgn', cx:op.cx, cy:op.cy, r:op.r, feather:op.feather,
+    scale:1+((op.scale==null?1:op.scale)-1)*f, rot:(op.rot||0)*f };
+  return { t:'pin', ax:op.ax, ay:op.ay, dx:(op.dx||0)*f, dy:(op.dy||0)*f, r:op.r }; }
+function easeHold(f){ const t=Math.min(1,Math.max(0,(f-0.18)/0.64)); return t*t*(3-2*t); } // hold each face, smooth between
+function currentPoseFor(l){
+  if(!S.exprPreview) return poseOf(l, S.expr);
+  const n=EXPRS.length, seg=1.1, phase=S.exprT/seg;
+  const i=Math.floor(phase)%n, frac=easeHold(phase-Math.floor(phase));
+  return lerpPose(poseOf(l,EXPRS[i].id), poseOf(l,EXPRS[(i+1)%n].id), frac);
+}
+function renderFace(W,H){
+  ctx.fillStyle='#0f1326'; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.translate(S.view.x,S.view.y); ctx.scale(S.view.zoom,S.view.zoom); ctx.imageSmoothingEnabled=true;
+  for(const l of S.layers){ if(!l.visible) continue; const cut=buildCut(l); if(!cut) continue;
+    if(l.role==='base'){ ctx.drawImage(cut,0,0); continue; }
+    const p=currentPoseFor(l), c=featureCenter(l);
+    drawWarpedFeature(cut, p, c, l);
+  }
+  ctx.restore();
+  // overlay for the selected feature — warp operators (circles / points) or the affine transform box.
+  // Skipped while morph-previewing or on the neutral/base face.
+  if(!S.exprPreview && S.expr!=='neutral'){ const l=activeLayer();
+    if(l && l.role!=='base' && l.visible){ const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      // FACS / MLS-rigid handles (rest → pulled), pink so they read apart from the teal warp ops
+      const pml=(l.poses[S.expr]&&l.poses[S.expr].mls)||null;
+      if(pml && pml.length){ const pp=poseOf(l,S.expr), cc=featureCenter(l);
+        for(const h of pml){ const r0=affinePt({x:h.px,y:h.py},pp,cc);
+          const [rx,ry]=sc(r0.x,r0.y), [hx,hy]=sc(r0.x+(h.dx||0), r0.y+(h.dy||0));
+          ctx.strokeStyle='rgba(255,138,196,.55)'; ctx.lineWidth=1.4;
+          ctx.beginPath(); ctx.moveTo(rx,ry); ctx.lineTo(hx,hy); ctx.stroke();
+          ctx.fillStyle='rgba(255,138,196,.5)'; ctx.beginPath(); ctx.arc(rx,ry,2.5,0,7); ctx.fill();
+          ctx.fillStyle='#ff8ac4'; ctx.beginPath(); ctx.arc(hx,hy,4,0,7); ctx.fill(); } }
+      if(S.faceWarp){                                   // warp overlay: region circles + point pins
+        const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+        for(const op of ops){ const seld=(op===S.warpSel);
+          if(op.t==='rgn'){
+            const [cx,cy]=sc(op.cx,op.cy); ctx.lineWidth=seld?2:1.4;
+            ctx.strokeStyle=seld?'#ffd166':'#5ad1c4'; ctx.setLineDash([5,4]);
+            ctx.beginPath(); ctx.arc(cx,cy,op.r*v.zoom,0,7); ctx.stroke();
+            if(op.feather){ ctx.setLineDash([2,4]); ctx.strokeStyle='rgba(90,209,196,.35)';
+              ctx.beginPath(); ctx.arc(cx,cy,(op.r+op.feather)*v.zoom,0,7); ctx.stroke(); }
+            ctx.setLineDash([]); ctx.fillStyle=seld?'#ffd166':'#5ad1c4';
+            ctx.beginPath(); ctx.arc(cx,cy,4,0,7); ctx.fill();
+          } else {
+            const [ax,ay]=sc(op.ax,op.ay), [hx,hy]=sc(op.ax+(op.dx||0), op.ay+(op.dy||0));
+            ctx.strokeStyle='rgba(90,209,196,.5)'; ctx.lineWidth=1.4;
+            ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(hx,hy); ctx.stroke();
+            ctx.strokeStyle='rgba(90,209,196,.35)'; ctx.beginPath(); ctx.arc(ax,ay,op.r*v.zoom,0,7); ctx.stroke();
+            ctx.fillStyle='rgba(90,209,196,.6)'; ctx.beginPath(); ctx.arc(ax,ay,2.5,0,7); ctx.fill();
+            ctx.fillStyle=seld?'#ffd166':'#5ad1c4'; ctx.beginPath(); ctx.arc(hx,hy,seld?6:4,0,7); ctx.fill();
+          } }
+      } else {                                          // affine transform box (whole part)
+        const hs=partHandles(l);
+        const [lx,ty]=sc(hs.L,hs.T), [rx,by]=sc(hs.R,hs.B);
+        ctx.strokeStyle='#5ad1c4'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+        ctx.strokeRect(lx,ty,rx-lx,by-ty); ctx.setLineDash([]);
+        ctx.fillStyle='#5ad1c4';
+        for(const k of ['tl','tr','bl','br','ml','mr','tc','bc']){ const [hx,hy]=sc(hs[k][0],hs[k][1]); ctx.fillRect(hx-4,hy-4,8,8); }
+      } } }
+  // lip-line guide: the traced mouth curve (gold), tracking the current pose so you see it bend per expression
+  if(!S.exprPreview){ const la=activeLayer();
+    if(la && la.role!=='base' && la.visible && Array.isArray(la.lips) && la.lips.length){
+      const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+      const pp=poseOf(la,S.expr), cc=featureCenter(la);
+      ctx.strokeStyle='rgba(255,209,102,.85)'; ctx.lineWidth=2; ctx.beginPath();
+      la.lips.forEach((q,i)=>{ const r=affinePt(q,pp,cc); const [x,y]=sc(r.x,r.y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+      ctx.stroke();
+      la.lips.forEach((q,i)=>{ const r=affinePt(q,pp,cc); const [x,y]=sc(r.x,r.y);
+        ctx.fillStyle=(i===0||i===la.lips.length-1)?'#ff8a3d':'#ffd166';   // corners accented
+        ctx.beginPath(); ctx.arc(x,y,3.5,0,7); ctx.fill(); }); }
+    // the lip SHE DREW for THIS expression (green) — what the mouth is being warped to
+    if(la && la.role!=='base' && la.visible && S.expr!=='neutral'){
+      const dp=la.poses && la.poses[S.expr], dl=dp&&dp.lipDraw;
+      if(Array.isArray(dl) && dl.length){ const v=S.view, sc=(x,y)=>[v.x+x*v.zoom, v.y+y*v.zoom];
+        ctx.strokeStyle='rgba(80,220,140,.95)'; ctx.lineWidth=2; ctx.beginPath();
+        dl.forEach((q,i)=>{ const [x,y]=sc(q.x,q.y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+        dl.forEach((q,i)=>{ const [x,y]=sc(q.x,q.y);
+          ctx.fillStyle=(i===0||i===dl.length-1)?'#2fae6a':'#7CF2AE';
+          ctx.beginPath(); ctx.arc(x,y,3.5,0,7); ctx.fill(); }); } } }
+  ctx.fillStyle='#ffd166'; ctx.font='14px sans-serif';
+  const lbl=(EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr;
+  ctx.fillText(S.exprPreview?'▶ preview — morphing through the expressions'
+    :('Posing: '+lbl+(S.expr==='neutral'?'  (resting face)'
+      :(S.faceWarp?(S.warpTool==='region'?'  — drag a circle over an area, then Zoom / Rotate it'
+                                          :'  — tap to drop a point, drag to pull it')
+                  :'  — drag to move · pull the handles to stretch / zoom'))), 12, H-14);
+}
+// find the topmost non-base feature whose (offset) alpha is under the finger
+function pickFeature(ip){
+  for(let i=S.layers.length-1;i>=0;i--){ const l=S.layers[i]; if(!l.visible||l.role==='base'||l.locked) continue;
+    const p=poseOf(l,S.expr); const x=Math.round(ip.x-p.dx), y=Math.round(ip.y-p.dy);
+    if(x<0||y<0||x>=S.iw||y>=S.ih) continue;
+    if(l.mctx.getImageData(x,y,1,1).data[3]>8) return i; }
+  return -1;
+}
+function faceDown(sp){
+  const ip=s2i(sp.x,sp.y);
+  const sel=activeLayer();
+  // ---- LIP-LINE mode: draw the mouth curve. On Neutral = the RESTING lip (source); on an expression =
+  //      the mouth you want FOR THAT expression (the mouth warps to it live). ----
+  if(S.lipEdit){
+    let l=sel;
+    if(!l || l.role==='base'){ const hit=pickFeature(ip); if(hit>=0){ S.active=hit; renderLayerList(); l=activeLayer(); } }
+    if(!l || l.role==='base'){ toast('Tap your mouth layer first, then draw its lip line'); draw(); return; }
+    if(l.locked){ toast('🔒 '+l.name+' is locked — unlock it to draw'); return; }
+    if(S.expr==='neutral'){
+      if(!Array.isArray(l.lips)) l.lips=[];
+      l.lips.push({x:Math.round(ip.x), y:Math.round(ip.y)});   // Neutral ⇒ image coords ARE rest coords
+      renderExprPose(); draw(); markDirty();
+      toast('Resting lip point '+l.lips.length+' — or pick 🙂/☹️ and draw that expression’s mouth');
+    } else {
+      const p=ensurePose(l, S.expr);
+      if(!Array.isArray(p.lipDraw)) p.lipDraw=[];
+      p.lipDraw.push({x:Math.round(ip.x), y:Math.round(ip.y)});
+      rebuildLipMls(l, S.expr);   // warp the mouth to the line she's drawing, live
+      renderExprPose(); draw(); markDirty();
+      toast(((EXPRS.find(x=>x.id===S.expr)||{}).label||S.expr)+' mouth — point '+p.lipDraw.length+', keep tapping left→right');
+    }
+    return;
+  }
+  // ---- WARP mode: region circle (zoom/rotate an area) or point pull ----
+  if(S.faceWarp){
+    if(S.expr==='neutral'){ toast('Pick an expression to warp'); return; }
+    let l=sel;
+    if(!l || l.role==='base'){ const hit=pickFeature(ip); if(hit>=0){ S.active=hit; S.warpSel=null; renderLayerList(); l=activeLayer(); } }
+    if(!l || l.role==='base'){ draw(); return; }
+    if(l.locked){ toast('🔒 '+l.name+' is locked — tap 🔓 in the Layers list to warp it'); draw(); return; }
+    const ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+    // 1) grab an existing operator's handle (pin tip / region centre)? → drag it (snapshot lazily on move)
+    const oi=hitWarpOp(l, sp);
+    if(oi>=0){ const op=ops[oi]; S.warpSel=op;
+      S.warpDrag=(op.t==='rgn') ? { layer:l, op, mode:'move', grab:{x:ip.x-op.cx, y:ip.y-op.cy}, snapped:false }
+                                : { layer:l, op, mode:'pull', snapped:false };
+      renderWarpPanel(); draw(); return; }
+    // 2) on the selected region's ring → resize it
+    if(S.warpTool==='region' && S.warpSel && S.warpSel.t==='rgn' && ops.indexOf(S.warpSel)>=0){
+      const op=S.warpSel, dR=Math.abs(Math.hypot(ip.x-op.cx, ip.y-op.cy)-op.r);
+      if(dR*S.view.zoom<=14){ S.warpDrag={ layer:l, op, mode:'resize', snapped:false }; draw(); return; }
+    }
+    // 3) else create a NEW operator at the finger (adding it IS the change → snapshot now)
+    const p=ensurePose(l,S.expr); if(!p.warp) p.warp=[]; pushPoseUndo(l,S.expr);
+    const op = (S.warpTool==='region')
+      ? {t:'rgn', cx:ip.x, cy:ip.y, r:1, feather:Math.max(8,Math.round(S.warpRadius*0.6)), scale:1, rot:0}
+      : {t:'pin', ax:ip.x, ay:ip.y, dx:0, dy:0, r:S.warpRadius};
+    p.warp.push(op); S.warpSel=op;
+    S.warpDrag={ layer:l, op, mode:(S.warpTool==='region'?'draw':'pull'), snapped:true };
+    renderWarpPanel(); draw(); return;
+  }
+  // ---- BOX mode (affine whole-part) ----
+  // 1) a transform handle of the already-selected feature? → start that stretch/zoom
+  if(S.expr!=='neutral' && sel && sel.role!=='base' && sel.visible && !sel.locked){
+    const h=hitHandle(sel, sp);
+    if(h){ S.faceDrag={ mode:h, ip, start:poseOf(sel,S.expr), c:featureCenter(sel), box:featureBox(sel), snapped:false }; draw(); return; }
+  }
+  // 2) else select the topmost feature under the finger (accounting for its current-expression offset)
+  const hit=pickFeature(ip);
+  if(hit>=0 && hit!==S.active){ S.active=hit; renderLayerList(); }
+  const l=activeLayer();
+  if(S.expr==='neutral'){ S.faceDrag=null; toast('Pick an expression to pose'); }
+  else if(l && l.locked){ S.faceDrag=null; toast('🔒 '+l.name+' is locked — tap 🔓 in the Layers list to move it'); }
+  else if(l && l.role!=='base'){ S.faceDrag={ mode:'move', ip, start:poseOf(l,S.expr), c:featureCenter(l), box:featureBox(l), snapped:false }; }
+  else S.faceDrag=null;
+  draw();
+}
+function warpMove(sp){ const wd=S.warpDrag; if(!wd) return; const op=wd.op, ip=s2i(sp.x,sp.y);
+  if(!wd.snapped){ pushPoseUndo(wd.layer,S.expr); wd.snapped=true; }   // snapshot once, on first real move
+  if(op.t==='pin'){ op.dx=Math.round(ip.x-op.ax); op.dy=Math.round(ip.y-op.ay); }
+  else if(wd.mode==='move'){ op.cx=Math.round(ip.x-wd.grab.x); op.cy=Math.round(ip.y-wd.grab.y); }
+  else { op.r=Math.max(2, Math.round(Math.hypot(ip.x-op.cx, ip.y-op.cy))); }   // draw or resize
+  renderWarpPanel(); draw(); markDirty();
+}
+function faceMove(sp){
+  const l=activeLayer(); const fd=S.faceDrag; if(!l||!fd) return;
+  const ip=s2i(sp.x,sp.y), c=fd.c, b=fd.box, start=fd.start;
+  if(!fd.snapped){ pushPoseUndo(l,S.expr); fd.snapped=true; }   // snapshot once, on first real move
+  const pose=ensurePose(l,S.expr);
+  const clamp=v=>Math.max(0.15,Math.min(5, Math.abs(v)));
+  if(fd.mode==='move'){
+    pose.dx=Math.round(start.dx+(ip.x-fd.ip.x)); pose.dy=Math.round(start.dy+(ip.y-fd.ip.y));
+  } else if(fd.mode==='ml'||fd.mode==='mr'){                 // stretch width
+    const bx=(fd.mode==='ml'?b.x:b.x+b.w); pose.sx=clamp((ip.x-start.dx-c.x)/((bx-c.x)||1));
+  } else if(fd.mode==='tc'||fd.mode==='bc'){                 // stretch height
+    const by=(fd.mode==='tc'?b.y:b.y+b.h); pose.sy=clamp((ip.y-start.dy-c.y)/((by-c.y)||1));
+  } else {                                                   // corner = uniform zoom
+    const bx=(fd.mode==='tl'||fd.mode==='bl'?b.x:b.x+b.w), by=(fd.mode==='tl'||fd.mode==='tr'?b.y:b.y+b.h);
+    const fx=Math.abs((ip.x-start.dx-c.x)/((bx-c.x)||1)), fy=Math.abs((ip.y-start.dy-c.y)/((by-c.y)||1));
+    const s=clamp((fx+fy)/2); pose.sx=s; pose.sy=s;
+  }
+  renderExprPose(); draw(); markDirty();
+}
+function renderExprChips(){
+  const box=document.getElementById('exprChips'); if(!box) return; box.innerHTML='';
+  EXPRS.forEach(ex=>{ const b=document.createElement('button'); b.className='sm'+(ex.id===S.expr?' on':'');
+    b.textContent=ex.label; b.onclick=()=>{ S.expr=ex.id; renderExprChips(); renderExprPose(); draw(); markDirty(); };
+    box.appendChild(b); });
+}
+function renderExprPose(){
+  const box=document.getElementById('exprPose'); if(!box) return;
+  if(S.mode!=='face'){ box.innerHTML=''; return; }
+  if(S.expr==='neutral'){ box.innerHTML='<p class="hint"><b>Neutral</b> is the resting face — pick a state above (Happy / Sad / Angry / Shocked), then stretch / move the parts.</p>'; return; }
+  const l=activeLayer();
+  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Select a <b>feature</b> (a mover: brow / eye / mouth) in the Layers list — or tap it on the canvas — then drag it / pull its handles, or fine-tune below.</p>'; return; }
+  const p=poseOf(l,S.expr);
+  box.innerHTML=`
+    <div class="mrow"><label>${l.name} · move</label>
+      <span class="nudge"><button class="mini pL">◀</button><button class="mini pU">▲</button><button class="mini pD">▼</button><button class="mini pR">▶</button></span>
+      <button class="mini pRst" title="reset this feature to neutral">⟲</button><span class="mval pOff">${p.dx|0},${p.dy|0}</span></div>
+    <div class="mrow"><label>Width</label><input type="range" class="pSx" min="0.3" max="2.5" step="0.05" value="${p.sx}"><span class="mval">${(+p.sx).toFixed(2)}×</span></div>
+    <div class="mrow"><label>Height</label><input type="range" class="pSy" min="0.3" max="2.5" step="0.05" value="${p.sy}"><span class="mval">${(+p.sy).toFixed(2)}×</span></div>
+    <div class="mrow"><label>Rotate</label><input type="range" class="pRot" min="-45" max="45" step="1" value="${p.rot}"><span class="mval">${p.rot|0}°</span></div>`;
+  const getp=()=>ensurePose(l,S.expr);
+  const upd=()=>{ const q=poseOf(l,S.expr); box.querySelector('.pOff').textContent=`${q.dx|0},${q.dy|0}`; draw(); markDirty(); };
+  const STEP=6, nudge=fn=>{ pushPoseUndo(l,S.expr); fn(); upd(); };
+  box.querySelector('.pL').onclick=()=>nudge(()=>getp().dx-=STEP);
+  box.querySelector('.pR').onclick=()=>nudge(()=>getp().dx+=STEP);
+  box.querySelector('.pU').onclick=()=>nudge(()=>getp().dy-=STEP);
+  box.querySelector('.pD').onclick=()=>nudge(()=>getp().dy+=STEP);
+  box.querySelector('.pRst').onclick=()=>{ pushPoseUndo(l,S.expr); if(l.poses) delete l.poses[S.expr]; S.warpSel=null; renderExprPose(); renderWarpPanel(); draw(); };
+  // sliders: snapshot once per drag (one slider-drag = one undo step) — wire history BEFORE oninput
+  ['pSx','pSy','pRot'].forEach(cls=>histSlider(box.querySelector('.'+cls), l, S.expr));
+  box.querySelector('.pSx').oninput=e=>{ getp().sx=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+  box.querySelector('.pSy').oninput=e=>{ getp().sy=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+  box.querySelector('.pRot').oninput=e=>{ getp().rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
+}
+// the selected warp operator's controls (region: zoom/rotate/feather · point: reach) + delete
+function renderWarpPanel(){
+  const box=document.getElementById('warpPanel'); if(!box) return;
+  if(S.mode!=='face' || !S.faceWarp){ box.innerHTML=''; return; }
+  const l=activeLayer();
+  if(S.expr==='neutral'){ box.innerHTML='<p class="hint">Pick an expression first (Happy / Sad …), then warp.</p>'; return; }
+  if(!l || l.role==='base'){ box.innerHTML='<p class="hint">Tap a feature (eye / brow / mouth) to warp it.</p>'; return; }
+  const op=S.warpSel, ops=(l.poses[S.expr]&&l.poses[S.expr].warp)||[];
+  if(!op || ops.indexOf(op)<0){
+    box.innerHTML=`<p class="hint">${S.warpTool==='region'
+      ? '<b>Drag a circle</b> over an area (e.g. the eye), then Zoom / Rotate it here. Drag its centre to move the circle, its edge to resize.'
+      : '<b>Tap</b> on the part to drop a point, then drag it to pull. Tap an existing point to edit it.'}</p>`;
+    return; }
+  const del=`<button class="mini danger wDel" title="delete this ${op.t==='rgn'?'region':'point'}">🗑</button>`;
+  if(op.t==='rgn'){
+    box.innerHTML=`
+      <div class="mrow"><label>Zoom</label><input type="range" class="wScale" min="0.3" max="2.5" step="0.02" value="${op.scale==null?1:op.scale}"><span class="mval">${(+(op.scale==null?1:op.scale)).toFixed(2)}×</span></div>
+      <div class="mrow"><label>Rotate</label><input type="range" class="wRot" min="-60" max="60" step="1" value="${op.rot||0}"><span class="mval">${op.rot|0}°</span></div>
+      <div class="mrow"><label>Soft edge</label><input type="range" class="wFeather" min="0" max="160" step="2" value="${op.feather||0}"><span class="mval">${op.feather|0}</span><span style="flex:0">${del}</span></div>`;
+    const sc=box.querySelector('.wScale'), rt=box.querySelector('.wRot'), ft=box.querySelector('.wFeather');
+    [sc,rt,ft].forEach(el=>histSlider(el, l, S.expr));
+    sc.oninput=e=>{ op.scale=+e.target.value; e.target.nextElementSibling.textContent=(+e.target.value).toFixed(2)+'×'; draw(); markDirty(); };
+    rt.oninput=e=>{ op.rot=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0)+'°'; draw(); markDirty(); };
+    ft.oninput=e=>{ op.feather=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0); draw(); markDirty(); };
+  } else {
+    box.innerHTML=`
+      <div class="mrow"><label>Reach</label><input type="range" class="wReach" min="15" max="260" step="5" value="${op.r}"><span class="mval">${op.r|0}</span><span style="flex:0">${del}</span></div>`;
+    const rc=box.querySelector('.wReach'); histSlider(rc, l, S.expr);
+    rc.oninput=e=>{ op.r=+e.target.value; e.target.nextElementSibling.textContent=(e.target.value|0); draw(); markDirty(); };
+  }
+  box.querySelector('.wDel').onclick=()=>{ pushPoseUndo(l,S.expr); const i=ops.indexOf(op); if(i>=0) ops.splice(i,1);
+    S.warpSel=null; renderWarpPanel(); draw(); };
+}
+let exprRAF=0, exprStart=0;
+function setExprPreview(on){
+  S.exprPreview=on; const btn=document.getElementById('previewExpr');
+  if(on){ if(!S.img){ toast('Cut a face first'); S.exprPreview=false; return; }
+    S.layers.forEach(l=>{ l._cut=null; });
+    if(btn){ btn.classList.add('on'); btn.textContent='■ Stop preview'; }
+    exprStart=0; const loop=(ts)=>{ if(!S.exprPreview) return; if(!exprStart) exprStart=ts;
+      S.exprT=(ts-exprStart)/1000; draw(); exprRAF=requestAnimationFrame(loop); };
+    exprRAF=requestAnimationFrame(loop); toast('Morphing through the expressions…');
+  } else { if(exprRAF) cancelAnimationFrame(exprRAF); exprRAF=0;
+    if(btn){ btn.classList.remove('on'); btn.textContent='▶ Preview expressions'; } draw(); }
+}
+function applyMode(){
+  const face=S.mode==='face';
+  document.querySelectorAll('#modeSw button').forEach(b=>b.classList.toggle('on', b.dataset.mode===S.mode));
+  const show=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display=on?'':'none'; };
+  show('toolsGroup', !face); show('cleanupGroup', !face); show('motionGroup', !face); show('faceGroup', face);
+  if(S.preview) setPreview(false);
+  if(!face && S.exprPreview) setExprPreview(false);
+  S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; l._rest=null; });   // rebuild cut images / centres / boxes / warp grids for the new view
+  if(face){ migrateAllWarp(); renderExprChips(); renderExprPose();
+    document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
+    const lt=document.getElementById('lipTools'); if(lt) lt.style.display = S.lipEdit?'':'none';
+    const curEdit = S.lipEdit?'lips':(S.faceWarp?'warp':'box');
+    document.querySelectorAll('#warpRow button').forEach(b=>b.classList.toggle('on', b.dataset.edit===curEdit));
+    document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.classList.toggle('on', b.dataset.warptool===S.warpTool));
+    renderWarpPanel(); }
+  draw();
+}
+/* ---- FACS auto-pose: the SEMANTIC driver. Each expression = a recipe of facial Action Units
+   (Ekman). We detect each feature's role from its layer NAME (brow / eye / mouth ± left/right),
+   then emit a believable per-feature pose scaled to that feature's own box — brows do the AU work
+   via rotate/shift, the mouth curls via two MLS-rigid handles at its corners. One tap poses the
+   whole face as a STARTING point; she then tweaks with Box / Warp. Unrecognised features untouched. */
+function facsRole(name){
+  const s=(name||'').toLowerCase();
+  const side = /(^|[_\- ])(l|left|sol)([_\- ]|\d|$)/.test(s) ? 'l'
+             : /(^|[_\- ])(r|right|sag|sağ)([_\- ]|\d|$)/.test(s) ? 'r' : '';
+  if(/brow|eyebrow|kas|kaş/.test(s))                    return {part:'brow', side};
+  if(/eye|göz|goz|lid|lash/.test(s))                    return {part:'eye',  side};
+  if(/mouth|lip|ağız|agiz|dudak|teeth|tongue/.test(s))  return {part:'mouth',side};
+  return {part:'', side};
+}
+// A believable pose for ONE feature under one expression — moves scaled to the feature's own box.
+// ---- Per-expression DRAWN lip: author each expression's mouth DIRECTLY (pick the expression, trace the
+//      mouth you want for it). The resting lip (traced on Neutral, or an auto baseline) is the SOURCE; her
+//      drawn lip is the TARGET; the mouth warps source→target via the same MLS-rigid machinery as FACS. ----
+function resampleLip(pts, n){
+  if(!pts || pts.length===0) return [];
+  if(pts.length===1) return Array.from({length:n},()=>({x:pts[0].x,y:pts[0].y}));
+  const d=[0]; for(let i=1;i<pts.length;i++) d[i]=d[i-1]+Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
+  const total=d[d.length-1]||1, out=[];
+  for(let k=0;k<n;k++){ const t=total*k/(n-1); let i=1; while(i<d.length && d[i]<t) i++;
+    const i0=i-1, seg=(d[i]-d[i0])||1, f=(t-d[i0])/seg;
+    out.push({x:pts[i0].x+(pts[i].x-pts[i0].x)*f, y:pts[i0].y+(pts[i].y-pts[i0].y)*f}); }
+  return out;
+}
+// The resting lip (warp SOURCE): her traced Neutral lip if any, else a straight baseline across the mouth box.
+function restLipOf(l, n){
+  if(Array.isArray(l.lips) && l.lips.length>=2) return resampleLip(l.lips, n);
+  const b=featureBox(l), y=b.y+0.60*b.h, x0=b.x+0.12*b.w, x1=b.x+0.88*b.w;
+  return Array.from({length:n},(_,i)=>({x:x0+(x1-x0)*i/(n-1), y}));
+}
+// Build the mouth's MLS warp for one expression from the lip SHE DREW for it (rest lip → drawn lip).
+function rebuildLipMls(l, expr){
+  const p=l.poses && l.poses[expr];
+  if(!p || !Array.isArray(p.lipDraw) || p.lipDraw.length<2){ if(p) delete p.mls; return; }
+  const n=Math.max(3, Math.min(9, p.lipDraw.length));
+  const rest=restLipOf(l, n), drawn=resampleLip(p.lipDraw, n);
+  p.dx=0; p.dy=0; p.rot=0; p.sx=1; p.sy=1;      // the drawn lip alone drives the mouth (identity box)
+  p.mls=rest.map((q,i)=>({px:Math.round(q.x), py:Math.round(q.y), dx:Math.round(drawn[i].x-q.x), dy:Math.round(drawn[i].y-q.y)}));
+}
+function facsPose(l, exprId){
+  const r=facsRole(l.name); if(!r.part) return null;
+  const b=featureBox(l), W=b.w, H=b.h;
+  // VIEWER-SIDE from GEOMETRY, not the l/r name (names may be viewer- or character-relative → angle flips).
+  // Compare this feature's centre-x to the midline of all paired brow/eye features. m=+1 ⇒ viewer-LEFT, -1 ⇒ right.
+  // Directional poses (brow furrow angle + knit, angry-eye slant) use m so the tilt always points the right way.
+  const cx0 = b.x + 0.5*W;
+  let sumx=0, nx=0;
+  for(const o of S.layers){ const rr=facsRole(o.name); if(rr.part==='brow'||rr.part==='eye'){ const bb=featureBox(o); sumx+=bb.x+0.5*bb.w; nx++; } }
+  const midx = nx ? sumx/nx : S.iw/2;
+  const m = (cx0 < midx) ? 1 : -1;   // +1 = viewer-left feature (inner end on its RIGHT) → +rot drives that inner end DOWN
+  const pose={dx:0,dy:0,rot:0,sx:1,sy:1};
+  // mouth corner handles (REST space): up>0 ⇒ corners rise (smile), up<0 ⇒ corners drop (frown)
+  const corners=up=>[ {px:b.x+0.10*W, py:b.y+0.55*H, dx:-0.03*W, dy:-up*0.45*H},
+                      {px:b.x+0.90*W, py:b.y+0.55*H, dx:+0.03*W, dy:-up*0.45*H} ];
+  const lips = (r.part==='mouth' && Array.isArray(l.lips) && l.lips.length>=2) ? l.lips : null;
+  // ABSOLUTE RETARGET (traced mouths): measure the lip's own vertical centre, then reshape it so the corners
+  // sit T·H above(+)/below(−) that centre with the middle AT centre. This is independent of what the art was
+  // drawn as — a grin, a frown, anything — so Happy=smile, Neutral=flat, Sad=frown all come out right.
+  const retarget = T => {
+    const xs=lips.map(q=>q.x), ys=lips.map(q=>q.y);
+    const xmin=Math.min(...xs), xmax=Math.max(...xs), half=(((xmax-xmin)||1)/2), xc=(xmin+xmax)/2;
+    const yc=ys.reduce((a,c)=>a+c,0)/ys.length;    // mouth vertical centre = the flat baseline
+    return lips.map(q=>{ const w=Math.min(1, Math.abs(q.x-xc)/half);   // 0 at centre → 1 at the corners
+      return { px:q.x, py:q.y, dx:0, dy: Math.round((yc - T*H*w) - q.y) }; });
+  };
+  // traced → absolute target T (corner raise in units of H); untraced → relative corner nudge `up` (box guess)
+  const mouthMls = (up,T) => lips ? retarget(T) : corners(up);
+  // NEUTRAL is identity — UNLESS the mouth was traced: then FLATTEN the drawn expression into a true resting face.
+  if(exprId==='neutral'){ if(lips){ pose.mls=retarget(0.0); return pose; } return null; }
+  if(exprId==='happy'){            // AU6 cheek-raise + AU12 lip-corner pull
+    if(r.part==='mouth'){ pose.sx=1.03; pose.mls=mouthMls(+0.5, +0.22); }   // corners up ~0.22·H (strong smile)
+    else if(r.part==='eye'){ pose.sy=0.88; pose.dy=+0.06*H; }
+    else if(r.part==='brow'){ pose.dy=-0.12*H; }                     // modest raise (was -0.25*H = read surprised / brow too prominent)
+  } else if(exprId==='sad'){       // Özge's rule — SAD = everything SOFT & SAGGING: low droopy brows, small/closed eyes, mouth down. NO sharp angle (angle = anger).
+    if(r.part==='mouth'){ pose.sx=0.97; pose.dy=+0.04*H; pose.mls=mouthMls(-0.6, -0.17); }   // mouth going down (frown)
+    else if(r.part==='brow'){ pose.rot=-7*m; pose.dy=+0.06*H; }    // LOW & droopy, only a gentle inner-up — deliberately NOT a sharp angle
+    else if(r.part==='eye'){ pose.sy=0.55; pose.dy=+0.12*H; }      // SMALL / nearly closed, drooping straight down (no slant)
+  } else if(exprId==='angry'){     // Özge's rule — ANGRY = SHARP & ANGLED: furrowed angled brows + angled/slanted eyes. The ANGLE (not low position) is the anger cue.
+    if(r.part==='brow'){ pose.rot=+22*m; pose.dy=+0.40*H; pose.dx=+0.16*W*m; }  // sharp downward-INWARD angle, knitted together (the furrow)
+    else if(r.part==='eye'){ pose.sy=0.72; pose.rot=+12*m; pose.dy=+0.03*H; }   // narrowed AND slanted — an angled glare (inner corner driven down), not just small
+    else if(r.part==='mouth'){ pose.sx=0.95; pose.sy=0.86; pose.mls=mouthMls(-0.3, -0.08); }  // tight & tense, not a big frown
+  } else if(exprId==='shocked'){   // AU1+2 brows-up + AU5 eyes-wide + AU26 jaw-drop
+    if(r.part==='brow'){ pose.dy=-0.70*H; }
+    else if(r.part==='eye'){ pose.sy=1.25; pose.dy=-0.03*H; }
+    else if(r.part==='mouth'){ pose.sx=0.90; pose.sy=1.40; pose.dy=+0.10*H; }   // jaw-drop O (open) — keeps the drawn mouth
+  } else return null;
+  return pose;
+}
+// Apply FACS to the WHOLE face for the current expression (one undo step per feature).
+function applyFacs(){
+  if(S.mode!=='face'){ return; }
+  if(S.expr==='neutral'){
+    const anyLips=S.layers.some(l=>l.role!=='base' && l.visible && Array.isArray(l.lips) && l.lips.length>=2);
+    if(!anyLips){ toast('Neutral is the rest face. Trace a 👄 lip line to flatten a drawn smile here, or pick Happy / Sad / Angry'); return; }
+  }
+  let n=0;
+  for(const l of S.layers){ if(l.role==='base' || !l.visible) continue;
+    const fp=facsPose(l, S.expr); if(!fp) continue;          // unrecognised feature → leave as-is
+    pushPoseUndo(l, S.expr);
+    const p=ensurePose(l, S.expr);
+    p.dx=Math.round(fp.dx); p.dy=Math.round(fp.dy); p.rot=fp.rot; p.sx=fp.sx; p.sy=fp.sy;
+    if(fp.mls) p.mls=fp.mls; else delete p.mls;              // keep her manual region/point warp (p.warp)
+    n++; }
+  renderExprPose(); renderWarpPanel(); draw(); markDirty();
+  toast(n ? ('FACS → posed '+n+' feature'+(n>1?'s':'')+' for '+S.expr+'. Tweak with Box / Warp, ↩︎ to undo.')
+          : 'No recognisable features — name layers brow / eye / mouth, then retry');
+}
+// the pose rows for happy/sad/angry/shocked, normalized (dx/W, dy/H), for export
+function collectExpressions(W,H){
+  const out={};
+  for(const ex of EXPRS){ if(ex.id==='neutral') continue; const list=[];
+    for(const l of S.layers){ const p=l.poses&&l.poses[ex.id]; if(!p) continue;
+      const q=poseOf(l, ex.id);   // normalized (handles legacy `scale` → sx/sy)
+      const hasWarp=q.warp && q.warp.length, hasMls=q.mls && q.mls.length;
+      if(q.dx||q.dy||q.rot||q.sx!==1||q.sy!==1||hasWarp||hasMls){
+        const e={ id:sanitize(l.name), dx:f3(q.dx/W), dy:f3(q.dy/H), rot:q.rot, sx:f3(q.sx), sy:f3(q.sy) };
+        if(hasWarp) e.warp=q.warp.map(op=> op.t==='rgn'   // localized operators, coords normalized
+          ? {t:'rgn', cx:f3(op.cx/W), cy:f3(op.cy/H), r:f3(op.r/W), feather:f3((op.feather||0)/W), scale:f3(op.scale==null?1:op.scale), rot:op.rot||0}
+          : {t:'pin', ax:f3(op.ax/W), ay:f3(op.ay/H), dx:f3((op.dx||0)/W), dy:f3((op.dy||0)/H), r:f3(op.r/W)});
+        if(hasMls) e.mls=q.mls.map(h=>   // MLS-rigid handles: rest point + pull, coords normalized
+          ({px:f3(h.px/W), py:f3(h.py/H), dx:f3((h.dx||0)/W), dy:f3((h.dy||0)/H)}));
+        list.push(e); } }
+    if(list.length) out[ex.id]=list; }
+  return out;
+}
+document.querySelectorAll('#modeSw button').forEach(b=>b.onclick=()=>{ S.mode=b.dataset.mode; applyMode(); markDirty(); });
+document.getElementById('previewExpr').onclick=()=>setExprPreview(!S.exprPreview);
+document.getElementById('exportFaceFrames').onclick=exportFaceFrames;
+document.getElementById('facsAuto').onclick=applyFacs;   // FACS action-unit auto-pose (whole face)
+// Face edit sub-mode: ▦ Box (affine) ↔ 🫠 Warp an area ↔ 👄 Lip line
+document.querySelectorAll('#warpRow button').forEach(b=>b.onclick=()=>{
+  const e=b.dataset.edit; S.faceWarp=(e==='warp'); S.lipEdit=(e==='lips');
+  document.querySelectorAll('#warpRow button').forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('warpTools').style.display = S.faceWarp?'':'none';
+  document.getElementById('lipTools').style.display = S.lipEdit?'':'none';
+  if(S.lipEdit) toast(S.expr==='neutral'
+    ? 'Neutral: trace where the mouth rests (optional) — or pick 🙂/☹️ and draw that expression’s mouth'
+    : 'Draw the mouth you want for '+(((EXPRS.find(x=>x.id===S.expr)||{}).label)||S.expr)+' — tap left→right along it');
+  S.faceDrag=null; S.warpDrag=null; renderWarpPanel(); draw(); });
+document.getElementById('lipClear').onclick=()=>{ const l=activeLayer(); if(!l) return;
+  if(S.expr==='neutral'){ if(Array.isArray(l.lips)&&l.lips.length){ l.lips=null; renderExprPose(); draw(); markDirty(); toast('Resting lip cleared'); } else toast('No resting lip'); }
+  else { const p=l.poses&&l.poses[S.expr]; if(p&&Array.isArray(p.lipDraw)&&p.lipDraw.length){ p.lipDraw=null; delete p.mls; renderExprPose(); draw(); markDirty(); toast('Cleared the '+S.expr+' mouth line'); } else toast('No lip line for '+S.expr); } };
+document.getElementById('lipUndo').onclick=()=>{ const l=activeLayer(); if(!l) return;
+  if(S.expr==='neutral'){ if(Array.isArray(l.lips)&&l.lips.length){ l.lips.pop(); if(!l.lips.length) l.lips=null; draw(); markDirty(); toast('Removed last resting-lip point'); } else toast('No lip point to remove'); }
+  else { const p=l.poses&&l.poses[S.expr]; if(p&&Array.isArray(p.lipDraw)&&p.lipDraw.length){ p.lipDraw.pop(); if(!p.lipDraw.length){ p.lipDraw=null; delete p.mls; } else rebuildLipMls(l,S.expr); draw(); markDirty(); toast('Removed last point'); } else toast('No lip point to remove'); } };
+// Warp tool: ⭕ Region (circle zoom/rotate) ↔ 📍 Point (pull a spot)
+document.querySelectorAll('#warpTools button[data-warptool]').forEach(b=>b.onclick=()=>{
+  S.warpTool = b.dataset.warptool;
+  document.querySelectorAll('#warpTools button[data-warptool]').forEach(x=>x.classList.toggle('on', x===b));
+  S.warpSel=null; renderWarpPanel(); draw(); });
+document.getElementById('warpClear').onclick=()=>{ const l=activeLayer();
+  if(l && l.poses && l.poses[S.expr] && l.poses[S.expr].warp && l.poses[S.expr].warp.length){
+    pushPoseUndo(l,S.expr); delete l.poses[S.expr].warp; S.warpSel=null; renderWarpPanel(); draw(); toast('Warp cleared on this feature'); }
+  else toast('No warp on this feature'); };
+
 /* ---------- boot ---------- */
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+applyMode();
 // debug hook for automated verification
-window.__lc = { S, loadImage, buildExport, buildNexumPayload, wandAt, zipStore };
+window.__lc = { S, loadImage, buildExport, buildHostPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
+  draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
+  mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer,
+  inpaintRGB, patchMatchInpaint, pmComplete, synthFromSwatch, fillPatternTarget, patTargetBegin, patTargetDab, layerBackfill, paintCloneDab, autoHealHoles };
 </script>
 </body>
 </html>

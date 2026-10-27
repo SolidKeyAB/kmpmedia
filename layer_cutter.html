@@ -131,8 +131,15 @@
         <button data-tool="clone">🩹 Patch base</button>
       </div>
       <div id="toolParams">
-        <label class="sld">Brush size <span id="brushVal">40</span>px</label>
-        <input type="range" id="brush" min="3" max="200" value="40">
+        <label class="sld">Brush size <span id="brushVal">120</span>px</label>
+        <input type="range" id="brush" min="3" max="600" value="120">
+        <div id="eraseParams" style="display:none; margin:8px 0;">
+          <label class="sld" style="margin-top:0;">🧽 Erase removes colour to…</label>
+          <div class="row">
+            <button class="sm on" id="eraseTrans" title="Cut the painted area OUT of this layer — it becomes a real transparent gap (what the old Erase did).">⌫ Transparent</button>
+            <button class="sm" id="eraseWhite" title="Paint the painted area WHITE over the colour — the layer keeps its shape, the colour is wiped to white.">▢ White</button>
+          </div>
+        </div>
         <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
         <input type="range" id="tol" min="2" max="120" value="40">
         <div class="row" id="wandMode" style="margin-top:8px;">
@@ -140,13 +147,33 @@
           <button class="sm" data-wm="sub">✖ Wand removes</button>
         </div>
         <div id="cloneParams" style="display:none; margin-top:8px;">
+          <div class="row" style="margin-bottom:6px;">
+            <button class="sm go" id="autoHeal" style="width:100%;" title="One-tap PatchMatch content-aware fill — rebuilds the whole magenta area from the real texture around it. Refine afterwards with the tools below.">✨ Auto-heal (fill the magenta)</button>
+          </div>
           <div class="row">
-            <button class="sm" id="cloneSample">🎯 Set source spot</button>
-            <button class="sm go" id="autoHeal" title="Auto-fill every cut-out hole on this layer with the surrounding texture — a good start you can then refine by hand">✨ Auto-heal holes</button>
+            <button class="sm on" id="modeBox">▭ Copy a box</button>
+            <button class="sm" id="modeBrush">🖌 Brush stamp</button>
+            <button class="sm" id="modePattern">🧵 Pattern fill</button>
+          </div>
+          <div class="row" id="boxRow" style="margin-top:6px;">
+            <button class="sm go" id="boxGrab">▭ Grab a box</button>
+          </div>
+          <div class="row" id="brushRow" style="margin-top:6px; display:none;">
+            <button class="sm go" id="cloneSample">🎯 Set source spot</button>
+          </div>
+          <div class="row" id="patRow" style="margin-top:6px; display:none;">
+            <button class="sm go" id="patPick">⬚ Pick pattern</button>
+            <button class="sm" id="patClear">🧽 Clear area</button>
           </div>
           <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
           <input type="range" id="soft" min="0" max="100" value="60">
-          <p class="hint"><b>🩹 Patch base</b> heals the hole a lifted mover leaves — so when it swings away you see real coat/texture, not a flat colour or a gap. Picking this tool <b>lifts the movers so the holes glow magenta</b> (you can finally see the gap you're patching; the magenta recedes as you fill it). Tap <b>🎯 Set source spot</b> → tap a clean patch of coat → then paint over the magenta hole; it clones real pixels (stripes, shading) from source to hole. Painting is auto-clipped to this layer's shape, so you can't smear outside the figure. It paints onto a non-destructive back-layer <i>under</i> the base (never touches the mover) and bakes under the base on export. <b>✨ Auto-heal holes</b> fills them all in one tap. ↩︎ / ⌘Z undoes any patch.</p>
+          <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
+          <input type="range" id="infuse" min="0" max="100" value="0">
+          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you fill it).<br>
+          <b>▭ Copy a box (recommended):</b> tap <b>▭ Grab a box</b>, then <b>drag a rectangle over a clean bit of belt/coat</b> — that whole rectangle (buckle, strap, weave and all) is copied. Then <b>tap or drag over the magenta</b> to stamp that exact patch at each point; a live ghost shows what will land. Overlapping stamps blend via <b>Softness</b>. Tap <b>▭ Grab a box</b> again to copy a different piece. This keeps the real detail — not one averaged tone.<br>
+          <b>🖌 Brush stamp:</b> the older round brush — tap <b>🎯 Set source spot</b> on clean belt, then paint; each dab copies that spot at the brush size (make the brush big).<br>
+          <b>🧵 Pattern fill (for a bending belt/strap):</b> tap <b>⬚ Pick pattern</b> and <b>drag a box over the texture you want</b> (a clean bit of belt). Then <b>paint the area to fill</b> — any flexible shape, e.g. the belt curving behind the arm. Lift your finger and it's filled with that pattern, seamlessly extended (no visible tiling) and feathered into the edges by <b>Softness</b>. Paint more to keep going; <b>🧽 Clear area</b> drops an un-filled painted area.<br>
+          <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches to the real coat bordering the hole (the lifted arm is excluded). Painting is clipped to the area behind the mover + the figure, onto a non-destructive back-layer <i>under</i> the base. ↩︎ / ⌘Z undoes any patch.</p>
         </div>
       </div>
       <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
@@ -267,8 +294,11 @@ const S = {
   img:null, iw:0, ih:0,
   src:null, srcData:null,              // native-res source canvas + cached pixel data
   layers:[], active:-1,
-  tool:'wand', brush:40, tol:40, bg:235, wandSub:false,
-  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneOff:null,   // 🩹 clone-stamp: source spot + aligned offset while stroking
+  tool:'wand', brush:120, tol:40, bg:235, wandSub:false,
+  eraseTo:'transparent',                // 🧽 real erase target: 'transparent' (cut from layer) | 'white' (paint white over colour)
+  cloneSrc:null, cloneSampling:false, cloneSoft:0.6, cloneHeal:0, cloneOff:null,   // 🩹 clone/heal: source spot + aligned offset while stroking + infuse strength (0 = clean copy)
+  cloneMode:'box', clonePatch:null, boxCapturing:false, boxDrag:null,   // ▭ box copy-paste: grab a rectangle of texture, then stamp that exact patch
+  patTarget:null, patPainted:false,     // 🧵 pattern-fill: freeform target mask you paint, filled with the sampled pattern on release
   view:{zoom:1, x:0, y:0},
   undo:[], redo:[],                     // history stacks: {id, data:ImageData}
   lasso:null,                           // in-progress lasso points (image coords)
@@ -594,6 +624,16 @@ if(resumeBtn && hasAutosave()){ resumeBtn.style.display='inline-block';
 function resizeCanvas(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
   cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
   ctx.setTransform(dpr,0,0,dpr,0,0); draw(); }
+// Keep the canvas BUFFER in lockstep with its on-screen CSS box. On mobile the viewport
+// changes (URL bar show/hide, panel relayout after a project loads) resize the canvas's CSS
+// box without always firing a 'resize' event — leaving a stale buffer. The image then renders
+// vertically scaled, so it sits OFFSET from where touches map (touch uses view + live rect,
+// which stay correct) → you tap the magenta hole but the fill lands below it. Re-syncing here,
+// before every draw, guarantees render and touch-mapping share one coordinate space.
+function syncCanvasSize(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(w>1 && h>1 && (cv.width!==w || cv.height!==h)){ cv.width=w; cv.height=h; ctx.setTransform(dpr,0,0,dpr,0,0); return true; }
+  return false; }
 function fitView(){ const r=stageWrap.getBoundingClientRect();
   const z=Math.min(r.width/S.iw, r.height/S.ih)*0.95;
   S.view.zoom=z; S.view.x=(r.width-S.iw*z)/2; S.view.y=(r.height-S.ih*z)/2; }
@@ -608,6 +648,22 @@ function punchKids(l){ return S.layers.filter(k=>k!==l && k.punch && k.parent===
 // export punches and the Patch/Auto-heal tools fill, so a layer "has holes" iff this is non-empty.
 function holeKids(l){ return punchKids(l).concat(l.role==='base'?S.layers.filter(k=>k.role==='mover'&&k.punch&&k.parent==null):[]); }
 function openHoleKids(l){ return holeKids(l).filter(k=>!k.seeThrough); }   // the ones that actually need healing (not see-through)
+// The layer 🩹 Patch / ✨ Auto-heal operate ON — always the SHEET a piece was cut FROM (the one
+// holding the hole), NEVER the mover you have selected. You heal the belt that the ARM hides, so
+// the brush must paint the BASE, not the arm layer. Prefer the active layer only if IT has holes;
+// otherwise the first layer that does; otherwise the base. (Was activeLayer() → patching the arm.)
+function patchTarget(){ const a=activeLayer();
+  if(a && openHoleKids(a).length) return a;
+  return S.layers.find(l=>openHoleKids(l).length)
+      || (a && a.role==='base' ? a : S.layers.find(l=>l.role==='base'))
+      || a || null; }
+// The sheet GROWN to include the footprints of the pieces cut from it — the base plus the holes it
+// must fill when those movers swing away. This is the region Patch/Auto-heal may paint into (so you
+// can rebuild the belt UNDER the arm, not just the sliver where the arm overlapped the figure).
+function grownSheet(l){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(l.mc,0,0);
+  for(const k of holeKids(l).filter(k=>!k.seeThrough && k.visible)) x.drawImage(k.mc,0,0);
+  return c; }
 // Split a set of cut-out child layers into the holes that get SKIN vs the holes left
 // SEE-THROUGH (real transparent hole — so a video/background behind the image shows
 // through). A hole is see-through if that child is marked see-through, OR skin-fill is
@@ -665,6 +721,104 @@ function inpaintRGB(ownMask, holeMasks, smoothPasses){
     else { out[p*3]=a[p*3];out[p*3+1]=a[p*3+1];out[p*3+2]=a[p*3+2]; } }
   return {out, hole, filled};
 }
+
+// ── Multi-scale PatchMatch content-aware fill ──────────────────────────────────
+// Reconstructs a BIG structured hole (a face/coat behind a lifted limb) by copying real
+// PATCHES of the surrounding texture — not a radial nearest-colour smear. Barnes 2009
+// PatchMatch NNF (propagation + random search) + Wexler/Simakov coherence voting, run
+// coarse→fine over an image pyramid so structure propagates into the hole centre.
+// Pure typed arrays; verified in Node (reconstructs a stripe pattern to ~0 error).
+function _mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function _downRGB(rgb,w,h,nw,nh){ const out=new Float32Array(nw*nh*3);
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){ const sx=Math.min(w-1,x*2),sy=Math.min(h-1,y*2),sx1=Math.min(w-1,sx+1),sy1=Math.min(h-1,sy+1);
+    for(let c=0;c<3;c++) out[(y*nw+x)*3+c]=0.25*(rgb[(sy*w+sx)*3+c]+rgb[(sy*w+sx1)*3+c]+rgb[(sy1*w+sx)*3+c]+rgb[(sy1*w+sx1)*3+c]); }
+  return out; }
+function _downHole(hole,w,h,nw,nh){ const out=new Uint8Array(nw*nh);
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){ const sx=Math.min(w-1,x*2),sy=Math.min(h-1,y*2),sx1=Math.min(w-1,sx+1),sy1=Math.min(h-1,sy+1);
+    out[y*nw+x]=(hole[sy*w+sx]+hole[sy*w+sx1]+hole[sy1*w+sx]+hole[sy1*w+sx1])>=2?1:0; }
+  return out; }
+function _bfsInit(content,hole,W,H){ const Nn=W*H,fl=new Uint8Array(Nn),q=new Int32Array(Nn); let hd=0,tl=0,sr=0,sg=0,sb=0,sn=0;
+  for(let p=0;p<Nn;p++) if(!hole[p]){ fl[p]=1; q[hd++]=p; sr+=content[p*3];sg+=content[p*3+1];sb+=content[p*3+2];sn++; }
+  if(!sn) return; while(tl<hd){ const p=q[tl++],x=p%W,y=(p/W)|0,nb=[p-1,p+1,p-W,p+W],ok=[x>0,x<W-1,y>0,y<H-1];
+    for(let d=0;d<4;d++){ if(!ok[d])continue; const np=nb[d]; if(hole[np]&&!fl[np]){ fl[np]=1; content[np*3]=content[p*3];content[np*3+1]=content[p*3+1];content[np*3+2]=content[p*3+2]; q[hd++]=np; } } }
+  const mr=sr/sn,mg=sg/sn,mb=sb/sn; for(let p=0;p<Nn;p++) if(hole[p]&&!fl[p]){ content[p*3]=mr;content[p*3+1]=mg;content[p*3+2]=mb; } }
+function _upInto(prev,pw,ph,content,w,h,hole){ for(let y=0;y<h;y++)for(let x=0;x<w;x++){ const p=y*w+x; if(!hole[p])continue;
+    const fx=(x+0.5)*pw/w-0.5,fy=(y+0.5)*ph/h-0.5; let x0=Math.floor(fx),y0=Math.floor(fy);
+    x0=x0<0?0:(x0>pw-1?pw-1:x0); y0=y0<0?0:(y0>ph-1?ph-1:y0); const x1=Math.min(pw-1,x0+1),y1=Math.min(ph-1,y0+1);
+    let tx=fx-x0; tx=tx<0?0:(tx>1?1:tx); let ty=fy-y0; ty=ty<0?0:(ty>1?1:ty);
+    for(let c=0;c<3;c++){ const a=prev[(y0*pw+x0)*3+c],b=prev[(y0*pw+x1)*3+c],cc=prev[(y1*pw+x0)*3+c],dd=prev[(y1*pw+x1)*3+c];
+      content[p*3+c]=(a*(1-tx)+b*tx)*(1-ty)+(cc*(1-tx)+dd*tx)*ty; } } }
+function _emLevel(content,real,hole,W,H,P,emIters,rng){ const Nn=W*H,posW=W-P+1,posH=H-P+1; if(posW<=0||posH<=0) return;
+  const integ=new Int32Array((W+1)*(H+1));
+  for(let y=0;y<H;y++){ let rs=0; for(let x=0;x<W;x++){ rs+=hole[y*W+x]; integ[(y+1)*(W+1)+(x+1)]=integ[y*(W+1)+(x+1)]+rs; } }
+  const hcount=(x,y)=>{ const x2=x+P,y2=y+P; return integ[y2*(W+1)+x2]-integ[y*(W+1)+x2]-integ[y2*(W+1)+x]+integ[y*(W+1)+x]; };
+  const srcList=[],srcValid=new Uint8Array(posW*posH),tgtActive=new Uint8Array(posW*posH);
+  for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x,hc=hcount(x,y); if(hc===0){ srcValid[pp]=1; srcList.push(pp);} else tgtActive[pp]=1; }
+  if(!srcList.length) return;
+  const nnf=new Int32Array(posW*posH).fill(-1), dcur=new Float64Array(posW*posH);
+  function dist(tx,ty,sx,sy,best){ let s=0; for(let dy=0;dy<P;dy++){ let ti=((ty+dy)*W+tx)*3, si=((sy+dy)*W+sx)*3;
+      for(let dx=0;dx<P;dx++){ const dr=content[ti]-real[si],dg=content[ti+1]-real[si+1],db=content[ti+2]-real[si+2]; s+=dr*dr+dg*dg+db*db; ti+=3; si+=3; }
+      if(s>=best) return s; } return s; }
+  for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x; if(!tgtActive[pp])continue;
+    const sp=srcList[(rng()*srcList.length)|0]; nnf[pp]=sp; dcur[pp]=dist(x,y,sp%posW,(sp/posW)|0,Infinity); }
+  for(let em=0;em<emIters;em++){
+    for(let pass=0;pass<2;pass++){ const rev=pass===1,xs=rev?posW-1:0,xe=rev?-1:posW,ys=rev?posH-1:0,ye=rev?-1:posH,step=rev?-1:1;
+      for(let y=ys;y!==ye;y+=step)for(let x=xs;x!==xe;x+=step){ const pp=y*posW+x; if(!tgtActive[pp])continue;
+        let bestSp=nnf[pp],bestD=dcur[pp];
+        const nbx=x-step; if(nbx>=0&&nbx<posW){ const sp=nnf[y*posW+nbx]; if(sp>=0){ const sx=sp%posW+step,sy=(sp/posW)|0;
+          if(sx>=0&&sx<posW){ const cand=sy*posW+sx; if(srcValid[cand]){ const d=dist(x,y,sx,sy,bestD); if(d<bestD){bestD=d;bestSp=cand;} } } } }
+        const nby=y-step; if(nby>=0&&nby<posH){ const sp=nnf[nby*posW+x]; if(sp>=0){ const sx=sp%posW,sy=((sp/posW)|0)+step;
+          if(sy>=0&&sy<posH){ const cand=sy*posW+sx; if(srcValid[cand]){ const d=dist(x,y,sx,sy,bestD); if(d<bestD){bestD=d;bestSp=cand;} } } } }
+        let radius=Math.max(posW,posH),bsx=bestSp%posW,bsy=(bestSp/posW)|0;
+        while(radius>=1){ const rx=bsx+(((rng()*2-1)*radius)|0),ry=bsy+(((rng()*2-1)*radius)|0);
+          if(rx>=0&&rx<posW&&ry>=0&&ry<posH){ const cand=ry*posW+rx; if(srcValid[cand]){ const d=dist(x,y,rx,ry,bestD); if(d<bestD){bestD=d;bestSp=cand;bsx=rx;bsy=ry;} } }
+          radius=(radius/2)|0; }
+        nnf[pp]=bestSp; dcur[pp]=bestD; } }
+    const acc=new Float64Array(Nn*3),wgt=new Float64Array(Nn);
+    for(let y=0;y<posH;y++)for(let x=0;x<posW;x++){ const pp=y*posW+x; if(!tgtActive[pp])continue; const sp=nnf[pp]; if(sp<0)continue; const sx=sp%posW,sy=(sp/posW)|0;
+      for(let dy=0;dy<P;dy++){ let tp=(y+dy)*W+x, si=((sy+dy)*W+sx)*3; for(let dx=0;dx<P;dx++){ acc[tp*3]+=real[si];acc[tp*3+1]+=real[si+1];acc[tp*3+2]+=real[si+2]; wgt[tp]++; tp++; si+=3; } } }
+    for(let p=0;p<Nn;p++) if(hole[p]&&wgt[p]>0){ content[p*3]=acc[p*3]/wgt[p];content[p*3+1]=acc[p*3+1]/wgt[p];content[p*3+2]=acc[p*3+2]/wgt[p]; }
+  } }
+function pmComplete(fullRGB,fullHole,W,H,P,seed){ const rng=_mulberry32(seed>>>0||1);
+  const pyr=[{w:W,h:H,rgb:fullRGB,hole:fullHole}]; let w=W,h=H,rgb=fullRGB,hole=fullHole;
+  while(Math.min(w,h)>Math.max(24,P*2)){ const nw=Math.max(1,w>>1),nh=Math.max(1,h>>1); rgb=_downRGB(rgb,w,h,nw,nh); hole=_downHole(hole,w,h,nw,nh); pyr.unshift({w:nw,h:nh,rgb,hole}); w=nw;h=nh; }
+  let prev=null;
+  for(let i=0;i<pyr.length;i++){ const lv=pyr[i]; const content=lv.rgb.slice();
+    if(prev) _upInto(prev.content,prev.w,prev.h,content,lv.w,lv.h,lv.hole); else _bfsInit(content,lv.hole,lv.w,lv.h);
+    _emLevel(content,lv.rgb,lv.hole,lv.w,lv.h,P, i===0?10:(i<pyr.length-1?6:4), rng);
+    prev={content,w:lv.w,h:lv.h}; }
+  return prev.content; }
+// ✨ Auto-heal engine: PatchMatch a layer's footprint holes using the real coat/face around
+// them. Works on a downscaled crop (≤WORK px) around the hole for speed (<1s), then bilinear-
+// upscales the filled region back. Returns {out:Float32(N*3), hole} like inpaintRGB (only hole
+// pixels of `out` are meaningful). Falls back to null if there's no clean source to sample.
+function patchMatchInpaint(ownMask, holeMasks){
+  const W=S.iw,H=S.ih, sd=S.srcData.data, N=W*H;
+  const hole=new Uint8Array(N), sheet=new Uint8Array(N);
+  let hx0=W,hy0=H,hx1=-1,hy1=-1, any=false;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const p=y*W+x,o=p*4;
+    if(ownMask[o+3]>8){ sheet[p]=1; let hf=1; for(const kd of holeMasks) hf*=(1-kd[o+3]/255);
+      if(hf<0.5){ hole[p]=1; any=true; if(x<hx0)hx0=x;if(x>hx1)hx1=x;if(y<hy0)hy0=y;if(y>hy1)hy1=y; } } }
+  if(!any) return null;
+  const MARG=Math.round(Math.max(W,H)*0.05)+10;                           // context ring of real coat to sample from
+  const rx0=Math.max(0,hx0-MARG), ry0=Math.max(0,hy0-MARG), rx1=Math.min(W-1,hx1+MARG), ry1=Math.min(H-1,hy1+MARG);
+  const rw=rx1-rx0+1, rh=ry1-ry0+1, WORK=384, sc=Math.min(1,WORK/Math.max(rw,rh));
+  const ww=Math.max(8,Math.round(rw*sc)), wh=Math.max(8,Math.round(rh*sc)), P=7;
+  const wrgb=new Float32Array(ww*wh*3), whole=new Uint8Array(ww*wh);
+  for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){ const fx=Math.min(W-1,rx0+Math.round((x+0.5)*rw/ww-0.5)), fy=Math.min(H-1,ry0+Math.round((y+0.5)*rh/wh-0.5));
+    const fp=fy*W+fx, wp=y*ww+x;
+    if(!sheet[fp]||hole[fp]) whole[wp]=1;                                 // outside sheet OR real hole → PM target (outside ignored on writeback)
+    else { const o=fp*4; wrgb[wp*3]=sd[o];wrgb[wp*3+1]=sd[o+1];wrgb[wp*3+2]=sd[o+2]; } }
+  const filled=pmComplete(wrgb,whole,ww,wh,P,1234567);
+  const out=new Float32Array(N*3);
+  for(let Y=ry0;Y<=ry1;Y++)for(let X=rx0;X<=rx1;X++){ const p=Y*W+X; if(!hole[p])continue;
+    const gx=((X-rx0+0.5)*ww/rw)-0.5, gy=((Y-ry0+0.5)*wh/rh)-0.5; let x0=Math.floor(gx),y0=Math.floor(gy);
+    x0=x0<0?0:(x0>ww-1?ww-1:x0); y0=y0<0?0:(y0>wh-1?wh-1:y0); const x1=Math.min(ww-1,x0+1),y1=Math.min(wh-1,y0+1);
+    let tx=gx-x0;tx=tx<0?0:(tx>1?1:tx); let ty=gy-y0;ty=ty<0?0:(ty>1?1:ty);
+    for(let c=0;c<3;c++){ const a=filled[(y0*ww+x0)*3+c],b=filled[(y0*ww+x1)*3+c],cc=filled[(y1*ww+x0)*3+c],dd=filled[(y1*ww+x1)*3+c];
+      out[p*3+c]=(a*(1-tx)+b*tx)*(1-ty)+(cc*(1-tx)+dd*tx)*ty; } }
+  return {out, hole};
+}
 // Live skin-fill poured into the cut-out holes at composite time (gated by the 🩹 checkbox).
 function skinFillRGB(ownMask, holeMasks){
   if(!S.skinFill || !holeMasks || !holeMasks.length) return null;
@@ -682,7 +836,6 @@ function buildCut(l){
   if(!any){ l._cut=null; return null; }
   const {skin:skinMasks, clear:clearMasks}=splitHoles(punchKids(l));   // skin-filled holes vs see-through holes
   const skin=skinFillRGB(md, skinMasks);   // skin to pour into the skin-filled holes (null when none)
-  const bf=l.backfill ? l.bfctx.getImageData(0,0,W,H).data : null;    // 🩹 clone-stamped / auto-healed pixels (override skin)
   const c=document.createElement('canvas'); c.width=W; c.height=H; const cx=c.getContext('2d');
   const out=cx.createImageData(W,H); const od=out.data;
   for(let p=0;p<W*H;p++){ const o=p*4; const ma=md[o+3]; if(!ma) continue;
@@ -691,8 +844,13 @@ function buildCut(l){
       od[o]=sd[o]*(1-t)+skin[p*3]*t; od[o+1]=sd[o+1]*(1-t)+skin[p*3+1]*t; od[o+2]=sd[o+2]*(1-t)+skin[p*3+2]*t;
       od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
     else { od[o]=sd[o]; od[o+1]=sd[o+1]; od[o+2]=sd[o+2]; od[o+3]=Math.round(sd[o+3]*(ma/255)*hfClear); }
-    if(bf){ const bt=bf[o+3]/255; if(bt){ od[o]=od[o]*(1-bt)+bf[o]*bt; od[o+1]=od[o+1]*(1-bt)+bf[o+1]*bt; od[o+2]=od[o+2]*(1-bt)+bf[o+2]*bt; } } }
-  cx.putImageData(out,0,0); l._cut=c; return c;
+  }
+  cx.putImageData(out,0,0);
+  // 🩹 clone-stamped / auto-healed pixels composite OVER the base — and because they can extend
+  // BEYOND the figure mask (rebuilt belt under where the arm swings away), drawImage them whole so
+  // the base GROWS to include the healed footprint, not just the pixels already inside md.
+  if(l.backfill) cx.drawImage(l.backfill,0,0);
+  l._cut=c; return c;
 }
 function layerById(id){ return S.layers.find(x=>x.id===id) || null; }
 // a layer's own swing angle at the current preview time
@@ -741,6 +899,7 @@ function setPreview(on){
 }
 
 function draw(){
+  syncCanvasSize();                                   // buffer must match its CSS box or render drifts from touch-mapping
   const dpr=window.devicePixelRatio||1; const W=cv.width/dpr, H=cv.height/dpr;
   ctx.clearRect(0,0,W,H);
   if(!S.img) return;
@@ -755,28 +914,31 @@ function draw(){
   // holes (eye cut off the head → reveal the HEAD, not the base), else any layer that does, else
   // fall back to the base. (Previously it only ever revealed the base, so head/mouth holes stayed
   // invisible — the exact "I can't see the holes" problem.)
-  const revealBase = (S.tool==='clone') ? (
-      (activeLayer() && openHoleKids(activeLayer()).length) ? activeLayer()
-      : (S.layers.find(l=>openHoleKids(l).length)
-         || (activeLayer()&&activeLayer().role==='base'?activeLayer():S.layers.find(l=>l.role==='base')))
-    ) : null;
+  const revealBase = (S.tool==='clone') ? patchTarget() : null;
   if(revealBase){
     // lift the pieces off this layer so the hole they leave is actually visible: punch each
     // cut-out footprint transparent, tint the empty hole magenta, then show the patched pixels
     // filling it — so you can see the gap AND watch it fill as you clone/heal.
     const W0=S.iw,H0=S.ih;
     const kids=holeKids(revealBase).filter(k=>!k.seeThrough && k.visible);
-    ctx.globalCompositeOperation='destination-out';                 // lift movers → holes go transparent
-    for(const k of kids) ctx.drawImage(k.mc,0,0);
+    // The hole = the mover's WHOLE footprint. When the arm swings away the base must have coat/belt
+    // behind it, so the base has to GROW to cover the full footprint — even the part hanging outside
+    // the current figure mask (84% of the elf's arm). We lift the whole mover off (so it stops
+    // hiding what's below) and glow the footprint magenta; ✨ Auto-heal then rebuilds base texture
+    // there (sampled from the real belt/coat around it) and the magenta recedes as it fills.
+    const hole=document.createElement('canvas'); hole.width=W0; hole.height=H0; const hx=hole.getContext('2d');
+    for(const k of kids) hx.drawImage(k.mc,0,0);
+    ctx.globalCompositeOperation='destination-out'; ctx.drawImage(hole,0,0);  // lift movers → holes go transparent
     ctx.globalCompositeOperation='source-over';
     if(kids.length){                                                // magenta backdrop BEHIND, so it shows only in the empty holes
       const mh=document.createElement('canvas'); mh.width=W0; mh.height=H0; const mx=mh.getContext('2d');
-      for(const k of kids) mx.drawImage(k.mc,0,0);
+      mx.drawImage(hole,0,0);
       mx.globalCompositeOperation='source-in'; mx.fillStyle='rgba(255,45,170,0.80)'; mx.fillRect(0,0,W0,H0);
       ctx.globalCompositeOperation='destination-over'; ctx.drawImage(mh,0,0); ctx.globalCompositeOperation='source-over';
     }
     if(revealBase.backfill) ctx.drawImage(revealBase.backfill,0,0);  // patched texture covers the magenta where you've healed
-    ctx.globalAlpha=0.30; ctx.drawImage(revealBase.mc,0,0); ctx.globalAlpha=1;   // faint tint of the base you're patching
+    // (no base-colour veil here — it cast a 30% purple tint over the whole figure and read as a
+    //  mysterious "dark colour". The real source pixels + magenta holes already show what's going on.)
   } else {
     for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(l.visible&&l.backfill) ctx.drawImage(l.backfill,0,0); }  // 🩹 patched/healed pixels in place
     for(let i=0;i<S.layers.length;i++){ const l=S.layers[i]; if(!l.visible)continue;
@@ -796,13 +958,63 @@ function draw(){
   if(S.lasso && S.lasso.length){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
     ctx.beginPath(); for(let k=0;k<S.lasso.length;k++){ const p=S.lasso[k]; const sx=v.x+p.x*v.zoom, sy=v.y+p.y*v.zoom;
       k?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);} ctx.stroke(); ctx.setLineDash([]); }
-  // brush cursor
-  if(S.cursor && (S.tool==='brush'||S.tool==='erase'||S.tool==='clone')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
+  // brush cursor (brush/erase only — clone draws its own source-preview cursor below)
+  if(S.cursor && (S.tool==='brush'||S.tool==='erase')){ ctx.strokeStyle='#fff9'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,S.brush*v.zoom/2,0,7); ctx.stroke(); }
-  // 🩹 clone source marker (green crosshair)
-  if(S.tool==='clone' && S.cloneSrc){ const px=v.x+S.cloneSrc.x*v.zoom, py=v.y+S.cloneSrc.y*v.zoom;
-    ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px,py,8,0,7);
-    ctx.moveTo(px-12,py); ctx.lineTo(px+12,py); ctx.moveTo(px,py-12); ctx.lineTo(px,py+12); ctx.stroke(); }
+  // 🩹 clone: show EXACTLY what's copied. The source spot is ringed at brush size (= the patch that
+  // gets copied), and a live ghost of those very pixels is previewed under the cursor so you can see
+  // what will land where before you drag. Both rings are the same size = the copy footprint.
+  if(S.tool==='clone' && S.cloneMode==='box'){
+    // ▭ box copy-paste overlay: the rectangle being grabbed, then a ghost of the grabbed patch under the cursor
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom;
+      const w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else if(S.clonePatch && S.cursor){                          // ghost of the grabbed patch, centred on the cursor
+      const pw=S.clonePatch.width*v.zoom, ph=S.clonePatch.height*v.zoom;
+      ctx.save(); ctx.globalAlpha=0.7; ctx.imageSmoothingEnabled=true;
+      ctx.drawImage(S.clonePatch, S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.restore();
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]);
+      ctx.strokeRect(S.cursor.x-pw/2, S.cursor.y-ph/2, pw, ph); ctx.setLineDash([]);
+    } else if(S.cursor && S.boxCapturing){                        // armed to grab → amber hint crosshair
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(S.cursor.x-12,S.cursor.y); ctx.lineTo(S.cursor.x+12,S.cursor.y);
+      ctx.moveTo(S.cursor.x,S.cursor.y-12); ctx.lineTo(S.cursor.x,S.cursor.y+12); ctx.stroke();
+    }
+  } else if(S.tool==='clone' && S.cloneMode==='pattern'){
+    // 🧵 pattern: show the grab box while sampling, the painted fill-area tinted, and a brush ring
+    if(S.boxDrag){ const b=S.boxDrag;
+      const x=v.x+Math.min(b.x0,b.x1)*v.zoom, y=v.y+Math.min(b.y0,b.y1)*v.zoom, w=Math.abs(b.x1-b.x0)*v.zoom, h=Math.abs(b.y1-b.y0)*v.zoom;
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([7,5]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    } else {
+      if(S.patTarget && S.patPainted){ ctx.save(); ctx.globalAlpha=0.45; ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(S.patTarget, v.x, v.y, S.iw*v.zoom, S.ih*v.zoom); ctx.restore(); }   // the area you've painted
+      if(S.cursor){ const rz=Math.max(3,S.brush*v.zoom/2);
+        ctx.strokeStyle=S.clonePatch?'#39d98a':'#ffd166cc'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); }
+    }
+  } else if(S.tool==='clone'){
+    const rz=Math.max(3,S.brush*v.zoom/2);                       // ring radius on screen
+    if(S.cloneSrc){
+      const scx = S.cloneSrc.x, scy = S.cloneSrc.y;      // fixed source — the picked spot you stamp from
+      const px=v.x+scx*v.zoom, py=v.y+scy*v.zoom;
+      // the copy footprint at the source (solid green ring + centre dot)
+      ctx.strokeStyle='#39d98a'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px,py,rz,0,7); ctx.stroke();
+      ctx.fillStyle='#39d98a'; ctx.beginPath(); ctx.arc(px,py,2.5,0,7); ctx.fill();
+      // live ghost preview of the copied pixels under the cursor
+      if(S.cursor){ const ri=Math.max(2,S.brush/2), di=Math.ceil(ri*2)+2;
+        const t=document.createElement('canvas'); t.width=di; t.height=di; const tc=t.getContext('2d');
+        tc.drawImage(S.src, Math.round(scx-ri),Math.round(scy-ri),di,di, 0,0,di,di);
+        tc.globalCompositeOperation='destination-in'; tc.fillStyle='#000';
+        tc.beginPath(); tc.arc(di/2,di/2,ri,0,7); tc.fill();
+        ctx.save(); ctx.globalAlpha=0.75; ctx.imageSmoothingEnabled=true;
+        ctx.drawImage(t, S.cursor.x-rz,S.cursor.y-rz, rz*2,rz*2); ctx.restore();
+        ctx.strokeStyle='#39d98a'; ctx.lineWidth=2; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+    } else if(S.cursor){                                          // no source yet → dashed amber ring hinting to pick one
+      ctx.strokeStyle='#ffd166cc'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.arc(S.cursor.x,S.cursor.y,rz,0,7); ctx.stroke(); ctx.setLineDash([]); }
+  }
 }
 
 /* ---------- history: one timeline covering BOTH mask edits and expression poses ----------
@@ -868,46 +1080,189 @@ document.querySelectorAll('#wandMode button').forEach(b=>b.onclick=()=>{
 window.addEventListener('keydown', e=>{ const mod=e.metaKey||e.ctrlKey; if(!mod)return; const k=e.key.toLowerCase();
   if(k==='z'){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); } else if(k==='y'){ e.preventDefault(); doRedo(); } });
 
-function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return; const m=l.mctx;
+function paintDab(ix,iy,erase){ const l=activeLayer(); if(!l)return;
+  // 🧽 Erase → White: wipe the COLOUR to white without cutting the shape — paint opaque white onto
+  // the layer's backfill (which composites over the source in both the edit view and the export).
+  if(erase && S.eraseTo==='white'){ layerBackfill(l); const b=l.bfctx;
+    b.globalCompositeOperation='source-over'; b.fillStyle='#ffffff';
+    b.beginPath(); b.arc(ix,iy,S.brush/2,0,7); b.fill(); l._cut=null; return; }
+  const m=l.mctx;
   m.globalCompositeOperation = erase?'destination-out':'source-over';
   m.fillStyle = l.color; m.beginPath(); m.arc(ix,iy,S.brush/2,0,7); m.fill();
   m.globalCompositeOperation='source-over'; }
 
-// 🩹 clone-stamp one soft dab: copy a brush-sized patch of ORIGINAL source texture,
-// translated by the locked source→dest offset, onto the layer's backfill — radially
-// feathered AND clipped to the layer's own silhouette (so you can't smear outside it).
-function paintCloneDab(ix,iy){ const l=activeLayer(); if(!l||!S.cloneSrc||!S.cloneOff)return;
+// 🩹 clone/heal one soft dab. Like GIMP's clone brush: the picked spot is an ANCHOR, and while you
+// drag within a stroke the source MOVES in parallel (S.cloneOff, set on pointer-down) — so a drag
+// copies a real moving region of belt/coat, not the same dot tiled. Each new stroke re-anchors to
+// the picked spot (non-aligned across strokes → no drift). With Infuse>0 the copied patch is also
+// tone-matched to the REAL pixels bordering the hole (sampled from the original around the dest), so
+// it melds in seamlessly instead of looking like a pasted square. Feathered + clipped to the work area.
+function paintCloneDab(ix,iy){ const l=patchTarget(); if(!l||!S.cloneSrc)return;
   const r=Math.max(2,S.brush/2), d=Math.ceil(r*2)+2;
   const dx0=Math.round(ix-r), dy0=Math.round(iy-r);                 // dest patch top-left (image coords)
-  const sx0=dx0+S.cloneOff.dx, sy0=dy0+S.cloneOff.dy;               // matching source patch top-left
+  // FIXED source: every dab copies the SAME picked area ("stamp the set area at the clicked points").
+  // Non-aligned on purpose — over a big hole an aligned source sweeps off the clean belt into the arm.
+  const srcCx = S.cloneSrc.x, srcCy = S.cloneSrc.y;
+  const sx0=Math.round(srcCx-r), sy0=Math.round(srcCy-r);
   const t=document.createElement('canvas'); t.width=d; t.height=d; const tc=t.getContext('2d');
-  tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the source spot
+  tc.drawImage(S.src, sx0,sy0,d,d, 0,0,d,d);                        // cloned texture from the (moving) source
+  // ✨ Infuse: shift the patch's mean colour toward the REAL coat bordering the hole so it blends in.
+  // Dest tone comes from S._cleanSrc (original with the hole punched out) → the lifted mover's own
+  // pixels (the arm) are transparent there and can't be averaged in. Default heal 0 = clean raw copy.
+  const heal=S.cloneHeal||0;
+  if(heal>0){ try{
+      // Tone-match COAT→COAT: skip near-black ink outline / dark hair pixels (INK_DARK) so the border
+      // mean reflects the coat colour, not the outline — else patching near the top of the figure drags
+      // the whole patch dark. Fall back to the plain mean if a region is entirely dark.
+      const INK_DARK=48;
+      const sMean=meanRGB(S.src, sx0,sy0,d,d, INK_DARK) || meanRGB(S.src, sx0,sy0,d,d); // tone of the copied texture
+      const dMean=meanRGB(S._cleanSrc||S.src, dx0,dy0,d,d, INK_DARK) || meanRGB(S._cleanSrc||S.src, dx0,dy0,d,d) || sMean; // REAL coat around the hole (arm + ink outline excluded)
+      if(sMean&&dMean){ const img=tc.getImageData(0,0,d,d), p=img.data;
+        const kr=heal*(dMean[0]-sMean[0]), kg=heal*(dMean[1]-sMean[1]), kb=heal*(dMean[2]-sMean[2]);
+        for(let i=0;i<p.length;i+=4){ p[i]=clamp8(p[i]+kr); p[i+1]=clamp8(p[i+1]+kg); p[i+2]=clamp8(p[i+2]+kb); }
+        tc.putImageData(img,0,0); }
+    }catch(e){} }
   tc.globalCompositeOperation='destination-in';                    // ∩ radial soft brush
   const inner=r*(1-Math.min(0.95,(S.cloneSoft||0)*0.95));
   const g=tc.createRadialGradient(d/2,d/2,Math.max(0,inner), d/2,d/2,r);
   g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
   tc.fillStyle=g; tc.fillRect(0,0,d,d);
-  tc.drawImage(l.mc, dx0,dy0,d,d, 0,0,d,d);                         // ∩ layer silhouette (mc alpha)
+  const clip=S._strokeClip||l.mc;                                   // ∩ base ∪ hole footprints (so you can paint belt UNDER the arm, not just on the figure)
+  tc.drawImage(clip, dx0,dy0,d,d, 0,0,d,d);
+  tc.globalCompositeOperation='source-over';
+  layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
+
+// ── 🧵 Pattern fill ────────────────────────────────────────────────────────────
+// A controllable (not auto) fill: you SAMPLE a pattern from a picked region (S.clonePatch),
+// then PAINT a freeform area (S.patTarget) — e.g. a bending belt — and on release that area
+// is filled with the sampled pattern, seamlessly synthesised (no visible tiling) and feathered
+// into its surroundings. Uses the verified PatchMatch core to extend the swatch over the area.
+function patTargetBegin(){ if(!S.patTarget){ const c=document.createElement('canvas'); c.width=S.iw; c.height=S.ih; S.patTarget=c; S.patTargetCtx=c.getContext('2d',{willReadFrequently:true}); }
+  S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
+function patTargetDab(ix,iy){ if(!S.patTarget)patTargetBegin(); const m=S.patTargetCtx;
+  m.fillStyle='#fff'; m.beginPath(); m.arc(ix,iy,Math.max(2,S.brush/2),0,7); m.fill(); S.patPainted=true; }
+// Seamlessly extend `swatch` to cover a bw×bh rectangle via PatchMatch (swatch = source band on
+// top, the rectangle below = hole synthesised from it). Returns a bw×bh canvas. ≤300px working res.
+function synthFromSwatch(swatch,bw,bh){ const P=7, WORK=300, sc=Math.min(1,WORK/Math.max(bw,bh));
+  const tw=Math.max(16,Math.round(bw*sc)), th=Math.max(16,Math.round(bh*sc));
+  const bandH=Math.min(140,Math.max(P*5,Math.round(th*0.6))), W2=tw, H2=bandH+th;
+  const cv=document.createElement('canvas'); cv.width=W2; cv.height=H2; const cx=cv.getContext('2d',{willReadFrequently:true});
+  const ss=Math.max(tw/swatch.width,bandH/swatch.height), sdw=swatch.width*ss, sdh=swatch.height*ss;  // cover-scale, tile to fill the source band
+  for(let ty=0;ty<bandH;ty+=sdh)for(let tx=0;tx<W2;tx+=sdw) cx.drawImage(swatch,tx,ty,sdw,sdh);
+  const id=cx.getImageData(0,0,W2,H2).data, rgb=new Float32Array(W2*H2*3), hole=new Uint8Array(W2*H2);
+  for(let p=0,i=0;p<W2*H2;p++,i+=4){ if(p>=bandH*W2) hole[p]=1; else { rgb[p*3]=id[i];rgb[p*3+1]=id[i+1];rgb[p*3+2]=id[i+2]; } }
+  const filled=pmComplete(rgb,hole,W2,H2,P,777);
+  const o=document.createElement('canvas'); o.width=tw; o.height=th; const oc=o.getContext('2d'), od=oc.createImageData(tw,th);
+  for(let y=0;y<th;y++)for(let x=0;x<tw;x++){ const sp=(y+bandH)*W2+x, dp=(y*tw+x)*4; od.data[dp]=filled[sp*3];od.data[dp+1]=filled[sp*3+1];od.data[dp+2]=filled[sp*3+2];od.data[dp+3]=255; }
+  oc.putImageData(od,0,0);
+  const full=document.createElement('canvas'); full.width=bw; full.height=bh; const fc=full.getContext('2d'); fc.imageSmoothingEnabled=true; fc.drawImage(o,0,0,bw,bh); return full; }
+// Fill the painted S.patTarget area with the sampled pattern, feathered (infused) at the edges,
+// clipped to the sheet, onto the layer's non-destructive backfill. Undoable.
+function fillPatternTarget(){ const l=patchTarget(); if(!l){ toast('No layer to fill'); return; }
+  if(!S.clonePatch){ toast('Pick a pattern first — tap ⬚ Pick pattern and drag over the texture'); return; }
+  if(!S.patTarget||!S.patPainted){ return; }
+  const W=S.iw,H=S.ih, td=S.patTargetCtx.getImageData(0,0,W,H).data;
+  let x0=W,y0=H,x1=-1,y1=-1; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(td[(y*W+x)*4+3]>8){ if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y; } }
+  if(x1<0){ return; } const bw=x1-x0+1, bh=y1-y0+1;
+  toast('🧵 Filling the area with the pattern…');
+  requestAnimationFrame(()=>{ setTimeout(()=>{                              // defer so the toast + painted overlay paint first
+    const synth=synthFromSwatch(S.clonePatch, bw, bh);
+    const t=document.createElement('canvas'); t.width=bw; t.height=bh; const tc=t.getContext('2d',{willReadFrequently:true});
+    tc.drawImage(synth,0,0);
+    // mask to the painted shape, blurred by Softness → feathered/infused edges
+    const f=Math.max(0, (S.cloneSoft||0)*Math.min(bw,bh)*0.14);
+    tc.globalCompositeOperation='destination-in';
+    tc.filter=f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.drawImage(S.patTarget, x0,y0,bw,bh, 0,0,bw,bh); tc.filter='none';
+    tc.drawImage(grownSheet(l), x0,y0,bw,bh, 0,0,bw,bh);   // ∩ sheet (base ∪ footprints) — stay on the figure
+    tc.globalCompositeOperation='source-over';
+    pushBackfillUndo(l); layerBackfill(l); l.bfctx.drawImage(t, x0,y0); l._cut=null;
+    S.patTargetCtx.clearRect(0,0,W,H); S.patPainted=false; draw(); markDirty();
+    toast('🧵 Filled with the pattern — paint more, ⬚ to re-pick, ↩︎ to undo');
+  },0); }); }
+// mean RGB of an area of an image/canvas, over its OPAQUE pixels only (transparent hole pixels ignored).
+// Returns [r,g,b] or null if nothing opaque. Used by Infuse to read the hole's real surrounding tone.
+let _meanCv=null;
+function meanRGB(srcImg, x,y,w,h, minLuma){
+  if(!_meanCv){ _meanCv=document.createElement('canvas'); }
+  _meanCv.width=w; _meanCv.height=h; const c=_meanCv.getContext('2d');
+  c.clearRect(0,0,w,h); c.drawImage(srcImg, x,y,w,h, 0,0,w,h);
+  const p=c.getImageData(0,0,w,h).data; let r=0,g=0,b=0,n=0;
+  for(let i=0;i<p.length;i+=4){ const a=p[i+3]; if(a<=24) continue;              // transparent → skip
+    if(minLuma){ const lum=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2]; if(lum<minLuma) continue; } // near-black ink outline → skip
+    r+=p[i]; g+=p[i+1]; b+=p[i+2]; n++; }
+  return n? [r/n,g/n,b/n] : null; }
+function clamp8(v){ return v<0?0:v>255?255:v; }
+// A copy of the original source with the layer's hole footprints (the lifted movers, e.g. the arm)
+// punched OUT (transparent). Infuse reads dest tone from this so it matches the real coat bordering
+// the hole and never averages in the mover's own pixels. Built once per stroke, cleared on pointer-up.
+function cleanSrcFor(l){
+  const w=S.src.width,h=S.src.height; const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d'); cx.drawImage(S.src,0,0);
+  const kids=holeKids(l).filter(k=>!k.seeThrough && k.visible);
+  cx.globalCompositeOperation='destination-out'; for(const k of kids) cx.drawImage(k.mc,0,0);
+  cx.globalCompositeOperation='source-over'; return c; }
+
+// ▭ Grab the dragged rectangle of ORIGINAL texture into S.clonePatch (the thing you then stamp).
+// This copies a real rectangle — buckle, strap, weave and all — so what you stamp keeps its detail,
+// not a single averaged tone. Too-small drags are rejected (an accidental tap).
+function captureBox(b){
+  const x0=Math.min(b.x0,b.x1), y0=Math.min(b.y0,b.y1);
+  const w=Math.round(Math.abs(b.x1-b.x0)), h=Math.round(Math.abs(b.y1-b.y0));
+  if(w<6||h<6){ toast('Box too small — drag a rectangle over a clean bit of belt/coat'); return false; }
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(S.src, Math.round(x0),Math.round(y0),w,h, 0,0,w,h);
+  S.clonePatch=c;
+  if(S.cloneMode==='pattern'){ const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+    toast('🧵 Pattern sampled ('+w+'×'+h+') — now PAINT the area to fill (a bending belt, any shape)'); return true; }
+  S.cloneMode='box';
+  toast('▭ Grabbed a '+w+'×'+h+' patch — now tap or drag over the magenta to stamp it'); return true; }
+
+// ▭ Stamp the grabbed patch centred at (ix,iy), with feathered edges so overlapping stamps connect
+// smoothly, clipped to the work area (base ∪ hole footprints). Onto the non-destructive backfill.
+function pasteClonePatch(ix,iy){ const l=patchTarget(); if(!l||!S.clonePatch)return;
+  const pw=S.clonePatch.width, ph=S.clonePatch.height;
+  const dx0=Math.round(ix-pw/2), dy0=Math.round(iy-ph/2);
+  const t=document.createElement('canvas'); t.width=pw; t.height=ph; const tc=t.getContext('2d');
+  tc.drawImage(S.clonePatch,0,0);
+  // feather: a blurred inset rectangle as the alpha mask → soft edges incl. corners (smooth joins)
+  const f=Math.max(0, Math.min(Math.min(pw,ph)/2-1, (S.cloneSoft||0)*Math.min(pw,ph)*0.45));
+  tc.globalCompositeOperation='destination-in';
+  tc.filter = f>0.5?('blur('+f.toFixed(1)+'px)'):'none'; tc.fillStyle='#000';
+  tc.fillRect(f,f, pw-2*f, ph-2*f); tc.filter='none';
+  const clip=S._strokeClip||l.mc;                                  // ∩ base ∪ footprints (still destination-in → intersect)
+  tc.drawImage(clip, dx0,dy0,pw,ph, 0,0,pw,ph);
   tc.globalCompositeOperation='source-over';
   layerBackfill(l); l.bfctx.drawImage(t, dx0,dy0); }
 
 // ✨ Auto-heal: bake the texture-aware inpaint of every (non-see-through) cut-out hole on
 // this layer into its backfill, in one tap. Undoable, and refinable afterwards with 🩹.
-function autoHealHoles(){ if(!S.img)return; let l=activeLayer();
+function autoHealHoles(){ if(!S.img)return; let l=patchTarget();
   // the hole set the export punches lives on whatever the piece was cut FROM. If the selected
   // layer has none, auto-jump to a layer that does — so a wrong selection heals instead of scolding.
   if(!l || !openHoleKids(l).length){ const alt=S.layers.find(L=>openHoleKids(L).length);
     if(alt){ l=alt; S.active=S.layers.indexOf(alt); renderLayerList(); toast('✨ Healing '+alt.name+' — that’s where the holes are'); } }
   const kids=l?openHoleKids(l):[];
-  if(!kids.length){ toast('No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
-  const md=l.mctx.getImageData(0,0,S.iw,S.ih).data;
+  if(!kids.length){
+    const stOnly = S.layers.flatMap(L=>holeKids(L)).filter(k=>k.seeThrough);
+    toast(stOnly.length ? ('🔲 '+stOnly[0].name+'’s hole is SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on it to heal it')
+                        : 'No cut-out holes anywhere yet — tick “cut out” on a mover first'); return; }
+  // Inpaint over the GROWN sheet (base ∪ hole footprints): the whole footprint is the hole to fill,
+  // the surrounding real base pixels (belt/coat) are the source. This rebuilds the base UNDER the
+  // mover — including the part outside the original figure mask — instead of only the thin overlap.
+  const md=grownSheet(l).getContext('2d',{willReadFrequently:true}).getImageData(0,0,S.iw,S.ih).data;
   const holeMasks=kids.map(k=>k.mctx.getImageData(0,0,S.iw,S.ih).data);
-  const res=inpaintRGB(md, holeMasks, 1); if(!res){ toast('Nothing to heal'); return; }
-  pushBackfillUndo(l); layerBackfill(l);
-  const img=l.bfctx.getImageData(0,0,S.iw,S.ih), dd=img.data, {out,hole}=res;
-  for(let p=0;p<S.iw*S.ih;p++){ if(hole[p]){ const o=p*4; dd[o]=out[p*3];dd[o+1]=out[p*3+1];dd[o+2]=out[p*3+2];dd[o+3]=255; } }
-  l.bfctx.putImageData(img,0,0); l._cut=null; draw(); markDirty();
-  toast('✨ Holes healed with surrounding texture — 🩹 Patch to refine, ↩︎ to undo'); }
+  toast('✨ Reconstructing texture with PatchMatch…');
+  // defer the heavy fill one frame so the toast paints first (it's a ~0.5–1s synchronous pass)
+  requestAnimationFrame(()=>{ setTimeout(()=>{
+    let res=null; try{ res=patchMatchInpaint(md, holeMasks); }catch(e){ res=null; }   // PatchMatch content-aware fill
+    if(!res) res=inpaintRGB(md, holeMasks, 1);                                         // fallback: nearest-colour fill
+    if(!res){ toast('Nothing to heal'); return; }
+    pushBackfillUndo(l); layerBackfill(l);
+    const img=l.bfctx.getImageData(0,0,S.iw,S.ih), dd=img.data, {out,hole}=res;
+    for(let p=0;p<S.iw*S.ih;p++){ if(hole[p]){ const o=p*4; dd[o]=out[p*3];dd[o+1]=out[p*3+1];dd[o+2]=out[p*3+2];dd[o+3]=255; } }
+    l.bfctx.putImageData(img,0,0); l._cut=null; draw(); markDirty();
+    toast('✨ Holes healed with PatchMatch — 🩹 Patch to refine, ↩︎ to undo');
+  },0); }); }
 
 function fillLasso(pts){ const l=activeLayer(); if(!l||pts.length<3)return; pushUndo();
   const m=l.mctx; m.fillStyle=l.color; m.beginPath(); m.moveTo(pts[0].x,pts[0].y);
@@ -996,16 +1351,38 @@ cv.addEventListener('pointerdown', e=>{ if(!S.img)return; cv.setPointerCapture(e
   if(S.tool==='wand'){ wandAt(ip.x,ip.y, S.wandSub); return; }
   if(S.tool==='lasso'){ S.lasso=[ip]; drawing=true; return; }
   if(S.tool==='clone'){
+    // ▭ box mode: grab a rectangle, or stamp the grabbed patch
+    if(S.boxCapturing){ S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; return; }
+    if(S.cloneMode==='pattern'){                                     // 🧵 pattern: sample a box, else paint the fill area
+      if(!S.clonePatch){ S.boxCapturing=true; const pp=document.getElementById('patPick'); if(pp)pp.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true; toast('Drag a box over the pattern to sample it'); return; }
+      drawing=true; patTargetBegin(); patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
+    if(S.cloneMode==='box'){
+      if(!S.clonePatch){ S.boxCapturing=true; const gb=document.getElementById('boxGrab'); if(gb)gb.classList.add('on');
+        S.boxDrag={x0:ip.x,y0:ip.y,x1:ip.x,y1:ip.y}; drawing=true;
+        toast('Drag a rectangle over a clean bit of belt/coat to copy it'); return; }
+      const l=patchTarget(); if(!l)return; drawing=true;
+      S._strokeClip=grownSheet(l);
+      pushBackfillUndo(l); l._cut=null; pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); return;
+    }
     if(S.cloneSampling){ S.cloneSrc={x:Math.round(ip.x),y:Math.round(ip.y)}; S.cloneSampling=false;
       const b=document.getElementById('cloneSample'); if(b)b.classList.remove('on');
       draw(); toast('🎯 Source set — now paint over the hole'); return; }
-    if(!S.cloneSrc){ toast('Tap 🎯 Set source spot first, then a clean patch of coat'); return; }
-    const l=activeLayer(); if(!l)return;
-    drawing=true; S.cloneOff={dx:S.cloneSrc.x-ip.x, dy:S.cloneSrc.y-ip.y};   // lock aligned offset for this stroke
+    if(!S.cloneSrc){                               // no source yet → arm source-picking so the first tap sets the spot
+      S.cloneSampling=true; const b=document.getElementById('cloneSample'); if(b)b.classList.add('on');
+      toast('🎯 First tap a clean patch of belt/coat to copy from, then paint over the magenta'); return; }
+    const l=patchTarget(); if(!l)return;           // paint the SHEET the hole lives in, never the selected mover
+    drawing=true;
+    S._cleanSrc=cleanSrcFor(l);                    // original with the hole punched out — so Infuse tone-matches the real coat, never the lifted arm
+    S._strokeClip=grownSheet(l);                   // clip clone paint to base ∪ footprints (so you can rebuild belt under the arm)
     pushBackfillUndo(l); l._cut=null; paintCloneDab(ip.x,ip.y); lastImg=ip; draw(); return;
   }
   // brush / erase
-  drawing=true; pushUndo(); paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
+  drawing=true;
+  if(S.tool==='erase' && S.eraseTo==='white'){ pushBackfillUndo(activeLayer()); }   // white erase edits the backfill
+  else pushUndo();                                                                  // brush + transparent erase edit the mask
+  paintDab(ip.x,ip.y, S.tool==='erase'); lastImg=ip; draw();
 });
 cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   if(S.pointers.has(e.pointerId)) S.pointers.set(e.pointerId, evPos(e));
@@ -1025,6 +1402,17 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
   const ip=s2i(sp.x,sp.y);
   if(S.tool==='lasso'){ S.lasso.push(ip); draw(); return; }
   if(S.tool==='clone'){
+    if(S.boxDrag){ S.boxDrag.x1=ip.x; S.boxDrag.y1=ip.y; draw(); return; }   // ▭ sizing the grab rectangle
+    if(S.cloneMode==='pattern'){                                             // 🧵 paint the fill-area trail
+      if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
+        for(let s=1;s<=steps;s++)patTargetDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+      else patTargetDab(ip.x,ip.y); lastImg=ip; draw(); return; }
+    if(S.cloneMode==='box'){                                                  // ▭ stamp the patch along the drag trail
+      if(S.clonePatch){ const sp2=Math.max(6,Math.min(S.clonePatch.width,S.clonePatch.height)/3);
+        if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/sp2);
+          for(let s=1;s<=steps;s++)pasteClonePatch(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
+        else pasteClonePatch(ip.x,ip.y); lastImg=ip; draw(); }
+      return; }
     if(lastImg){ const dx=ip.x-lastImg.x, dy=ip.y-lastImg.y; const steps=Math.max(1,Math.hypot(dx,dy)/(S.brush/3));
       for(let s=1;s<=steps;s++)paintCloneDab(lastImg.x+dx*s/steps, lastImg.y+dy*s/steps); }
     else paintCloneDab(ip.x,ip.y);
@@ -1038,6 +1426,9 @@ cv.addEventListener('pointermove', e=>{ if(!S.img)return;
 });
 function endPointer(e){ S.pointers.delete(e.pointerId);
   if(S.pointers.size<2)S.pinch=null;
+  if(S.boxDrag){ captureBox(S.boxDrag); S.boxDrag=null; S.boxCapturing=false;   // ▭ finish grabbing the rectangle
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); drawing=false; lastImg=null; draw(); return; }
+  if(S.tool==='clone'&&S.cloneMode==='pattern'&&drawing&&S.patPainted){ fillPatternTarget(); }   // 🧵 fill the painted area with the pattern
   if(S.tool==='lasso'&&drawing&&S.lasso){ fillLasso(S.lasso); S.lasso=null; }
   if(S.faceDrag){ S.faceDrag=null; markDirty(); }
   if(S.warpDrag){ const wd=S.warpDrag; S.warpDrag=null;
@@ -1047,7 +1438,7 @@ function endPointer(e){ S.pointers.delete(e.pointerId);
       S.undo.pop(); renderWarpPanel(); draw();                  // undo the snapshot we took for the create
     } else markDirty();
   }
-  drawing=false; lastImg=null; }
+  drawing=false; lastImg=null; S.cloneOff=null; S._cleanSrc=null; }   // drop the aligned offset + clean-source cache; next stroke re-anchors to the picked spot
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('pointerleave', e=>{ if(!drawing)S.cursor=null; draw(); });
@@ -1062,25 +1453,51 @@ stageWrap.addEventListener('wheel', e=>{ if(!S.img)return; e.preventDefault();
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>{
   S.tool=b.dataset.tool; document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('on',x===b));
   const cp=document.getElementById('cloneParams'); if(cp) cp.style.display = (S.tool==='clone')?'block':'none';
-  if(S.tool==='clone'){                                   // Patch heals the layer the hole LIVES in — auto-jump there so the holes show
-    const cur=activeLayer();
-    // if a mover is selected, patch the layer it was cut FROM (its parent, or the base);
-    // otherwise find any layer that actually has holes; fall back to the base.
-    let target = (cur&&cur.role==='mover') ? (cur.parent!=null?layerById(cur.parent):S.layers.find(l=>l.role==='base')) : cur;
-    if(!target || !openHoleKids(target).length){
-      target = S.layers.find(l=>openHoleKids(l).length) || S.layers.find(l=>l.role==='base') || cur;
-    }
+  const ep=document.getElementById('eraseParams'); if(ep) ep.style.display = (S.tool==='erase')?'block':'none';
+  if(S.tool==='clone'){                                   // Patch heals the SHEET the hole LIVES in — auto-jump there so the holes show
+    const target = patchTarget();                          // same target the brush paints (the base, never the selected mover)
     if(target){ const ti=S.layers.indexOf(target); if(ti>=0 && ti!==S.active){ S.active=ti; renderLayerList(); } }
     const n = target?openHoleKids(target).length:0;
-    toast(n ? ('🩹 Patching '+target.name+' — '+n+' hole'+(n>1?'s':'')+' glow magenta; tap 🎯 Set source then paint')
-            : '🩹 No holes yet — tick “cut out” on a mover first, then Patch heals the layer beneath it');
-  } else { S.cloneSampling=false; const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on'); }
+    const stOnly = target ? holeKids(target).filter(k=>k.seeThrough) : [];   // holes hidden from patching because they're see-through
+    toast(n ? ('🩹 Patching '+target.name+' — '+n+' area'+(n>1?'s':'')+' glow magenta. Tap ▭ Grab a box, drag a rectangle over clean belt/coat, then stamp it over the magenta.')
+          : stOnly.length ? ('🔲 '+target.name+'’s hole is set SEE-THROUGH (kept as a real gap) — untick 🔲 see-through on '+stOnly[0].name+' to patch it')
+          : '🩹 No holes yet — tick “cut out” on a mover first, then Patch rebuilds what’s behind it');
+  } else { S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+    const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+    const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on'); }
   draw(); });
+{ const et=document.getElementById('eraseTrans'), ew=document.getElementById('eraseWhite');
+  const setErase=(mode)=>{ S.eraseTo=mode; et.classList.toggle('on',mode==='transparent'); ew.classList.toggle('on',mode==='white');
+    toast(mode==='white'?'🧽 Erase → paints colour to WHITE (keeps the shape)':'🧽 Erase → cuts the area out (transparent gap)'); };
+  if(et) et.onclick=()=>setErase('transparent'); if(ew) ew.onclick=()=>setErase('white'); }
 document.getElementById('cloneSample').onclick=()=>{ const b=document.getElementById('cloneSample');
   S.cloneSampling=!S.cloneSampling; b.classList.toggle('on',S.cloneSampling);
-  toast(S.cloneSampling?'Tap a clean patch of coat to set the clone source':'Sampling off'); };
-document.getElementById('autoHeal').onclick=autoHealHoles;
+  toast(S.cloneSampling?'Tap a clean patch of belt/coat to copy from':'Sampling off'); };
+function setCloneMode(m){ S.cloneMode=m; S.cloneSampling=false; S.boxCapturing=false; S.boxDrag=null;
+  if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; }
+  document.getElementById('modeBox').classList.toggle('on', m==='box');
+  document.getElementById('modeBrush').classList.toggle('on', m==='brush');
+  document.getElementById('modePattern').classList.toggle('on', m==='pattern');
+  document.getElementById('boxRow').style.display  = m==='box'  ? 'flex':'none';
+  document.getElementById('brushRow').style.display= m==='brush'? 'flex':'none';
+  document.getElementById('patRow').style.display  = m==='pattern'? 'flex':'none';
+  const cs=document.getElementById('cloneSample'); if(cs)cs.classList.remove('on');
+  const gb=document.getElementById('boxGrab'); if(gb)gb.classList.remove('on');
+  const pp=document.getElementById('patPick'); if(pp)pp.classList.remove('on');
+  if(m==='pattern') toast('🧵 Pattern fill: ⬚ Pick pattern, then paint the area to fill'); draw(); }
+document.getElementById('autoHeal').onclick=()=>autoHealHoles();
+document.getElementById('modeBox').onclick=()=>setCloneMode('box');
+document.getElementById('modeBrush').onclick=()=>setCloneMode('brush');
+document.getElementById('modePattern').onclick=()=>setCloneMode('pattern');
+document.getElementById('patPick').onclick=()=>{ const pp=document.getElementById('patPick');
+  S.cloneMode='pattern'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; pp.classList.add('on');
+  toast('Drag a box over the pattern/texture you want to sample'); draw(); };
+document.getElementById('patClear').onclick=()=>{ if(S.patTargetCtx){ S.patTargetCtx.clearRect(0,0,S.iw,S.ih); S.patPainted=false; draw(); } toast('Painted area cleared'); };
+document.getElementById('boxGrab').onclick=()=>{ const gb=document.getElementById('boxGrab');
+  S.cloneMode='box'; S.clonePatch=null; S.boxCapturing=true; S.boxDrag=null; gb.classList.add('on');
+  toast('Drag a rectangle over a clean bit of belt/coat to copy it'); draw(); };
 { const se=document.getElementById('soft'); if(se) se.oninput=()=>{ S.cloneSoft=+se.value/100; document.getElementById('softVal').textContent=se.value; }; }
+{ const ie=document.getElementById('infuse'); if(ie) ie.oninput=()=>{ S.cloneHeal=+ie.value/100; document.getElementById('infuseVal').textContent=ie.value; }; }
 const brushEl=document.getElementById('brush'), tolEl=document.getElementById('tol'), bgEl=document.getElementById('bg');
 brushEl.oninput=()=>{S.brush=+brushEl.value; document.getElementById('brushVal').textContent=brushEl.value;};
 tolEl.oninput=()=>{S.tol=+tolEl.value; document.getElementById('tolVal').textContent=tolEl.value;};
@@ -1956,7 +2373,7 @@ applyMode();
 window.__lc = { S, loadImage, buildExport, buildHostPayload, wandAt, zipStore, applyMode, collectExpressions, poseOf, EXPRS,
   draw, ensurePose, renderWarpPanel, renderExprPose, fieldDisp, doUndo, doRedo, migrateAllWarp,
   mlsRigid, mlsControls, facsPose, facsRole, applyFacs, buildCut, punchKids, splitHoles, skinFillRGB, makeLayer,
-  inpaintRGB, layerBackfill, paintCloneDab, autoHealHoles };
+  inpaintRGB, patchMatchInpaint, pmComplete, synthFromSwatch, fillPatternTarget, patTargetBegin, patTargetDab, layerBackfill, paintCloneDab, autoHealHoles };
 </script>
 </body>
 </html>
