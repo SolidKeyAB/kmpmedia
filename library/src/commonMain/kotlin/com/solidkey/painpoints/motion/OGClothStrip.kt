@@ -39,6 +39,22 @@ data class OGClothSpec(
 )
 
 /**
+ * Overlay a named [OGCloths.materials] fabric onto this strip's **feel** (weight / stiffness / air-catch),
+ * keeping its **form** (nodes, length, pinTail, seed) and its **prevailing wind** (the scene's breeze).
+ * Unknown name → returned unchanged. So: scarf-shaped silk that flutters in the scene's wind is
+ * `OGCloths.preset("scarf")!!.withMaterial("silk")`.
+ */
+fun OGClothSpec.withMaterial(name: String): OGClothSpec {
+    val m = OGCloths.material(name) ?: return this
+    return copy(
+        gravity = m.gravity,
+        damping = m.damping,
+        windAmplitude = m.windAmplitude,
+        windFrequency = m.windFrequency,
+    )
+}
+
+/**
  * A lightweight **1-D Verlet cloth strip** — the "real fabric" member of the motion-dynamics family: a
  * scarf, a cape edge, a flag, a banner or a hair strand. Unlike [OGFollowChain] (N springs in series,
  * which *stretch* and trail like a comet tail), this strip is **inextensible** — neighbouring nodes hold a
@@ -205,6 +221,29 @@ object OGCloths {
     fun preset(name: String): OGClothSpec? = presets[name.lowercase()]
 
     /**
+     * **Named fabrics** — the *material* half of a cloth, so you can author by feel ("a cotton shirt",
+     * "silk", "denim") instead of raw numbers. Each entry tunes only the **material** knobs — weight
+     * ([OGClothSpec.gravity]), stiffness ([OGClothSpec.damping]) and how much it catches air
+     * ([OGClothSpec.windAmplitude] / [OGClothSpec.windFrequency]). It deliberately leaves **form** (nodes,
+     * length, pinTail) and the **prevailing [OGClothSpec.wind]** (that's the *scene's* breeze, not the
+     * fabric) to the caller — overlay a material onto any shape with [withMaterial]:
+     * `OGCloths.preset("scarf")!!.withMaterial("silk").copy(wind = -0.5f)`.
+     */
+    val materials: Map<String, OGClothSpec> = linkedMapOf(
+        "cotton" to OGClothSpec(name = "cotton", gravity = 0.95f, damping = 0.95f, windAmplitude = 0.35f, windFrequency = 0.7f, wind = 0f),
+        "silk" to OGClothSpec(name = "silk", gravity = 0.6f, damping = 0.6f, windAmplitude = 0.7f, windFrequency = 0.9f, wind = 0f),
+        "chiffon" to OGClothSpec(name = "chiffon", gravity = 0.45f, damping = 0.5f, windAmplitude = 0.85f, windFrequency = 1.1f, wind = 0f),
+        "satin" to OGClothSpec(name = "satin", gravity = 0.7f, damping = 0.65f, windAmplitude = 0.6f, windFrequency = 0.85f, wind = 0f),
+        "linen" to OGClothSpec(name = "linen", gravity = 0.8f, damping = 0.8f, windAmplitude = 0.5f, windFrequency = 0.8f, wind = 0f),
+        "wool" to OGClothSpec(name = "wool", gravity = 1.1f, damping = 1.05f, windAmplitude = 0.3f, windFrequency = 0.55f, wind = 0f),
+        "denim" to OGClothSpec(name = "denim", gravity = 1.3f, damping = 1.2f, windAmplitude = 0.2f, windFrequency = 0.5f, wind = 0f),
+        "leather" to OGClothSpec(name = "leather", gravity = 1.5f, damping = 1.3f, windAmplitude = 0.12f, windFrequency = 0.4f, wind = 0f),
+    )
+
+    /** Look up a [materials] feel-template by name (case-insensitive), or `null` if there is none. */
+    fun material(name: String): OGClothSpec? = materials[name.lowercase()]
+
+    /**
      * Deterministically **re-simulate a fresh head-pinned strip to time [timeSec]** at the fixed internal
      * substep, with the head anchor given by [anchorAt] (seconds → point). This is the compositor's way to
      * *scrub* a cloth strip (it has no closed form): same inputs → same output, exactly. Cheap at a handful
@@ -248,9 +287,14 @@ object OGCloths {
           "pinTail":       <bool (false): also pin the far end — a flag/banner between two points>
         }
 
+        Think in MATERIALS: lighter + lower-damping fabric flutters more (silk/chiffon: gravity~0.5,
+        damping~0.6, windAmplitude~0.8); heavier + stiffer barely moves (denim/leather/wool: gravity~1.3,
+        damping~1.2, windAmplitude~0.2); cotton shirt sits in between (gravity~0.95, damping~0.95).
+
         Examples:
-        {"name":"silk scarf","nodes":16,"length":0.5,"gravity":0.7,"damping":0.7,"windAmplitude":0.8}
+        {"name":"silk scarf","nodes":16,"length":0.5,"gravity":0.6,"damping":0.6,"windAmplitude":0.8}
         {"name":"heavy flag","nodes":16,"length":0.5,"gravity":0.4,"wind":1.1,"pinTail":true}
+        {"name":"cotton shirt hem","nodes":14,"length":0.4,"gravity":0.95,"damping":0.95,"windAmplitude":0.35}
 
         Output the JSON only, with no prose and no markdown fences.
 

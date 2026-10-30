@@ -101,6 +101,17 @@ private fun DrawScope.drawStageLayerExport(r: OGResolvedStageLayer, fps: Int) {
             is OGStageContent.Slash -> fxGroup(r, w, h) { drawExportSlash(c.slash, r.localTimeMs) }
             is OGStageContent.Lightning -> fxGroup(r, w, h) { drawExportLightning(c.lightning, r.localTimeMs) }
             is OGStageContent.SpeedLines -> fxGroup(r, w, h) { drawExportSpeedLines(c.speedLines, r.localTimeMs) }
+
+            // A raster cutout draws real bundled pixels through the Compose image loader — a recomposing,
+            // async path with no synchronous off-screen equivalent in this DrawScope, so the frame-by-frame
+            // exporter skips it (it still bakes the rest of the timeline). Capture an image-puppet stage
+            // from the live player instead; a sync decoder for baking cutouts can slot in here later.
+            is OGStageContent.Image -> Unit
+
+            // A wind-blown cloth/hair strip bakes through the SAME deterministic per-frame draw the live
+            // view uses (re-simulated from 0 to the layer-local time), with the layer's opacity/look/blend.
+            is OGStageContent.Cloth ->
+                drawOGStageClothFrame(c, r.localTimeMs / 1000f, r.opacity, r.look.cf(), r.blend.toBlendMode())
         }
     }
 }

@@ -4,6 +4,7 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -124,5 +125,27 @@ class OGClothStripTest {
             assertTrue(abs(sampled.x(i) - manual.x(i)) < 1e-5f, "node $i x reproducible")
             assertTrue(abs(sampled.y(i) - manual.y(i)) < 1e-5f, "node $i y reproducible")
         }
+    }
+
+    @Test
+    fun materialLibrary_overlaysFeelButKeepsFormAndSceneWind() {
+        // Named materials exist and span light→heavy.
+        assertNotNull(OGCloths.material("cotton"))
+        assertNotNull(OGCloths.material("silk"))
+        assertNull(OGCloths.material("unobtanium"))
+        assertTrue(OGCloths.material("denim")!!.gravity > OGCloths.material("chiffon")!!.gravity, "denim is heavier than chiffon")
+
+        // withMaterial overlays weight/stiffness/air-catch but preserves form + the scene's prevailing wind.
+        val base = OGCloths.preset("scarf")!!.copy(wind = -0.5f, nodes = 20, length = 0.6f, pinTail = true)
+        val silk = base.withMaterial("silk")
+        assertEquals(OGCloths.material("silk")!!.gravity, silk.gravity)
+        assertEquals(OGCloths.material("silk")!!.damping, silk.damping)
+        assertEquals(-0.5f, silk.wind, "prevailing scene wind is kept")
+        assertEquals(20, silk.nodes, "form (nodes) is kept")
+        assertEquals(0.6f, silk.length, "form (length) is kept")
+        assertTrue(silk.pinTail, "form (pinTail) is kept")
+
+        // Unknown material → unchanged.
+        assertEquals(base, base.withMaterial("nope"))
     }
 }

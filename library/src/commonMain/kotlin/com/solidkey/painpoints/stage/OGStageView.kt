@@ -1,11 +1,14 @@
 package com.solidkey.painpoints.stage
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,7 +27,10 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import com.solidkey.painpoints.image.loading.loadImageFromResource
 import com.solidkey.painpoints.ai.OGPlacedShapeSpec
 import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.ai.animatedAt
@@ -246,6 +252,51 @@ private fun StageLayerBox(
 
             is OGStageContent.Text ->
                 TextLayerCanvas(c, r.localTimeMs, Modifier.fillMaxSize())
+
+            is OGStageContent.Image ->
+                ImageLayerBox(c, r.localTimeMs, Modifier.fillMaxSize())
+
+            is OGStageContent.Cloth ->
+                ClothLayerCanvas(c, r.localTimeMs, Modifier.fillMaxSize())
+        }
+    }
+}
+
+/** A wind-blown cloth/hair strip at its layer-local time — drawn through the SAME deterministic
+ *  [drawOGStageClothFrame] the export uses, so preview and exported frames match exactly. */
+@Composable
+private fun ClothLayerCanvas(c: OGStageContent.Cloth, timeMs: Long, modifier: Modifier) {
+    Canvas(modifier) {
+        drawOGStageClothFrame(c, timeMs / 1000f)
+    }
+}
+
+/**
+ * Draw a **raster-cutout** layer: every [frames][OGStageContent.Image.frames] resource is loaded once
+ * (the shared loader caches by name, so a blink re-shows frames with no re-decode or flicker), and the
+ * frame for the layer-local [timeMs] is picked and drawn — centred and fit within the content's
+ * `widthFrac × heightFrac` of the box. The layer's transform / grade / blend / opacity are applied by
+ * the caller ([StageLayerBox]), so this draws the pixels straight (the same split as the other kinds).
+ * Transparent until the first decode arrives (no placeholder box), so a cutout composites cleanly.
+ */
+@Composable
+private fun ImageLayerBox(c: OGStageContent.Image, timeMs: Long, modifier: Modifier) {
+    val loaded = remember(c.frames) { mutableStateMapOf<String, Painter>() }
+    for (f in c.frames) {
+        loadImageFromResource(f.resource) { p -> loaded[f.resource] = p }
+    }
+    val current = c.frames.getOrNull(c.frameIndexAt(timeMs))?.resource
+    val painter = current?.let { loaded[it] }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (painter != null) {
+            Image(
+                painter = painter,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth(c.widthFrac.coerceIn(0f, 1f))
+                    .fillMaxHeight(c.heightFrac.coerceIn(0f, 1f)),
+            )
         }
     }
 }

@@ -12,6 +12,7 @@ import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
 import com.solidkey.painpoints.style.OGStyleSpec
+import com.solidkey.painpoints.motion.OGClothSpec
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.max
@@ -45,8 +46,8 @@ import kotlin.math.roundToInt
  * trips losslessly.
  *
  * The kinds cover the two halves of the engine (a generated scene + a generative-motion pack), the
- * action-FX packs, styled vector [Text] for titles/captions, and a flat fill; `rig` / `cloth` / an
- * image bitmap slot in behind the same interface with no change to [OGStage] or [OGStageView].
+ * action-FX packs, styled vector [Text] for titles/captions, a flat fill, a wind-blown [Cloth] strip,
+ * and a raster [Image] cutout — all behind the same interface with no change to [OGStage] or [OGStageView].
  */
 @Serializable
 sealed interface OGStageContent {
@@ -104,7 +105,96 @@ sealed interface OGStageContent {
         val family: String? = null,
         val style: OGStyleSpec? = null,
     ) : OGStageContent
+
+    /**
+     * A **raster cutout** — real drawn pixels (a bundled PNG / WebP), not a redrawn vector. This is the
+     * image-bitmap slot the engine reserved: it lets a hand-drawn character part live on the stage as
+     * itself. One or more [frames] are shown in order on the layer's local clock (looping), so a cutout
+     * animates by **frame-swap** (a blink, a mouth shape, a wave) while the layer's own transform tracks
+     * move it and an [OGStageLayer.onTap] makes it poke-reactive — a paper-doll / Spine-style puppet,
+     * authored as data.
+     *
+     * The image is centred in the layer box and scaled to **fit** within [widthFrac] × [heightFrac] of
+     * it (aspect preserved), so you place and size it with the layer transform, not by pre-scaling the
+     * art. Each frame names a resource the **host app bundles** (Android `res/drawable`, iOS bundle),
+     * resolved by the shared image loader — so unlike the other content kinds a blind describe→movie
+     * model can't author this one, but an app assembling a puppet from its own assets can.
+     *
+     * @param frames the cutout's frames in play order; one frame = a still, several = a frame-swap sprite.
+     * @param widthFrac / [heightFrac] the fit box as a fraction of the stage (`1` = the whole stage box).
+     */
+    @Serializable
+    @SerialName("image")
+    data class Image(
+        val frames: List<OGImageFrame>,
+        val widthFrac: Float = 1f,
+        val heightFrac: Float = 1f,
+    ) : OGStageContent {
+        /** True when there is more than one frame — the cutout animates by frame-swap. */
+        val isAnimated: Boolean get() = frames.size > 1
+
+        /** The index of the frame shown at layer-local [timeMs], looping over the total hold span. Safe
+         *  for an empty / single-frame list (returns 0). */
+        fun frameIndexAt(timeMs: Long): Int {
+            if (frames.size <= 1) return 0
+            val total = frames.sumOf { it.holdMs.coerceAtLeast(1L) }
+            if (total <= 0L) return 0
+            var t = (timeMs % total).coerceAtLeast(0L)
+            for (i in frames.indices) {
+                t -= frames[i].holdMs.coerceAtLeast(1L)
+                if (t < 0L) return i
+            }
+            return frames.lastIndex
+        }
+    }
+
+    /**
+     * A **wind-blown cloth strip** — a scarf, cape edge, banner, or a lock of **long hair** that hangs
+     * and *flutters*. Wraps the motion family's 1-D Verlet [OGClothSpec] (gravity + prevailing wind +
+     * turbulent gusts) as a first-class stage layer: the strip's head is pinned at ([anchorX], [anchorY])
+     * inside the layer box and streams out on the breeze, deterministic and frame-identical on both
+     * platforms (it re-simulates from `0` to the layer-local time, so a live frame and an exported frame
+     * match exactly). Pair it with a particle layer blowing the SAME direction and the whole scene reads
+     * as one wind — snow sweeps, hair streams, a dress ripples, together.
+     *
+     * Pin it onto a character cutout by placing this layer at the hairline / hem / sleeve with the layer
+     * transform. The anchor is fixed within the box (the layer transform moves it), so the strip responds
+     * to **wind**, not to the character's own acceleration — inertial drag from motion is out of scope.
+     *
+     * @param cloth the fabric's feel (nodes / length / gravity / damping / wind…); reuse an [OGClothSpec]
+     *   preset like `"hair"` or `"scarf"` and `copy()` the wind to taste.
+     * @param anchorX / [anchorY] the pinned head, normalized `0..1` of the layer box.
+     * @param tailX / [tailY] the far-end pin, used only when [OGClothSpec.pinTail] (a banner strung taut).
+     * @param color the ribbon fill (an SVG colour string).
+     * @param width the ribbon's half-thickness as a fraction of the box's shorter side.
+     * @param taper taper the ribbon to a point at the free end (a hair lock / pennant) vs a constant
+     *   width (a strap / banner).
+     */
+    @Serializable
+    @SerialName("cloth")
+    data class Cloth(
+        val cloth: OGClothSpec,
+        val anchorX: Float = 0.5f,
+        val anchorY: Float = 0.12f,
+        val tailX: Float = 0.5f,
+        val tailY: Float = 0.12f,
+        val color: String = "#FFFFFF",
+        val width: Float = 0.05f,
+        val taper: Boolean = true,
+    ) : OGStageContent
 }
+
+/**
+ * One raster frame of an [OGStageContent.Image] cutout: a bundled image [resource] held on screen for
+ * [holdMs] before the next frame. A single frame is a static cutout; a list is a frame-swap sprite — a
+ * blink, a mouth shape, a wave — advanced on the layer's local clock. Hold the resting frame long and
+ * the transient frames briefly to read as a natural blink (e.g. `open 3000ms, half 40ms, shut 90ms`).
+ */
+@Serializable
+data class OGImageFrame(
+    val resource: String,
+    val holdMs: Long = 120L,
+)
 
 /** Style ops whose output changes with time — a [OGStageContent.Text] carrying one of these animates. */
 private val TEXT_LIVE_OPS = setOf("boil", "wave", "ripple")
@@ -195,6 +285,8 @@ data class OGStage(
                 is OGStageContent.Lightning -> true
                 is OGStageContent.SpeedLines -> true
                 is OGStageContent.Text -> c.style?.ops?.any { it.op.lowercase() in TEXT_LIVE_OPS } == true
+                is OGStageContent.Image -> c.isAnimated
+                is OGStageContent.Cloth -> true
                 is OGStageContent.Solid -> false
             }
             contentLive ||
