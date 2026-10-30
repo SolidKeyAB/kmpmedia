@@ -176,6 +176,10 @@ scarf.step(dt, anchorX = neckX, anchorY = neckY)      // pin the head at the nec
 // then draw a tapered ribbon through scarf.point(0 .. count-1)
 ```
 
+The wind model (prevailing `wind` + seeded turbulent `windAmplitude` / `windFrequency` / `windSeed`
+gusts) is **shared with the [particle system](./PARTICLES.md)**, so cloth and particles blow alike —
+drive both from one breeze value and a scarf flutters while the snow sweeps the same way.
+
 It advances on a **fixed internal substep** (position Verlet is only stable + deterministic at a
 constant `dt`), so it is frame-identical on Android & iOS and **exact for fixed-step GIF/MP4 export**.
 Unlike `OGSpring` it is a **live stepper, not closed-form** — there is no `valueAt(t)`; to *scrub* it,
