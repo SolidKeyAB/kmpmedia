@@ -16,8 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
@@ -88,13 +90,14 @@ fun OGGlass(
         ) { content() }
 
         if (enabled && size.width > 0 && size.height > 0) {
-            val r = s.radius * min(size.width, size.height).toFloat()
+            val halfH = s.radius * min(size.width, size.height).toFloat()
+            val halfW = halfH * s.aspect
             val c = resolveCenter(center, size.width.toFloat(), size.height.toFloat())
             // Grip handle on the lower-right of the rim — the ONLY thing that moves the lens.
             val grip = 44
             Box(
                 Modifier
-                    .offset { IntOffset((c.x + r * 0.72f).roundToInt() - grip / 2, (c.y + r * 0.72f).roundToInt() - grip / 2) }
+                    .offset { IntOffset((c.x + halfW * 0.72f).roundToInt() - grip / 2, (c.y + halfH * 0.72f).roundToInt() - grip / 2) }
                     .size(grip.dp)
                     .clip(CircleShape)
                     .background(rim.copy(alpha = 0.92f))
@@ -112,7 +115,7 @@ fun OGGlass(
                 val x = 34
                 Box(
                     Modifier
-                        .offset { IntOffset((c.x + r * 0.72f).roundToInt() - x / 2, (c.y - r * 0.72f).roundToInt() - x / 2) }
+                        .offset { IntOffset((c.x + halfW * 0.72f).roundToInt() - x / 2, (c.y - halfH * 0.72f).roundToInt() - x / 2) }
                         .size(x.dp)
                         .clip(CircleShape)
                         .background(rim.copy(alpha = 0.92f))
@@ -127,53 +130,58 @@ fun OGGlass(
 private fun resolveCenter(center: Offset, w: Float, h: Float): Offset =
     if (center == Offset.Unspecified) Offset(w / 2f, h / 2f) else center
 
-/** The resolved lens disc — its on-screen [center], [radius] and the circle [path] — shared by the
- *  base-content hole-punch and the lens draw so they line up exactly. */
-private class LensCircle(val center: Offset, val radius: Float, val path: Path)
+/** The resolved lens shape — its on-screen [center], half-[width]/half-[height] and the rounded-rect
+ *  [path] — shared by the base-content hole-punch and the lens draw so they line up exactly. A circle is
+ *  just the square (half-width == half-height), fully-rounded case. */
+private class LensShape(val center: Offset, val halfW: Float, val halfH: Float, val path: Path)
 
-/** Resolve the lens disc for a [w]×[h] view, clamping [rawCenter] so the whole circle stays on screen.
- *  Returns `null` when the view or radius is degenerate. */
-private fun computeLens(s: OGGlassSpec, rawCenter: Offset, w: Float, h: Float): LensCircle? {
+/** Resolve the lens shape for a [w]×[h] view, clamping [rawCenter] so the whole lens stays on screen.
+ *  [OGGlassSpec.radius] sets the half-height, [aspect] the width, [cornerRadius] the end rounding.
+ *  Returns `null` when the view or size is degenerate. */
+private fun computeLens(s: OGGlassSpec, rawCenter: Offset, w: Float, h: Float): LensShape? {
     if (w <= 0f || h <= 0f) return null
-    val r = s.radius * min(w, h)
-    if (r <= 0f) return null
-    val cx = if (w > 2 * r) rawCenter.x.coerceIn(r, w - r) else w / 2f
-    val cy = if (h > 2 * r) rawCenter.y.coerceIn(r, h - r) else h / 2f
+    val halfH = s.radius * min(w, h)
+    if (halfH <= 0f) return null
+    val halfW = halfH * s.aspect
+    val cx = if (w > 2 * halfW) rawCenter.x.coerceIn(halfW, w - halfW) else w / 2f
+    val cy = if (h > 2 * halfH) rawCenter.y.coerceIn(halfH, h - halfH) else h / 2f
     val c = Offset(cx, cy)
-    val path = Path().apply { addOval(Rect(c.x - r, c.y - r, c.x + r, c.y + r)) }
-    return LensCircle(c, r, path)
+    val corner = s.cornerRadius * minOf(halfW, halfH)
+    val path = Path().apply {
+        addRoundRect(RoundRect(Rect(c.x - halfW, c.y - halfH, c.x + halfW, c.y + halfH), CornerRadius(corner, corner)))
+    }
+    return LensShape(c, halfW, halfH, path)
 }
 
-/** Draw the lens: magnified (scaled) copy of [layer] clipped to a circle, then tint, rim and sheen. */
+/** Draw the lens: magnified (scaled) copy of [layer] clipped to the lens shape, then tint, rim and sheen. */
 private fun DrawScope.drawGlass(
     s: OGGlassSpec,
     layer: GraphicsLayer,
-    lens: LensCircle,
+    lens: LensShape,
     tint: Color,
     rim: Color,
 ) {
     val c = lens.center
-    val r = lens.radius
     // The magnified (or minified) content under the glass: scale the recorded layer about the lens centre.
     clipPath(lens.path) {
         scale(s.zoom, s.zoom, pivot = c) { drawLayer(layer) }
     }
     // Coloured glass: lay the tint over the lensed content (clear tint → nothing).
     val tintA = tint.alpha * s.tintStrength
-    if (tintA > 0f) drawCircle(tint.copy(alpha = tintA), radius = r, center = c)
+    if (tintA > 0f) drawPath(lens.path, tint.copy(alpha = tintA))
     // Specular sheen across the top-left, selling the curved-glass look.
     if (s.highlight > 0f) {
         val sheen = Brush.radialGradient(
             colorStops = arrayOf(0f to Color.White.copy(alpha = 0.55f * s.highlight), 1f to Color.Transparent),
-            center = Offset(c.x - r * 0.3f, c.y - r * 0.3f),
-            radius = r * 1.25f,
+            center = Offset(c.x - lens.halfW * 0.3f, c.y - lens.halfH * 0.3f),
+            radius = maxOf(lens.halfW, lens.halfH) * 1.25f,
         )
-        drawCircle(brush = sheen, radius = r, center = c)
+        drawPath(lens.path, brush = sheen)
     }
     // The glass rim / frame.
-    val rimW = (s.rimWidth * r)
+    val rimW = (s.rimWidth * lens.halfH)
     if (rimW > 0f && s.rimAlpha > 0f) {
-        drawCircle(rim.copy(alpha = s.rimAlpha), radius = r, center = c, style = Stroke(width = rimW))
+        drawPath(lens.path, rim.copy(alpha = s.rimAlpha), style = Stroke(width = rimW))
     }
 }
 

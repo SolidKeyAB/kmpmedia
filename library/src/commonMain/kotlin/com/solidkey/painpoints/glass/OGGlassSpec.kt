@@ -19,8 +19,15 @@ data class OGGlassSpec(
     val name: String? = null,
     /** Magnification under the glass: `> 1` magnifies, `< 1` minifies, `1` is a plain (tinted) pane. */
     val zoom: Float = 2f,
-    /** Lens radius as a fraction of the shorter side of the view (`0..1`). */
+    /** Lens radius as a fraction of the shorter side of the view (`0..1`). Sets the lens **half-height**;
+     *  [aspect] stretches the width from it. */
     val radius: Float = 0.22f,
+    /** Lens **width ÷ height**. `1` = a round lens (default). `> 1` = a horizontal **pill / bar** — wider
+     *  than tall, so it spans a whole row of content cleanly instead of clipping them on a circle's curve. */
+    val aspect: Float = 1f,
+    /** Corner rounding as a fraction of the lens half-height (`0..1`). `1` = fully round ends (a circle when
+     *  [aspect] is 1, a stadium/capsule when wider); `0` = a sharp-cornered rectangle. */
+    val cornerRadius: Float = 1f,
     /** Glass tint — any SVG colour string. Fully transparent (`#00000000`) = clear magnifier. */
     val tint: String = "#00000000",
     /** How strongly the [tint] is laid over the magnified content (`0..1`). */
@@ -38,6 +45,8 @@ data class OGGlassSpec(
     fun sanitized(): OGGlassSpec = copy(
         zoom = zoom.coerceIn(0.2f, 6f),
         radius = radius.coerceIn(0.03f, 1f),
+        aspect = aspect.coerceIn(0.2f, 5f),
+        cornerRadius = cornerRadius.coerceIn(0f, 1f),
         tintStrength = tintStrength.coerceIn(0f, 1f),
         rimWidth = rimWidth.coerceIn(0f, 0.5f),
         rimAlpha = rimAlpha.coerceIn(0f, 1f),
