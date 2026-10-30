@@ -105,7 +105,7 @@ fun OGGlass(
                             center = from + drag
                         }
                     },
-            ) { Canvas(Modifier.fillMaxSize()) { drawMoveGlyph(tint.takeIf { it.alpha > 0f } ?: Color.Black) } }
+            ) { Canvas(Modifier.fillMaxSize()) { drawMoveGlyph(GripInk) } }
 
             // Remove ✕ on the upper-right of the rim.
             if (onRemove != null) {
@@ -177,13 +177,22 @@ private fun DrawScope.drawGlass(
     }
 }
 
-/** A four-arrow "move" glyph for the grip handle. */
+/** Fixed dark ink for the grip dots — a readable charcoal that contrasts on the light knob regardless of
+ *  the lens tint (a pale tint would wash the dots out). */
+private val GripInk = Color(0xFF3A3A3A)
+
+/** A **drag-handle** glyph for the grip — a 2×3 grid of dots, the universal "grab here to move" affordance.
+ *  (Deliberately NOT a "+" or arrows, which read as zoom / direction rather than "hold me".) */
 private fun DrawScope.drawMoveGlyph(color: Color) {
     val c = Offset(size.width / 2f, size.height / 2f)
-    val a = size.minDimension * 0.28f
-    val sw = size.minDimension * 0.07f
-    drawLine(color, Offset(c.x - a, c.y), Offset(c.x + a, c.y), strokeWidth = sw, cap = StrokeCap.Round)
-    drawLine(color, Offset(c.x, c.y - a), Offset(c.x, c.y + a), strokeWidth = sw, cap = StrokeCap.Round)
+    val dot = size.minDimension * 0.07f
+    val gx = size.minDimension * 0.17f  // column half-spacing
+    val gy = size.minDimension * 0.17f  // row spacing
+    for (col in intArrayOf(-1, 1)) {
+        for (row in intArrayOf(-1, 0, 1)) {
+            drawCircle(color, radius = dot, center = Offset(c.x + col * gx, c.y + row * gy))
+        }
+    }
 }
 
 /** An ✕ glyph for the remove button. */
