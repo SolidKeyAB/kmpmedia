@@ -89,10 +89,16 @@ fun OGGlass(
             },
         ) { content() }
 
-        if (enabled && size.width > 0 && size.height > 0) {
-            val halfH = s.radius * min(size.width, size.height).toFloat()
-            val halfW = halfH * s.aspect
-            val c = resolveCenter(center, size.width.toFloat(), size.height.toFloat())
+        // Position the ✕ and grip off the SAME clamped lens shape the Canvas draws (computeLens coerces the
+        // centre so the whole lens stays on screen). Recomputing the raw centre here would leave the handles
+        // behind when the lens is pushed to a screen edge — they'd drift off the rim.
+        val handleLens = if (enabled) {
+            computeLens(s, resolveCenter(center, size.width.toFloat(), size.height.toFloat()), size.width.toFloat(), size.height.toFloat())
+        } else null
+        if (handleLens != null) {
+            val c = handleLens.center
+            val halfW = handleLens.halfW
+            val halfH = handleLens.halfH
             // Grip handle on the lower-right of the rim — the ONLY thing that moves the lens.
             val grip = 44
             Box(
