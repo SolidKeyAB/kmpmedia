@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -71,8 +72,18 @@ fun OGGlass(
         Box(
             Modifier.fillMaxSize().drawWithContent {
                 layer.record { this@drawWithContent.drawContent() }
-                drawLayer(layer)
-                if (enabled) drawGlass(s, layer, resolveCenter(center, this.size.width, this.size.height), tint, rim)
+                val lens = if (enabled) {
+                    computeLens(s, resolveCenter(center, this.size.width, this.size.height), this.size.width, this.size.height)
+                } else null
+                if (lens != null) {
+                    // Draw the base content everywhere EXCEPT the lens disc, so inside the circle only the
+                    // magnified copy shows. Without this hole the un-magnified base would show through wherever
+                    // the content is transparent (e.g. beside a sprite) → a "doubled" ghost under the lens.
+                    clipPath(lens.path, clipOp = ClipOp.Difference) { drawLayer(layer) }
+                    drawGlass(s, layer, lens, tint, rim)
+                } else {
+                    drawLayer(layer)
+                }
             },
         ) { content() }
 
@@ -116,26 +127,35 @@ fun OGGlass(
 private fun resolveCenter(center: Offset, w: Float, h: Float): Offset =
     if (center == Offset.Unspecified) Offset(w / 2f, h / 2f) else center
 
+/** The resolved lens disc — its on-screen [center], [radius] and the circle [path] — shared by the
+ *  base-content hole-punch and the lens draw so they line up exactly. */
+private class LensCircle(val center: Offset, val radius: Float, val path: Path)
+
+/** Resolve the lens disc for a [w]×[h] view, clamping [rawCenter] so the whole circle stays on screen.
+ *  Returns `null` when the view or radius is degenerate. */
+private fun computeLens(s: OGGlassSpec, rawCenter: Offset, w: Float, h: Float): LensCircle? {
+    if (w <= 0f || h <= 0f) return null
+    val r = s.radius * min(w, h)
+    if (r <= 0f) return null
+    val cx = if (w > 2 * r) rawCenter.x.coerceIn(r, w - r) else w / 2f
+    val cy = if (h > 2 * r) rawCenter.y.coerceIn(r, h - r) else h / 2f
+    val c = Offset(cx, cy)
+    val path = Path().apply { addOval(Rect(c.x - r, c.y - r, c.x + r, c.y + r)) }
+    return LensCircle(c, r, path)
+}
+
 /** Draw the lens: magnified (scaled) copy of [layer] clipped to a circle, then tint, rim and sheen. */
 private fun DrawScope.drawGlass(
     s: OGGlassSpec,
     layer: GraphicsLayer,
-    rawCenter: Offset,
+    lens: LensCircle,
     tint: Color,
     rim: Color,
 ) {
-    val w = size.width; val h = size.height
-    if (w <= 0f || h <= 0f) return
-    val r = s.radius * min(w, h)
-    if (r <= 0f) return
-    // Keep the whole lens on screen.
-    val cx = if (w > 2 * r) rawCenter.x.coerceIn(r, w - r) else w / 2f
-    val cy = if (h > 2 * r) rawCenter.y.coerceIn(r, h - r) else h / 2f
-    val c = Offset(cx, cy)
-
-    val circle = Path().apply { addOval(Rect(c.x - r, c.y - r, c.x + r, c.y + r)) }
+    val c = lens.center
+    val r = lens.radius
     // The magnified (or minified) content under the glass: scale the recorded layer about the lens centre.
-    clipPath(circle) {
+    clipPath(lens.path) {
         scale(s.zoom, s.zoom, pivot = c) { drawLayer(layer) }
     }
     // Coloured glass: lay the tint over the lensed content (clear tint → nothing).
