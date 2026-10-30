@@ -89,9 +89,10 @@ fun OGGlass(
             },
         ) { content() }
 
-        // Position the ✕ and grip off the SAME clamped lens shape the Canvas draws (computeLens coerces the
-        // centre so the whole lens stays on screen). Recomputing the raw centre here would leave the handles
-        // behind when the lens is pushed to a screen edge — they'd drift off the rim.
+        // Position the ✕ and grip off the SAME lens shape the Canvas draws (computeLens coerces the centre
+        // on screen). Recomputing the raw centre here would leave the handles behind when the lens is pushed
+        // to an edge — they'd drift off the rim. The rim may now spill past an edge, so clamp each knob's
+        // anchor onto the screen too, keeping it tappable even when its corner of the rim is off-screen.
         val handleLens = if (enabled) {
             computeLens(s, resolveCenter(center, size.width.toFloat(), size.height.toFloat()), size.width.toFloat(), size.height.toFloat())
         } else null
@@ -99,11 +100,16 @@ fun OGGlass(
             val c = handleLens.center
             val halfW = handleLens.halfW
             val halfH = handleLens.halfH
+            fun anchor(dx: Float, dy: Float, knob: Int): IntOffset {
+                val ax = (c.x + dx).coerceIn(knob / 2f, size.width - knob / 2f)
+                val ay = (c.y + dy).coerceIn(knob / 2f, size.height - knob / 2f)
+                return IntOffset(ax.roundToInt() - knob / 2, ay.roundToInt() - knob / 2)
+            }
             // Grip handle on the lower-right of the rim — the ONLY thing that moves the lens.
             val grip = 44
             Box(
                 Modifier
-                    .offset { IntOffset((c.x + halfW * 0.72f).roundToInt() - grip / 2, (c.y + halfH * 0.72f).roundToInt() - grip / 2) }
+                    .offset { anchor(halfW * 0.72f, halfH * 0.72f, grip) }
                     .size(grip.dp)
                     .clip(CircleShape)
                     .background(rim.copy(alpha = 0.92f))
@@ -121,7 +127,7 @@ fun OGGlass(
                 val x = 34
                 Box(
                     Modifier
-                        .offset { IntOffset((c.x + halfW * 0.72f).roundToInt() - x / 2, (c.y - halfH * 0.72f).roundToInt() - x / 2) }
+                        .offset { anchor(halfW * 0.72f, -halfH * 0.72f, x) }
                         .size(x.dp)
                         .clip(CircleShape)
                         .background(rim.copy(alpha = 0.92f))
@@ -141,16 +147,18 @@ private fun resolveCenter(center: Offset, w: Float, h: Float): Offset =
  *  just the square (half-width == half-height), fully-rounded case. */
 private class LensShape(val center: Offset, val halfW: Float, val halfH: Float, val path: Path)
 
-/** Resolve the lens shape for a [w]×[h] view, clamping [rawCenter] so the whole lens stays on screen.
- *  [OGGlassSpec.radius] sets the half-height, [aspect] the width, [cornerRadius] the end rounding.
- *  Returns `null` when the view or size is degenerate. */
+/** Resolve the lens shape for a [w]×[h] view, clamping [rawCenter] so the lens **centre** stays on screen
+ *  — the rim is allowed to spill past an edge so the loupe can be dragged right onto edge content (a wide
+ *  pill lens whose centre was pinned ≥ halfW could never reach the first column, magnifying its leading
+ *  letters off-screen → "UYRUK" read as "YRUK"). [OGGlassSpec.radius] sets the half-height, [aspect] the
+ *  width, [cornerRadius] the end rounding. Returns `null` when the view or size is degenerate. */
 private fun computeLens(s: OGGlassSpec, rawCenter: Offset, w: Float, h: Float): LensShape? {
     if (w <= 0f || h <= 0f) return null
     val halfH = s.radius * min(w, h)
     if (halfH <= 0f) return null
     val halfW = halfH * s.aspect
-    val cx = if (w > 2 * halfW) rawCenter.x.coerceIn(halfW, w - halfW) else w / 2f
-    val cy = if (h > 2 * halfH) rawCenter.y.coerceIn(halfH, h - halfH) else h / 2f
+    val cx = rawCenter.x.coerceIn(0f, w)
+    val cy = rawCenter.y.coerceIn(0f, h)
     val c = Offset(cx, cy)
     val corner = s.cornerRadius * minOf(halfW, halfH)
     val path = Path().apply {
