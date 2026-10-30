@@ -105,11 +105,14 @@ fun OGGlass(
                 val ay = (c.y + dy).coerceIn(knob / 2f, size.height - knob / 2f)
                 return IntOffset(ax.roundToInt() - knob / 2, ay.roundToInt() - knob / 2)
             }
-            // Grip handle on the lower-right of the rim — the ONLY thing that moves the lens.
+            // Grip handle on the BOTTOM-CENTRE of the rim — the ONLY thing that moves the lens. Centre (not a
+            // corner) so it tracks the clamped centre.x and never jams against a side wall: that let the lens
+            // pan symmetrically to BOTH edges (a right-side grip hit the right wall early and blocked the lens
+            // from reaching the rightmost content, while the left panned freely).
             val grip = 44
             Box(
                 Modifier
-                    .offset { anchor(halfW * 0.72f, halfH * 0.72f, grip) }
+                    .offset { anchor(0f, halfH * 0.86f, grip) }
                     .size(grip.dp)
                     .clip(CircleShape)
                     .background(rim.copy(alpha = 0.92f))
@@ -122,12 +125,12 @@ fun OGGlass(
                     },
             ) { Canvas(Modifier.fillMaxSize()) { drawMoveGlyph(GripInk) } }
 
-            // Remove ✕ on the upper-right of the rim.
+            // Remove ✕ on the TOP-CENTRE of the rim (mirrors the grip; clear of both side walls).
             if (onRemove != null) {
                 val x = 34
                 Box(
                     Modifier
-                        .offset { anchor(halfW * 0.72f, -halfH * 0.72f, x) }
+                        .offset { anchor(0f, -halfH * 0.86f, x) }
                         .size(x.dp)
                         .clip(CircleShape)
                         .background(rim.copy(alpha = 0.92f))
