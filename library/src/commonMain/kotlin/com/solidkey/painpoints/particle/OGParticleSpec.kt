@@ -74,6 +74,15 @@ data class OGParticleSpec(
     val windFrequency: Float = 0.7f,
     /** Seed for the gust pattern — change it for a different-but-repeatable breeze. */
     val windSeed: Int = 0,
+    /**
+     * **Curl-noise turbulence** (Bridson 2007) — advects every particle through a divergence-free
+     * velocity field built as the curl of a fractal-noise potential (`v = (∂P/∂y, −∂P/∂x)`).
+     * Divergence-free means the field has no sources or sinks, so particles swirl and eddy naturally
+     * without ever bunching up or thinning out artificially — the real-smoke look. The displacement
+     * scales with [speed] too, so faster effects churn harder. `0` (default) = off, byte-identical to
+     * the old integrator. Try `0.2..0.5` for smoke/leaves/embers.
+     */
+    val turbulenceStrength: Float = 0f,
     /** Size at birth, as a fraction of the box's shorter side. */
     val startSize: Float = 0.04f,
     /** Size at death, as a fraction of the box's shorter side. */
@@ -161,11 +170,13 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
     private var rng = 0
     private var emitAccum = 0f
     private var bursted = false
-    /** Monotonic seconds, advanced each [update]; drives the wind-gust noise field. */
+    /** Monotonic seconds, advanced each [update]; drives the wind-gust + curl-noise fields. */
     private var windClockSec = 0f
     /** Whether any wind force is configured — lets the integrator skip the noise work (and stay
      *  byte-identical to the old output) when wind is off. */
     private val hasWind = spec.wind != 0f || spec.windAmplitude != 0f
+    /** Whether curl-noise turbulence is on — off (default) skips the field entirely. */
+    private val hasTurb = spec.turbulenceStrength > 0f
 
     init { reset() }
 
@@ -226,7 +237,7 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
     fun update(dtMs: Float) {
         if (cap == 0) return
         val dt = (dtMs.coerceAtLeast(0f)) / 1000f
-        if (hasWind) windClockSec += dt
+        if (hasWind || hasTurb) windClockSec += dt
 
         // Age, integrate, and compact out the dead in one pass.
         var w = 0
@@ -243,6 +254,22 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
                 val gustY = spec.windAmplitude * 0.5f * OGFxNoise.fbm(y[r] * 2.3f, t + x[r] * 2.3f, 2, spec.windSeed + 101)
                 vx[r] += (spec.wind + gustX) * dt
                 vy[r] += gustY * dt
+            }
+            if (hasTurb) {
+                // Curl noise (Bridson 2007): v = curl P = (∂P/∂y, −∂P/∂x) of a scalar noise potential,
+                // via central differences. Divergence-free by construction → particles eddy and swirl
+                // without artificial clumping or thinning. Applied as a positional advection so it
+                // layers cleanly on top of the ballistic velocity.
+                val t = windClockSec * 0.35f
+                val px = x[r] * CURL_FREQ
+                val py = y[r] * CURL_FREQ
+                val cvx = (curlPotential(px, py + CURL_EPS, t) - curlPotential(px, py - CURL_EPS, t)) /
+                    (2f * CURL_EPS)
+                val cvy = -(curlPotential(px + CURL_EPS, py, t) - curlPotential(px - CURL_EPS, py, t)) /
+                    (2f * CURL_EPS)
+                val k = spec.turbulenceStrength * spec.speed * dt
+                x[r] += cvx * k
+                y[r] += cvy * k
             }
             if (spec.drag > 0f) {
                 val damp = (1f - spec.drag * dt).coerceAtLeast(0f)
@@ -280,9 +307,17 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
         }
     }
 
+    /** The scalar noise potential P for curl noise — a slowly time-evolving fractal field. */
+    private fun curlPotential(px: Float, py: Float, t: Float): Float =
+        OGFxNoise.fbm(px + t, py - t * 0.7f, 2, spec.seed + 977)
+
     private companion object {
         const val DEG = 0.017453292f
         const val TWO_PI = 6.2831855f
+        /** Spatial frequency of the curl-noise potential over the normalized 0..1 view. */
+        const val CURL_FREQ = 2.2f
+        /** Central-difference step for the curl (in potential-field units). */
+        const val CURL_EPS = 0.05f
         fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
         fun packArgb(a: Float, r: Float, g: Float, b: Float): Int {
             val ai = (a.coerceIn(0f, 1f) * 255f + 0.5f).toInt()

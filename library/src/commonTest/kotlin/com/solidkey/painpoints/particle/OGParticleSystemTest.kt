@@ -3,6 +3,7 @@ package com.solidkey.painpoints.particle
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -128,6 +129,15 @@ class OGParticleSystemTest {
         val sys = OGParticles.decodeOrNull(fenced)!!
         sys.update(16f)
         assertEquals(5, sys.count)
+    }
+
+    @Test
+    fun bubblesPreset_existsAndRisesBuoyantly() {
+        val spec = OGParticles.preset("bubbles")
+        assertNotNull(spec)
+        assertEquals(OGParticles.BUBBLES, OGParticles.preset("BUBBLES")) // case-insensitive
+        assertTrue(spec.gravityY < 0f, "bubbles are buoyant (negative gravity)")
+        assertEquals(12, OGParticles.presets.size)
     }
 
     @Test

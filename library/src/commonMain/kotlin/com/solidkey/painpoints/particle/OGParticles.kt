@@ -48,6 +48,7 @@ object OGParticles {
           x, y, spawnRadius, angleDeg, spreadDeg, speed, speedJitter, gravityX, gravityY, drag,
           wind (steady horizontal breeze, + = right), windAmplitude (turbulent gust strength on top),
           windFrequency (how fast gusts wander), windSeed,
+          turbulenceStrength (0..1 curl-noise eddying — swirling smoke/leaf motion; 0 = off),
           startSize, endSize, sizeJitter, startColor, endColor, startAlpha, endAlpha,
           spinDeg, spinJitter, shape ("circle"|"square"|"triangle"|"star"|"petal"|"teardrop"), seed.
 
@@ -145,7 +146,7 @@ object OGParticles {
         name = "embers", shape = "circle", maxParticles = 200, burst = 0, emissionRate = 55f,
         lifetimeMs = 1600f, lifetimeJitter = 0.4f, x = 0.5f, y = 0.72f, spawnRadius = 0.25f,
         angleDeg = 270f, spreadDeg = 50f, speed = 0.22f, speedJitter = 0.7f, gravityY = -0.06f,
-        drag = 0.2f, startSize = 0.012f, endSize = 0.003f, sizeJitter = 0.5f,
+        drag = 0.2f, turbulenceStrength = 0.20f, startSize = 0.012f, endSize = 0.003f, sizeJitter = 0.5f,
         startColor = "#FFE082", endColor = "#FF6D00", endAlpha = 0f, seed = 31,
     )
 
@@ -154,8 +155,17 @@ object OGParticles {
         name = "droplets", shape = "teardrop", maxParticles = 160, burst = 0, emissionRate = 40f,
         lifetimeMs = 1400f, lifetimeJitter = 0.3f, x = 0.5f, y = 0.3f, spawnRadius = 0.25f,
         angleDeg = 90f, spreadDeg = 60f, speed = 0.18f, speedJitter = 0.6f, gravityY = 0.5f,
-        drag = 0.1f, startSize = 0.01f, endSize = 0.006f, sizeJitter = 0.4f,
+        drag = 0.1f, turbulenceStrength = 0.15f, startSize = 0.01f, endSize = 0.006f, sizeJitter = 0.4f,
         startColor = "#E1F5FE", endColor = "#4FC3F7", startAlpha = 0.9f, endAlpha = 0f, seed = 41,
+    )
+
+    /** Underwater bubbles rising buoyantly, fading to near-white as they near the surface. */
+    val BUBBLES = OGParticleSpec(
+        name = "bubbles", shape = "circle", maxParticles = 60, burst = 0, emissionRate = 20f,
+        lifetimeMs = 2200f, lifetimeJitter = 0.45f, x = 0.5f, y = 1.05f, spawnRadius = 0.5f,
+        angleDeg = 270f, spreadDeg = 30f, speed = 0.08f, speedJitter = 0.6f, gravityY = -0.05f,
+        startSize = 0.018f, endSize = 0.018f, sizeJitter = 0.65f,
+        startColor = "#B3E5FC", endColor = "#E1F5FE", startAlpha = 0.55f, endAlpha = 0f, seed = 53,
     )
 
     /** Autumn leaves drifting down, turning from green to amber. */
@@ -163,7 +173,7 @@ object OGParticles {
         name = "leaves", shape = "petal", maxParticles = 90, burst = 0, emissionRate = 16f,
         lifetimeMs = 7000f, lifetimeJitter = 0.3f, x = 0.5f, y = -0.1f, spawnRadius = 0.6f,
         angleDeg = 90f, spreadDeg = 50f, speed = 0.09f, speedJitter = 0.7f, gravityY = 0.015f,
-        drag = 0.08f, startSize = 0.024f, endSize = 0.024f, sizeJitter = 0.6f,
+        drag = 0.08f, turbulenceStrength = 0.45f, startSize = 0.024f, endSize = 0.024f, sizeJitter = 0.6f,
         startColor = "#AED581", endColor = "#FBC02D", startAlpha = 0.95f, endAlpha = 0f,
         spinDeg = 150f, spinJitter = 1f, seed = 51,
     )
@@ -171,6 +181,6 @@ object OGParticles {
     /** All built-in presets, keyed by lowercase name. */
     val presets: Map<String, OGParticleSpec> = listOf(
         CONFETTI, SPARKS, SNOW, BLIZZARD, BOKEH, RAIN, FIREWORKS,
-        PETALS, EMBERS, DROPLETS, LEAVES,
+        PETALS, EMBERS, DROPLETS, BUBBLES, LEAVES,
     ).associateBy { it.name!! }
 }

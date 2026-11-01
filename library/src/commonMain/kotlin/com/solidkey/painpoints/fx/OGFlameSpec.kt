@@ -77,13 +77,19 @@ data class OGFlamePoint(val x: Float, val y: Float)
 /**
  * One resolved tongue at a given time: its [spine] centreline from base (`spine.first()`, at `baseY`) up
  * to the flickering tip (`spine.last()`), the [halfWidth] of its base (fraction of the view, taper to 0
- * at the tip) and its peak [alpha]. The view builds a tapered path around the spine and fills it with the
- * hot→cool gradient.
+ * at the tip), its peak [alpha], and its [flickerPulse] — the raw height-flicker multiplier (around `1`)
+ * so the view can pulse the bright inner core in step with the crown. The view builds a tapered path
+ * around the spine and fills it with the hot→cool gradient.
  */
-data class OGFlameTongue(val spine: List<OGFlamePoint>, val halfWidth: Float, val alpha: Float)
+data class OGFlameTongue(
+    val spine: List<OGFlamePoint>,
+    val halfWidth: Float,
+    val alpha: Float,
+    val flickerPulse: Float = 0f,
+)
 
 /** How many points sample each tongue's centreline (base → tip). More = smoother waves, marginally costlier. */
-private const val SPINE_SAMPLES = 9
+private const val SPINE_SAMPLES = 14
 
 /**
  * Resolve [OGFlameSpec.tongues] flame tongues at [timeSec] — pure + deterministic from [OGFlameSpec.seed],
@@ -102,7 +108,11 @@ fun flameTongues(spec: OGFlameSpec, timeSec: Float): List<OGFlameTongue> {
         // Fast height pulsing; fbm is ~[-1,1] so flicker scales the crown up and down.
         val flick = 1f + spec.flicker * OGFxNoise.fbm(timeSec * spec.flickerSpeed + k * 2.3f, 0f, oct, spec.seed + 61)
         val h = (spec.height * hJit * flick).coerceAtLeast(0.01f)
-        val halfWidth = spec.width * 0.5f * (0.7f + 0.6f * OGFxMath.hash01(k * 9 + 2, spec.seed))
+        // Slow per-tongue girth breathing so the body swells and relaxes, not just the crown.
+        val widthBreathe = 1f + 0.18f * OGFxNoise.fbm(
+            timeSec * spec.swaySpeed * 0.5f + k * 5.9f, 0f, 2, spec.seed + 113,
+        )
+        val halfWidth = spec.width * 0.5f * (0.7f + 0.6f * OGFxMath.hash01(k * 9 + 2, spec.seed)) * widthBreathe
         val alpha = (spec.opacity * (0.8f + 0.2f * OGFxMath.hash01(k * 11 + 4, spec.seed))).coerceIn(0f, 1f)
 
         val spine = List(SPINE_SAMPLES + 1) { j ->
@@ -118,6 +128,6 @@ fun flameTongues(spec: OGFlameSpec, timeSec: Float): List<OGFlameTongue> {
             val lean = spec.wind * s * s
             OGFlamePoint(rootX + wave + lean, y)
         }
-        OGFlameTongue(spine, halfWidth, alpha)
+        OGFlameTongue(spine, halfWidth, alpha, flickerPulse = flick)
     }
 }
