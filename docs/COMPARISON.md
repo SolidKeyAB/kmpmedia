@@ -1,6 +1,6 @@
 # KMPMedia vs. the KMP / Compose Multiplatform landscape
 
-*Last verified: **2026-10-11**. Versions checked: Coil **3.6.3**, Kamel **1.0.9**, Landscapist **2.13.2**, Compottie **2.3.3**, Telephoto **0.19.0**, Compose Multiplatform **1.12.1**. This page is re-checked periodically (see [Keeping this current](#keeping-this-current)).*
+*Last verified: **2026-11-01**. Versions checked: Coil **3.6.3**, Kamel **1.0.9**, Landscapist **2.13.2**, Compottie **2.3.3**, Telephoto **0.19.0**, Compose Multiplatform **1.12.2**. This page is re-checked periodically (see [Keeping this current](#keeping-this-current)).*
 
 Showing an SVG or a cached image on both platforms is a solved problem. KMPMedia lives one layer up: it's a **creative media + vector toolkit** — media that moves, responds to touch, composes on a timeline, and changes at runtime. Most of what follows is **complementary** to the loaders, not competing.
 
