@@ -108,4 +108,10 @@ internal fun unitOutline(shape: OGParticleShape): List<Offset>? = when (shape) {
         Offset(0f, -1f), Offset(0.5f, -0.1f), Offset(0.65f, 0.4f), Offset(0.38f, 0.82f),
         Offset(0f, 1f), Offset(-0.38f, 0.82f), Offset(-0.65f, 0.4f), Offset(-0.5f, -0.1f),
     )
+    // Kira-kira diamond sparkle — 4 elongated points at the cardinal directions, very thin.
+    // Models the astroid cusp look (Spencer 1995) as a polygon for GPU compositing.
+    OGParticleShape.SPARKLE -> listOf(
+        Offset(0f, -1f), Offset(0.07f, -0.07f), Offset(1f, 0f), Offset(0.07f, 0.07f),
+        Offset(0f, 1f), Offset(-0.07f, 0.07f), Offset(-1f, 0f), Offset(-0.07f, -0.07f),
+    )
 }

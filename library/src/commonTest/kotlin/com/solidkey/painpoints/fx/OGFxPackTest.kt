@@ -101,6 +101,6 @@ class OGFxPackTest {
     @Test
     fun elementalPresets_arePresent() {
         for (n in listOf("petals", "embers", "droplets", "bubbles", "leaves")) assertNotNull(OGParticles.preset(n))
-        assertEquals(12, OGParticles.presets.size) // 6 original + 5 elemental + BLIZZARD (wind demo)
+        assertEquals(13, OGParticles.presets.size) // 6 original + 5 elemental + BLIZZARD + SPARKLES
     }
 }

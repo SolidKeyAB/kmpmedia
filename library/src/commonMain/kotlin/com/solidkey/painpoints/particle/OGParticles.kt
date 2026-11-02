@@ -178,9 +178,22 @@ object OGParticles {
         spinDeg = 150f, spinJitter = 1f, seed = 51,
     )
 
+    /**
+     * Kira-kira anime sparkles — 4-pointed diamond sparkle bursts (Spencer 1995 astroid).
+     * Classic use: glass/jewel/magical highlight bursts. Spin fast, dissolve quickly.
+     */
+    val SPARKLES = OGParticleSpec(
+        name = "sparkles", shape = "sparkle", maxParticles = 60, burst = 12, emissionRate = 0f,
+        lifetimeMs = 620f, lifetimeJitter = 0.45f, x = 0.5f, y = 0.5f, spawnRadius = 0.08f,
+        angleDeg = 270f, spreadDeg = 360f, speed = 0.22f, speedJitter = 0.75f, gravityY = -0.04f,
+        drag = 0.12f, startSize = 0.040f, endSize = 0.010f, sizeJitter = 0.6f,
+        startColor = "#FFFFFF", endColor = "#FFD700", startAlpha = 1f, endAlpha = 0f,
+        spinDeg = 480f, spinJitter = 1f, seed = 77,
+    )
+
     /** All built-in presets, keyed by lowercase name. */
     val presets: Map<String, OGParticleSpec> = listOf(
         CONFETTI, SPARKS, SNOW, BLIZZARD, BOKEH, RAIN, FIREWORKS,
-        PETALS, EMBERS, DROPLETS, BUBBLES, LEAVES,
+        PETALS, EMBERS, DROPLETS, BUBBLES, LEAVES, SPARKLES,
     ).associateBy { it.name!! }
 }

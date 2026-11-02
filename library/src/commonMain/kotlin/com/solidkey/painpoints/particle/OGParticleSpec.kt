@@ -101,7 +101,7 @@ data class OGParticleSpec(
     val spinDeg: Float = 0f,
     /** Spin spread as a fraction (`0..1`). */
     val spinJitter: Float = 1f,
-    /** Particle shape: `circle` · `square` · `triangle` · `star` · `petal` · `teardrop`. */
+    /** Particle shape: `circle` · `square` · `triangle` · `star` · `petal` · `teardrop` · `sparkle`. */
     val shape: String = "circle",
     /** Seed for the deterministic jitter — change it for a different-but-repeatable burst. */
     val seed: Int = 0,
@@ -111,7 +111,7 @@ data class OGParticleSpec(
 }
 
 /** The particle silhouette, resolved once from [OGParticleSpec.shape]. */
-enum class OGParticleShape { CIRCLE, SQUARE, TRIANGLE, STAR, PETAL, TEARDROP }
+enum class OGParticleShape { CIRCLE, SQUARE, TRIANGLE, STAR, PETAL, TEARDROP, SPARKLE }
 
 /**
  * A live, compiled [OGParticleSpec] — a fixed-capacity particle simulation. Build via
@@ -152,6 +152,7 @@ class OGParticleSystem(private val spec: OGParticleSpec) {
         "star" -> OGParticleShape.STAR
         "petal", "leaf" -> OGParticleShape.PETAL
         "teardrop", "drop", "droplet" -> OGParticleShape.TEARDROP
+        "sparkle", "kira", "diamond" -> OGParticleShape.SPARKLE
         else -> OGParticleShape.CIRCLE
     }
 

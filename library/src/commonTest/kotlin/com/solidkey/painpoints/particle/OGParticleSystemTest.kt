@@ -137,7 +137,7 @@ class OGParticleSystemTest {
         assertNotNull(spec)
         assertEquals(OGParticles.BUBBLES, OGParticles.preset("BUBBLES")) // case-insensitive
         assertTrue(spec.gravityY < 0f, "bubbles are buoyant (negative gravity)")
-        assertEquals(12, OGParticles.presets.size)
+        assertEquals(13, OGParticles.presets.size)
     }
 
     @Test
