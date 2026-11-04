@@ -79,6 +79,31 @@
     #stageWrap{flex:1 1 46vh; min-height:40vh;}
     .side{flex:1 1 auto; border-left:none; border-top:1px solid var(--line); max-height:54vh;}
   }
+  /* ── Stepper ── */
+  .stepper{display:flex;align-items:center;flex-wrap:wrap;row-gap:4px;padding:9px 10px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto;gap:2px;}
+  .step-btn{font:inherit;font-size:11px;font-weight:600;color:var(--dim);background:transparent;
+    border:1.5px solid transparent;border-radius:7px;padding:5px 7px;cursor:pointer;white-space:nowrap;
+    transition:color .15s,border-color .15s,background .15s;flex:0 0 auto;min-height:0;line-height:1.2;}
+  .step-btn:hover:not([disabled]){color:var(--txt);}
+  .step-btn.active{color:var(--accent);border-color:var(--accent);background:#8b7bff18;}
+  .step-btn.done{color:var(--ok);}
+  .step-btn[disabled]{opacity:.3;pointer-events:none;}
+  .step-sep{color:var(--line);font-size:11px;padding:0 1px;flex:0 0 auto;user-select:none;}
+  /* Step panels — only the active one is shown */
+  .sp{display:none;}
+  .sp.sp-on{display:contents;}
+  /* Next button */
+  .nxt-row{padding:10px 12px 12px;border-bottom:1px solid var(--line);}
+  .nxt{font:inherit;font-size:13px;font-weight:700;width:100%;padding:11px 14px;
+    background:var(--accent);border:none;border-radius:9px;color:#120f28;cursor:pointer;}
+  .nxt:active{transform:scale(.98);}
+  /* Collapsible hints */
+  details.ht>summary{font-size:11px;color:var(--accent);cursor:pointer;margin-top:5px;
+    user-select:none;list-style:none;display:flex;align-items:center;gap:4px;}
+  details.ht>summary::before{content:'▸';font-size:10px;transition:transform .15s;}
+  details.ht[open]>summary::before{transform:rotate(90deg);}
+  details.ht .hint{margin:4px 0 0;}
 </style>
 </head>
 <body>
@@ -108,176 +133,254 @@
     </div>
   </div>
 
-  <aside class="side">
-    <!-- Mode -->
-    <div class="group">
-      <h2>What are you making?</h2>
-      <div class="row" id="modeSw">
-        <button class="sm on" data-mode="rig">🧍 Puppet rig</button>
-        <button class="sm" data-mode="face">😀 Face expressions</button>
+  <aside class=”side”>
+
+    <!-- ── Stepper nav ── -->
+    <nav class=”stepper” id=”stepper”>
+      <button class=”step-btn active” data-s=”1”>1 · Load</button>
+      <span class=”step-sep”>›</span>
+      <button class=”step-btn” data-s=”2” disabled>2 · Cut</button>
+      <span class=”step-sep”>›</span>
+      <button class=”step-btn” data-s=”3” disabled>3 · Layers</button>
+      <span class=”step-sep”>›</span>
+      <button class=”step-btn” data-s=”4” disabled>4 · Motion</button>
+      <span class=”step-sep”>›</span>
+      <button class=”step-btn” data-s=”5” disabled>5 · Export</button>
+    </nav>
+
+    <!-- ── Step 1 · Load ── -->
+    <div class=”sp sp-on” id=”sp1”>
+      <div class=”group”>
+        <h2>Open an image to get started</h2>
+        <div class=”row”>
+          <button class=”go” id=”loadBtnSide”>📁 Choose image…</button>
+        </div>
+        <p class=”hint” style=”margin-top:8px;”>Or <b>paste</b> a copied image (⌘V) · <b>drag</b> one onto the canvas · <b>open</b> a saved project below.</p>
+        <div class=”row” style=”margin-top:8px;”>
+          <button class=”sm” id=”openProjSide”>📂 Open saved project</button>
+        </div>
+        <button class=”sm go” id=”resumeBtnSide” style=”display:none; width:100%; margin-top:12px”>↩︎ Resume last cut</button>
+        <details class=”ht” style=”margin-top:14px;”>
+          <summary>What is Layer Cutter?</summary>
+          <p class=”hint”>Cut a character drawing into <b>animated parts</b> (arm, head, leg…) for the KMPMedia puppet rig, or cut face features and pose <b>expressions</b> (happy / sad / angry / shocked). The lib then plays the puppet live in your app.</p>
+        </details>
       </div>
-      <p class="hint"><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut a face's features (brows, eyes, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them. Cut in Puppet-rig mode, then switch here to pose the faces.</p>
     </div>
 
-    <!-- Tools -->
-    <div class="group" id="toolsGroup">
-      <h2>Tool</h2>
-      <div class="row" id="tools">
-        <button data-tool="wand"  class="on">🪄 Wand</button>
-        <button data-tool="brush">🖌 Brush</button>
-        <button data-tool="erase">🧽 Erase</button>
-        <button data-tool="lasso">➰ Lasso</button>
-        <button data-tool="pivot">🎯 Pivot</button>
-        <button data-tool="clone">🩹 Patch base</button>
-      </div>
-      <div id="toolParams">
-        <label class="sld">Brush size <span id="brushVal">120</span>px</label>
-        <input type="range" id="brush" min="3" max="600" value="120">
-        <div id="eraseParams" style="display:none; margin:8px 0;">
-          <label class="sld" style="margin-top:0;">🧽 Erase removes colour to…</label>
-          <div class="row">
-            <button class="sm on" id="eraseTrans" title="Cut the painted area OUT of this layer — it becomes a real transparent gap (what the old Erase did).">⌫ Transparent</button>
-            <button class="sm" id="eraseWhite" title="Paint the painted area WHITE over the colour — the layer keeps its shape, the colour is wiped to white.">▢ White</button>
+    <!-- ── Step 2 · Cut ── -->
+    <div class=”sp” id=”sp2”>
+      <!-- Tools -->
+      <div class=”group” id=”toolsGroup”>
+        <h2>Select a part</h2>
+        <div class=”row” id=”tools”>
+          <button data-tool=”wand” class=”on”>🪄 Wand</button>
+          <button data-tool=”brush”>🖌 Brush</button>
+          <button data-tool=”erase”>🧽 Erase</button>
+          <button data-tool=”lasso”>➰ Lasso</button>
+          <button data-tool=”pivot”>🎯 Pivot</button>
+          <button data-tool=”clone”>🩹 Patch</button>
+        </div>
+        <div id=”toolParams”>
+          <label class=”sld”>Brush size <span id=”brushVal”>120</span>px</label>
+          <input type=”range” id=”brush” min=”3” max=”600” value=”120”>
+          <div id=”eraseParams” style=”display:none; margin:8px 0;”>
+            <label class=”sld” style=”margin-top:0;”>Erase removes colour to…</label>
+            <div class=”row”>
+              <button class=”sm on” id=”eraseTrans”>⌫ Transparent</button>
+              <button class=”sm” id=”eraseWhite”>▢ White</button>
+            </div>
+          </div>
+          <label class=”sld”>Wand tolerance <span id=”tolVal”>40</span></label>
+          <input type=”range” id=”tol” min=”2” max=”120” value=”40”>
+          <div class=”row” id=”wandMode” style=”margin-top:8px;”>
+            <button class=”sm on” data-wm=”add”>✚ Add to selection</button>
+            <button class=”sm” data-wm=”sub”>✖ Remove from</button>
+          </div>
+          <div id=”cloneParams” style=”display:none; margin-top:8px;”>
+            <div class=”row” style=”margin-bottom:6px;”>
+              <button class=”sm go” id=”autoHeal” style=”width:100%;”>✨ Auto-heal (fill the magenta)</button>
+            </div>
+            <div class=”row”>
+              <button class=”sm on” id=”modeBox”>▭ Copy a box</button>
+              <button class=”sm” id=”modeBrush”>🖌 Brush stamp</button>
+              <button class=”sm” id=”modePattern”>🧵 Pattern</button>
+            </div>
+            <div class=”row” id=”boxRow” style=”margin-top:6px;”>
+              <button class=”sm go” id=”boxGrab”>▭ Grab a box</button>
+            </div>
+            <div class=”row” id=”brushRow” style=”margin-top:6px; display:none;”>
+              <button class=”sm go” id=”cloneSample”>🎯 Set source spot</button>
+            </div>
+            <div class=”row” id=”patRow” style=”margin-top:6px; display:none;”>
+              <button class=”sm go” id=”patPick”>⬚ Pick pattern</button>
+              <button class=”sm” id=”patClear”>🧽 Clear area</button>
+            </div>
+            <label class=”sld” style=”margin-top:8px;”>Patch softness <span id=”softVal”>60</span>%</label>
+            <input type=”range” id=”soft” min=”0” max=”100” value=”60”>
+            <label class=”sld”>Infuse (blend) <span id=”infuseVal”>0</span>%</label>
+            <input type=”range” id=”infuse” min=”0” max=”100” value=”0”>
+            <details class=”ht” style=”margin-top:4px;”>
+              <summary>How does Patch work?</summary>
+              <p class=”hint”>Rebuilds texture hidden under a mover. Picking this lifts the movers so the hidden area glows <b>magenta</b> — fill it back in. <b>▭ Copy a box</b>: grab a clean patch of the texture → stamp over the magenta. <b>🧵 Pattern</b>: pick a texture, paint any shape to fill it seamlessly.</p>
+            </details>
           </div>
         </div>
-        <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
-        <input type="range" id="tol" min="2" max="120" value="40">
-        <div class="row" id="wandMode" style="margin-top:8px;">
-          <button class="sm on" data-wm="add">✚ Wand adds</button>
-          <button class="sm" data-wm="sub">✖ Wand removes</button>
+        <details class=”ht”>
+          <summary>Tool guide</summary>
+          <p class=”hint”>🪄 <b>Wand</b>: tap a colour to flood-select it. ✚ Add / ✖ Remove to build up the mask. 🖌 <b>Brush</b>: paint to add. 🧽 <b>Erase</b>: paint to remove. ➰ <b>Lasso</b>: draw a free shape. 🎯 <b>Pivot</b>: tap to place the rotation joint. Two fingers / mouse-wheel = zoom &amp; pan.</p>
+        </details>
+      </div>
+
+      <!-- Clean up -->
+      <div class=”group” id=”cleanupGroup”>
+        <h2>Clean up selection</h2>
+        <div class=”row”>
+          <button class=”sm” id=”knock”>⬜ Knock white</button>
+          <button class=”sm” id=”invert”>↔ Invert</button>
         </div>
-        <div id="cloneParams" style="display:none; margin-top:8px;">
-          <div class="row" style="margin-bottom:6px;">
-            <button class="sm go" id="autoHeal" style="width:100%;" title="One-tap PatchMatch content-aware fill — rebuilds the whole magenta area from the real texture around it. Refine afterwards with the tools below.">✨ Auto-heal (fill the magenta)</button>
-          </div>
-          <div class="row">
-            <button class="sm on" id="modeBox">▭ Copy a box</button>
-            <button class="sm" id="modeBrush">🖌 Brush stamp</button>
-            <button class="sm" id="modePattern">🧵 Pattern fill</button>
-          </div>
-          <div class="row" id="boxRow" style="margin-top:6px;">
-            <button class="sm go" id="boxGrab">▭ Grab a box</button>
-          </div>
-          <div class="row" id="brushRow" style="margin-top:6px; display:none;">
-            <button class="sm go" id="cloneSample">🎯 Set source spot</button>
-          </div>
-          <div class="row" id="patRow" style="margin-top:6px; display:none;">
-            <button class="sm go" id="patPick">⬚ Pick pattern</button>
-            <button class="sm" id="patClear">🧽 Clear area</button>
-          </div>
-          <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
-          <input type="range" id="soft" min="0" max="100" value="60">
-          <label class="sld" style="margin-top:8px;">Infuse (blend into surroundings) <span id="infuseVal">0</span>%</label>
-          <input type="range" id="infuse" min="0" max="100" value="0">
-          <p class="hint"><b>🩹 Patch base</b> rebuilds the coat/belt hidden behind a mover, so when it swings away you see real texture — not a gap. Picking this tool <b>lifts the movers off so the area behind them glows magenta</b> (that's what you're rebuilding; the magenta recedes as you fill it).<br>
-          <b>▭ Copy a box (recommended):</b> tap <b>▭ Grab a box</b>, then <b>drag a rectangle over a clean bit of belt/coat</b> — that whole rectangle (buckle, strap, weave and all) is copied. Then <b>tap or drag over the magenta</b> to stamp that exact patch at each point; a live ghost shows what will land. Overlapping stamps blend via <b>Softness</b>. Tap <b>▭ Grab a box</b> again to copy a different piece. This keeps the real detail — not one averaged tone.<br>
-          <b>🖌 Brush stamp:</b> the older round brush — tap <b>🎯 Set source spot</b> on clean belt, then paint; each dab copies that spot at the brush size (make the brush big).<br>
-          <b>🧵 Pattern fill (for a bending belt/strap):</b> tap <b>⬚ Pick pattern</b> and <b>drag a box over the texture you want</b> (a clean bit of belt). Then <b>paint the area to fill</b> — any flexible shape, e.g. the belt curving behind the arm. Lift your finger and it's filled with that pattern, seamlessly extended (no visible tiling) and feathered into the edges by <b>Softness</b>. Paint more to keep going; <b>🧽 Clear area</b> drops an un-filled painted area.<br>
-          <b>Infuse</b> (default <b>0 = off</b>) optionally tone-matches to the real coat bordering the hole (the lifted arm is excluded). Painting is clipped to the area behind the mover + the figure, onto a non-destructive back-layer <i>under</i> the base. ↩︎ / ⌘Z undoes any patch.</p>
+        <label class=”sld”>White threshold <span id=”bgVal”>235</span></label>
+        <input type=”range” id=”bg” min=”150” max=”254” value=”235”>
+        <div class=”row” style=”margin-top:8px;”>
+          <button class=”sm” id=”grow”>＋ Grow</button>
+          <button class=”sm” id=”shrink”>－ Shrink</button>
+          <button class=”sm” id=”feather”>🌫 Feather</button>
         </div>
-      </div>
-      <p class="hint">Two fingers (or mouse-wheel) to zoom &amp; pan. The coloured overlay shows what's selected. Switch the wand to <b>✖ removes</b> to un-select a wrong flood — or just ↩︎/↪︎ in the top bar (⌘Z / ⇧⌘Z) to undo/redo any step. Pivot = the joint the part rotates around.</p>
-    </div>
-
-    <!-- Selection ops -->
-    <div class="group" id="cleanupGroup">
-      <h2>Clean up the selection</h2>
-      <div class="row">
-        <button class="sm" id="knock">⬜→✂ Knock out white</button>
-        <button class="sm" id="invert">↔ Invert</button>
-      </div>
-      <label class="sld">White threshold <span id="bgVal">235</span> (for knock-out)</label>
-      <input type="range" id="bg" min="150" max="254" value="235">
-      <div class="row" style="margin-top:8px;">
-        <button class="sm" id="grow">＋ Grow</button>
-        <button class="sm" id="shrink">－ Shrink</button>
-        <button class="sm" id="feather">🌫 Feather</button>
-      </div>
-      <div class="row" style="margin-top:6px;">
-        <button class="sm" id="undo">↩︎ Undo</button>
-        <button class="sm" id="redo">↪︎ Redo</button>
-        <button class="sm danger" id="clear">✕ Clear layer</button>
-      </div>
-      <p class="hint">Knock-out white flood-fills the connected white background and keeps everything else — the fast first cut. Then Brush/Erase to fix, Grow to catch the soft pencil edge, Shrink/Feather to tidy.</p>
-    </div>
-
-    <!-- Layers -->
-    <div class="group">
-      <h2>Layers (back → front)</h2>
-      <div id="layerList"></div>
-      <div class="row">
-        <button class="sm" id="addLayer">＋ Add part layer</button>
-        <button class="sm go" id="preview">▶ Preview motion</button>
-      </div>
-      <label class="pill" id="skinFillPill" title="When a part is cut out of the head/body, fill the empty hole it leaves with the surrounding skin colour — so when the mouth/eye moves for an expression you see skin underneath, not a transparent gap"><input type="checkbox" id="skinFill" checked> 🩹 fill cut-out holes with skin</label>
-      <p class="hint"><b>base</b> = the body, stays still &amp; joined. <b>mover</b> = a limb you'll animate — cut it OFF the body itself (not a separate study, or it won't line up), tick “cut out” so its shape is lifted off whatever it sits on (the base, or the layer it <b>Swings with</b>), and pin its 🎯 joint (shoulder/hip/neck). Use <b>▲▼</b> on a row to order front/back. Then <b>▶ Preview motion</b> to watch the whole figure assemble + swing.</p>
-    </div>
-
-    <!-- Motion -->
-    <div class="group" id="motionGroup">
-      <h2>Motion (selected mover)</h2>
-      <div id="motion"></div>
-      <p class="hint"><b>Angle</b> = how far it swings, <b>Speed</b> = how fast. <b>Tuck to body</b> nudges the part a few px toward the torso so the empty cut area (e.g. behind the right hand) stays hidden. Changes show live in ▶ Preview.</p>
-    </div>
-
-    <!-- Face expressions -->
-    <div class="group" id="faceGroup" style="display:none">
-      <h2>Expressions</h2>
-      <div class="row" id="exprChips"></div>
-      <div class="row" id="facsRow" style="margin-top:6px; align-items:center; gap:8px;">
-        <button class="sm go" id="facsAuto" title="Auto-pose the whole face for this expression using FACS action units — a believable starting face you then tweak">✨ FACS auto-pose</button>
-        <span style="font-size:11px;color:var(--dim)">whole face, one tap · MLS-rigid mouth curl</span>
-      </div>
-      <div id="exprPose"></div>
-      <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
-        <span style="font-size:11px;color:var(--dim)">Edit:</span>
-        <button class="sm on" data-edit="box">▦ Box (whole part)</button>
-        <button class="sm" data-edit="warp">🫠 Warp an area</button>
-        <button class="sm" data-edit="lips">👄 Lip line</button>
-      </div>
-      <div id="lipTools" style="display:none; margin-top:6px;">
-        <div class="row" style="align-items:center; gap:8px;">
-          <span style="font-size:11px;color:var(--dim)"><b>Pick an expression, then draw its mouth</b> — tap left→right along the lip you want (green).</span>
-          <button class="mini" id="lipUndo" title="remove the last lip point" style="margin-left:auto">⌫ point</button>
-          <button class="mini" id="lipClear" title="remove this expression's lip line">⟲ clear</button>
+        <div class=”row” style=”margin-top:6px;”>
+          <button class=”sm” id=”undo”>↩︎ Undo</button>
+          <button class=”sm” id=”redo”>↪︎ Redo</button>
+          <button class=”sm danger” id=”clear”>✕ Clear</button>
         </div>
-        <p class="hint" style="margin-top:4px"><b>Draw each expression's mouth directly:</b> tap 🙂 <b>Happy</b> → draw the smile; tap ☹️ <b>Sad</b> → draw the frown; etc. The mouth warps to the line you draw, live. <b>Neutral</b> = trace where the mouth rests (the source the others bend from) — optional; if you skip it a straight baseline is used. 3–6 points. Needs the mouth named <b>mouth / lip / dudak</b>. (The ✨ FACS auto-pose button still auto-shapes any expression you'd rather not draw by hand.)</p>
+        <details class=”ht”>
+          <summary>Tips</summary>
+          <p class=”hint”><b>Knock white</b> removes a white background in one tap — fastest first cut. Then <b>Grow</b> to catch soft pencil edges, <b>Shrink</b>/<b>Feather</b> to remove halos. ↩︎/↪︎ or ⌘Z/⇧⌘Z to undo/redo.</p>
+        </details>
       </div>
-      <div id="warpTools" style="display:none; margin-top:6px;">
-        <div class="row" style="align-items:center; gap:8px;">
-          <span style="font-size:11px;color:var(--dim)">Tool:</span>
-          <button class="sm on" data-warptool="region">⭕ Region</button>
-          <button class="sm" data-warptool="point">📍 Point</button>
-          <button class="mini" id="warpClear" title="remove all warp on this feature" style="margin-left:auto">⟲ clear</button>
-        </div>
-        <div id="warpPanel"></div>
+
+      <div class=”nxt-row”>
+        <button class=”nxt” id=”toStep3”>3 · Layers &amp; Parts →</button>
       </div>
-      <div class="row" style="margin-top:8px;">
-        <button class="sm go" id="previewExpr">▶ Preview expressions</button>
-        <button class="sm" id="exportFaceFrames" title="Bake each expression's posed head into a transparent PNG (neutral + happy/sad/angry/shocked), same framing as superx_head.png — drop straight into the WordStorm SUPER X watcher">📸 Export face frames</button>
-      </div>
-      <p class="hint">Pick an expression, then tap <b>✨ FACS auto-pose</b> for a believable whole-face start (needs features named brow / eye / mouth), and tweak from there. Or pose by hand: <b>▦ Box</b> moves / rotates / stretches the <b>whole</b> part. <b>🫠 Warp an area</b>: <b>⭕ Region</b> = drag a circle over an area (the eye) then <b>Zoom / Rotate</b> just that area with a soft edge; <b>📍 Point</b> = tap to drop a point and drag to pull it. <b>Neutral</b> is the resting face. <b>↩︎ undo</b> / ⌘Z covers all of these. ▶ Preview morphs through them. Tip: tick <b>cut out</b> (on the feature's row) so it's lifted off the head — its old spot won't ghost when it moves.</p>
     </div>
 
-    <!-- Export -->
-    <div class="group">
-      <h2>Export</h2>
-      <div class="row" style="align-items:center; gap:6px;">
-        <label style="font-size:12px;color:var(--dim)">Name</label>
-        <input id="charName" type="text" placeholder="character" style="flex:1; min-width:0; padding:5px 7px; font-size:12px;">
+    <!-- ── Step 3 · Layers ── -->
+    <div class=”sp” id=”sp3”>
+      <div class=”group”>
+        <h2>What are you making?</h2>
+        <div class=”row” id=”modeSw”>
+          <button class=”sm on” data-mode=”rig”>🧍 Puppet rig</button>
+          <button class=”sm” data-mode=”face”>😀 Face expressions</button>
+        </div>
+        <details class=”ht”>
+          <summary>Which should I pick?</summary>
+          <p class=”hint”><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut face features (brow, eye, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them.</p>
+        </details>
       </div>
-      <p class="hint" style="margin-top:2px">Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;_face_frames.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
-      <div class="row">
-        <button class="go" id="toApp">📡 Send to app</button>
+
+      <div class=”group” id=”layersGroup”>
+        <h2>Layers (back → front)</h2>
+        <div id=”layerList”></div>
+        <div class=”row”>
+          <button class=”sm” id=”addLayer”>＋ Add part</button>
+          <button class=”sm go” id=”preview”>▶ Preview</button>
+        </div>
+        <label class=”pill” id=”skinFillPill” title=”Fill cut-out holes with the surrounding skin colour”><input type=”checkbox” id=”skinFill” checked> 🩹 fill holes with skin</label>
+        <details class=”ht”>
+          <summary>How to set up parts</summary>
+          <p class=”hint”><b>base</b> = the body, stays still. <b>mover</b> = a limb to animate — cut it off the body, tick <b>cut out</b>, place its 🎯 pivot (shoulder/hip/neck). Use ▲▼ to order front/back. Then ▶ Preview to see it swing.</p>
+        </details>
       </div>
-      <div class="row" style="margin-top:6px;">
-        <button class="sm" id="export">⬇ Export .zip</button>
-        <button class="sm" id="previewBtn">👁 Preview</button>
-        <button class="sm" id="showJson">{ } rig JSON</button>
+
+      <div class=”nxt-row”>
+        <button class=”nxt” id=”toStep4”>4 · Motion &amp; Expressions →</button>
       </div>
-      <textarea id="json" style="display:none" readonly></textarea>
-      <p class="hint"><b>Send to app</b> hands the layers + rig straight to the host app (it bakes the moving puppet, no files to pass around). <b>Export .zip</b> is the manual route: one transparent PNG per layer, the base with mover-holes punched, and <code>rig.json</code>.</p>
     </div>
+
+    <!-- ── Step 4 · Motion / Expressions ── -->
+    <div class=”sp” id=”sp4”>
+      <!-- Rig motion -->
+      <div class=”group” id=”motionGroup”>
+        <h2>Motion (selected mover)</h2>
+        <div id=”motion”></div>
+        <details class=”ht”>
+          <summary>Tips</summary>
+          <p class=”hint”><b>Angle</b> = how far it swings. <b>Speed</b> = how fast. <b>Tuck</b> nudges the part toward the body so the cut gap stays hidden. All changes show live in ▶ Preview.</p>
+        </details>
+      </div>
+
+      <!-- Face expressions -->
+      <div class=”group” id=”faceGroup” style=”display:none”>
+        <h2>Expressions</h2>
+        <div class=”row” id=”exprChips”></div>
+        <div class=”row” id=”facsRow” style=”margin-top:6px; align-items:center; gap:8px;”>
+          <button class=”sm go” id=”facsAuto”>✨ FACS auto-pose</button>
+          <span style=”font-size:11px;color:var(--dim)”>whole face, one tap</span>
+        </div>
+        <div id=”exprPose”></div>
+        <div class=”row” id=”warpRow” style=”margin-top:8px; align-items:center; gap:8px;”>
+          <span style=”font-size:11px;color:var(--dim)”>Edit:</span>
+          <button class=”sm on” data-edit=”box”>▦ Box</button>
+          <button class=”sm” data-edit=”warp”>🫠 Warp</button>
+          <button class=”sm” data-edit=”lips”>👄 Lip line</button>
+        </div>
+        <div id=”lipTools” style=”display:none; margin-top:6px;”>
+          <div class=”row” style=”align-items:center; gap:8px;”>
+            <span style=”font-size:11px;color:var(--dim)”><b>Pick an expression, draw its mouth</b> — tap left→right along the lip.</span>
+            <button class=”mini” id=”lipUndo” style=”margin-left:auto”>⌫ point</button>
+            <button class=”mini” id=”lipClear”>⟲ clear</button>
+          </div>
+          <details class=”ht” style=”margin-top:4px;”>
+            <summary>Lip line guide</summary>
+            <p class=”hint”>Tap 🙂 Happy → draw the smile; tap ☹️ Sad → draw the frown. Neutral = trace the resting mouth (optional baseline). 3–6 points. Layer must be named <b>mouth / lip / dudak</b>.</p>
+          </details>
+        </div>
+        <div id=”warpTools” style=”display:none; margin-top:6px;”>
+          <div class=”row” style=”align-items:center; gap:8px;”>
+            <span style=”font-size:11px;color:var(--dim)”>Warp tool:</span>
+            <button class=”sm on” data-warptool=”region”>⭕ Region</button>
+            <button class=”sm” data-warptool=”point”>📍 Point</button>
+            <button class=”mini” id=”warpClear” style=”margin-left:auto”>⟲ clear</button>
+          </div>
+          <div id=”warpPanel”></div>
+        </div>
+        <div class=”row” style=”margin-top:8px;”>
+          <button class=”sm go” id=”previewExpr”>▶ Preview</button>
+          <button class=”sm” id=”exportFaceFrames”>📸 Face frames</button>
+        </div>
+        <details class=”ht”>
+          <summary>Posing guide</summary>
+          <p class=”hint”>Pick an expression → tap ✨ <b>FACS auto-pose</b> for a full-face starting point (needs layers named brow / eye / mouth). Then tweak: <b>▦ Box</b> = move / rotate / stretch the whole feature. <b>🫠 Warp</b>: ⭕ Region = drag a circle then zoom/rotate that area; 📍 Point = pull a spot. ↩︎ undoes any step.</p>
+        </details>
+      </div>
+
+      <div class=”nxt-row”>
+        <button class=”nxt” id=”toStep5”>5 · Export →</button>
+      </div>
+    </div>
+
+    <!-- ── Step 5 · Export ── -->
+    <div class=”sp” id=”sp5”>
+      <div class=”group” id=”exportGroup”>
+        <h2>Export</h2>
+        <div class=”row” style=”align-items:center; gap:6px;”>
+          <label style=”font-size:12px;color:var(--dim)”>Character name</label>
+          <input id=”charName” type=”text” placeholder=”character” style=”flex:1; min-width:0; padding:5px 7px; font-size:12px;”>
+        </div>
+        <p class=”hint” style=”margin-top:2px”>Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
+        <div class=”row” style=”margin-top:8px;”>
+          <button class=”go” id=”toApp”>📡 Send to app</button>
+        </div>
+        <div class=”row” style=”margin-top:6px;”>
+          <button class=”sm” id=”export”>⬇ Export .zip</button>
+          <button class=”sm” id=”previewBtn”>👁 Preview</button>
+          <button class=”sm” id=”showJson”>{ } JSON</button>
+        </div>
+        <textarea id=”json” style=”display:none” readonly></textarea>
+        <details class=”ht”>
+          <summary>What does each button do?</summary>
+          <p class=”hint”><b>Send to app</b>: hands layers + rig to the host app directly (no files). <b>Export .zip</b>: one transparent PNG per layer + <code>rig.json</code>. <b>JSON</b>: view the raw rig data.</p>
+        </details>
+      </div>
+    </div>
+
   </aside>
 </div>
 
@@ -619,6 +722,9 @@ document.getElementById('projFile').onchange=e=>openProjectFile(e.target.files[0
 const resumeBtn=document.getElementById('resumeBtn');
 if(resumeBtn && hasAutosave()){ resumeBtn.style.display='inline-block';
   resumeBtn.onclick=(e)=>{ e.stopPropagation(); resumeAutosave(); }; }
+const resumeBtnSide=document.getElementById('resumeBtnSide');
+if(resumeBtnSide && hasAutosave()){ resumeBtnSide.style.display='inline-block';
+  resumeBtnSide.onclick=()=>resumeAutosave(); }
 
 /* ---------- view ---------- */
 function resizeCanvas(){ const dpr=window.devicePixelRatio||1; const r=stageWrap.getBoundingClientRect();
@@ -2193,7 +2299,8 @@ function applyMode(){
   const face=S.mode==='face';
   document.querySelectorAll('#modeSw button').forEach(b=>b.classList.toggle('on', b.dataset.mode===S.mode));
   const show=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display=on?'':'none'; };
-  show('toolsGroup', !face); show('cleanupGroup', !face); show('motionGroup', !face); show('faceGroup', face);
+  // toolsGroup/cleanupGroup live in sp2 (always shown there); only control motion vs face panels
+  show('motionGroup', !face); show('faceGroup', face);
   if(S.preview) setPreview(false);
   if(!face && S.exprPreview) setExprPreview(false);
   S.layers.forEach(l=>{ l._cut=null; l._ctr=null; l._box=null; l._rest=null; });   // rebuild cut images / centres / boxes / warp grids for the new view
@@ -2364,6 +2471,54 @@ document.getElementById('warpClear').onclick=()=>{ const l=activeLayer();
   if(l && l.poses && l.poses[S.expr] && l.poses[S.expr].warp && l.poses[S.expr].warp.length){
     pushPoseUndo(l,S.expr); delete l.poses[S.expr].warp; S.warpSel=null; renderWarpPanel(); draw(); toast('Warp cleared on this feature'); }
   else toast('No warp on this feature'); };
+
+/* ---------- step system ---------- */
+let _currentStep = 1;
+function goStep(n){
+  if(n<1||n>5) return;
+  if(n>1 && !S.img){ toast('Load an image first — step 1'); return; }
+  _currentStep=n;
+  document.querySelectorAll('.sp').forEach(sp=>{ sp.classList.remove('sp-on'); sp.style.display='none'; });
+  const sp=document.getElementById('sp'+n);
+  if(sp){ sp.style.display=''; sp.classList.add('sp-on'); }
+  document.querySelectorAll('.step-btn').forEach(b=>{
+    const s=+b.dataset.s;
+    b.classList.toggle('active', s===n);
+    b.classList.toggle('done', s<n);
+    // unlock all visited steps plus the next one
+    b.disabled = (s>1 && !S.img) || (s>n+1);
+  });
+  const side=document.querySelector('.side'); if(side) side.scrollTop=0;
+  // keep applyMode in sync (it manages motionGroup vs faceGroup inside sp4)
+  if(n===4) applyMode();
+}
+// Wire Next buttons
+document.getElementById('toStep3').onclick=()=>goStep(3);
+document.getElementById('toStep4').onclick=()=>goStep(4);
+document.getElementById('toStep5').onclick=()=>goStep(5);
+// Wire step chips
+document.querySelectorAll('.step-btn').forEach(b=>b.onclick=()=>goStep(+b.dataset.s));
+// Wire Load/Open buttons in sp1 to the header buttons
+document.getElementById('loadBtnSide').onclick=()=>document.getElementById('loadBtn').click();
+document.getElementById('openProjSide').onclick=()=>document.getElementById('openProj').click();
+// Auto-advance to step 2 when image loads (patch loadImage and restoreProject finish hooks)
+(function(){
+  const origLoad=loadImage;
+  window.loadImage=function(src){
+    const prevImg=S.img;
+    origLoad(src);
+    const t=setInterval(()=>{ if(S.img && S.img!==prevImg){ clearInterval(t); goStep(2); }},60);
+  };
+})();
+// Also hook restoreProject finish — it calls applyMode() after loading; we patch that
+(function(){
+  const origAM=applyMode;
+  applyMode=function(){
+    origAM();
+    // if a project was just restored, advance step
+    if(S.img && _currentStep===1) goStep(2);
+  };
+})();
 
 /* ---------- boot ---------- */
 window.addEventListener('resize', resizeCanvas);
