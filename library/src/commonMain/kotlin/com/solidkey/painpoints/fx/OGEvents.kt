@@ -624,25 +624,22 @@ object OGEvents {
                 startSize = 0.007f, endSize = 0.003f, sizeJitter = 0.5f, seed = seed + 41,
             )
         }
-        val burnSparks = remember(seed, cx, cy) {
-            OGParticles.SPARKS.copy(
-                shape = "star",
-                burst = 0, emissionRate = 95f, maxParticles = 70,
-                x = cx, y = cy, spawnRadius = 0.012f,
-                angleDeg = 270f, spreadDeg = 75f,
-                speed = 0.48f, speedJitter = 0.65f, gravityY = -0.06f, drag = 0.18f,
-                lifetimeMs = 680f,
-                startSize = 0.009f, endSize = 0.002f, sizeJitter = 0.5f,
-                spinDeg = 240f, spinJitter = 1f,
-                startColor = "#FFE033", endColor = "#FF4400", endAlpha = 0f, seed = seed + 7,
-            )
-        }
         val burnFlame = remember(seed) {
-            OGFlame.CAMPFIRE.copy(
-                coreColor = "#FFD24D", tipColor = "#FF3B10",
-                tongues = 9, height = 0.68f, heightJitter = 0.55f, width = 0.22f,
-                sway = 0.08f, swaySpeed = 1.3f, flicker = 0.40f, flickerSpeed = 2.8f,
-                opacity = 0.90f, seed = seed + 13,
+            OGFlameSpec(
+                name = "tile_fire",
+                coreColor = "#FFD24D",
+                tipColor = "#FF3B10",
+                tongues = 1,
+                height = 0.72f,
+                heightJitter = 0.15f,
+                width = 0.44f,
+                sway = 0.07f,
+                swaySpeed = 1.2f,
+                flicker = 0.35f,
+                flickerSpeed = 2.5f,
+                octaves = 3,
+                opacity = 0.95f,
+                seed = seed + 13,
             )
         }
         val afterBolt = remember(seed, cx, cy) {
@@ -820,19 +817,7 @@ object OGEvents {
                             cornerRadius = CornerRadius(8f),
                             style = Stroke(width = 3.5f),
                         )
-                        // Searing heat fractures across the tile face
-                        if (scorchAlpha > 0.05f) {
-                            val crackRng = Random(seed + 53)
-                            val crackPath = Path().apply {
-                                moveTo(tLeft + tW * 0.15f, tTop + tH * 0.20f)
-                                lineTo(tLeft + tW * 0.48f, tTop + tH * 0.52f)
-                                lineTo(tLeft + tW * 0.82f, tTop + tH * 0.78f)
-                                moveTo(tLeft + tW * 0.48f, tTop + tH * 0.52f)
-                                lineTo(tLeft + tW * 0.75f, tTop + tH * 0.25f)
-                            }
-                            drawPath(crackPath, color = Color(0xFFFF3D00).copy(alpha = scorchAlpha * 0.85f), style = Stroke(width = 2.5f))
-                            drawPath(crackPath, color = Color(0xFFFFEA00).copy(alpha = scorchAlpha * 0.95f), style = Stroke(width = 1.0f))
-                        }
+
 
                         // Blinding white-hot flash over the tile immediately upon strike
                         val whiteFlashAlpha = (1f - nfSmooth(tImpact, tImpact + 0.08f, p)).coerceIn(0f, 1f)
@@ -885,19 +870,18 @@ object OGEvents {
                 }
             }
 
-            // BURN: afterimage ghost bolt & star fire sparks
+            // BURN: afterimage ghost bolt
             OGLightningView(afterBolt, Modifier.fillMaxSize(), playing = afterBoltPlaying)
-            OGParticleView(burnSparks, Modifier.fillMaxSize(), playing = burning)
 
-            // BURN: campfire flame at the struck tile — real fire tongues instead of circles
+            // BURN: single flame tongue at the struck tile
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val tW = maxWidth * tileWidth
                 val tH = maxHeight * tileHeight
-                val flameW = tW * 2.8f
-                val flameH = tH * 2.6f
+                val flameW = tW * 1.5f
+                val flameH = tH * 2.2f
                 Box(
                     Modifier
-                        .offset(x = maxWidth * cx - flameW / 2f, y = maxHeight * cy + tH * 0.5f - flameH)
+                        .offset(x = maxWidth * cx - flameW / 2f, y = maxHeight * cy + tH * 0.45f - flameH)
                         .width(flameW).height(flameH)
                         .graphicsLayer { alpha = nfSmooth(tBurn, tBurn + 0.08f, p) * (1f - nfSmooth(0.80f, 0.95f, p)) },
                 ) {
@@ -1328,11 +1312,13 @@ object OGEvents {
         onDone: (() -> Unit)? = null,
     ) {
         val progress = remember(seed) { Animatable(0f) }
-        val tileSwept = remember(seed) { Animatable(0f) }
         var sprayPlaying by remember(seed) { mutableStateOf(false) }
 
         val cx = targetX
         val cy = targetY
+
+        val tileHitSweep = ((cx - tileWidth * 0.5f + 0.15f) / 1.50f).coerceIn(0.05f, 0.85f)
+        val pHit = 0.08f + tileHitSweep * (0.82f - 0.08f)
 
         val waterMist = remember(seed) {
             OGFog.MIST.copy(
@@ -1393,7 +1379,8 @@ object OGEvents {
         }
         LaunchedEffect(seed, playing) {
             if (!playing) return@LaunchedEffect
-            delay(460L)
+            val hitMs = (pHit * durationMs).toLong().coerceAtLeast(200L)
+            delay(hitMs)
             var nowMs = 0L; withFrameMillis { nowMs = it }
             rippleState.spawn(cx, cy, nowMs)
             rippleState.spawn(cx - 0.12f, cy + 0.08f, nowMs)
@@ -1405,19 +1392,11 @@ object OGEvents {
         }
         LaunchedEffect(seed, playing) {
             if (!playing) return@LaunchedEffect
-            val hitFrac = (cx * 0.35f + cy * 0.35f).coerceIn(0.08f, 0.50f)
-            val hitMs = (hitFrac * durationMs).toLong().coerceAtLeast(300L)
-            delay(hitMs)
-            tileSwept.animateTo(1f, tween(1350, easing = LinearEasing))
-        }
-        LaunchedEffect(seed, playing) {
-            if (!playing) return@LaunchedEffect
             progress.animateTo(1f, tween(durationMs.toInt(), easing = LinearEasing))
             onDone?.invoke()
         }
 
         val p = progress.value
-        val swept = tileSwept.value
 
         // Tidal surge heave (camera undulates gently with the rising flood mass)
         val heaveY = sin(p * 5f * PI.toFloat()) * 9f * nfSmooth(0.08f, 0.40f, p) * (1f - nfSmooth(0.82f, 1f, p))
@@ -1554,132 +1533,13 @@ object OGEvents {
                     }
                 }
 
-                // 2. Charybdis Maelstrom Whirlpool (Centered directly over the targeted tile)
-                val tW = tileWidth * w
-                val tH = tileHeight * h
-                // Vortex opens only once the flood wave front actually reaches this tile — not before
-                val tileHitSweep = ((cx - tileWidth * 0.5f + 0.15f) / 1.50f).coerceIn(0.05f, 0.85f)
-                val vortexOpen = nfSmooth(tileHitSweep, tileHitSweep + 0.14f, floodSweep)
-                val vortexClose = nfSmooth(0.86f, 0.96f, p)
-                val vortexP = vortexOpen * (1f - vortexClose)
-                if (vortexP > 0.01f) {
-                    val vCenterX = cx * w
-                    val vCenterY = cy * h
-                    val vRadiusX = tW * 2.8f * vortexP
-                    val vRadiusY = tH * 2.0f * vortexP
-
-                    // A. Deep Oceanic Watery Abyss Depression Funnel
-                    drawOval(
-                        color = Color(0x660277BD),
-                        topLeft = Offset(vCenterX - vRadiusX, vCenterY - vRadiusY),
-                        size = Size(vRadiusX * 2f, vRadiusY * 2f),
+                // Expanding water splash shockwave ring on surge impact
+                val surgeP = nfSmooth(pHit, pHit + 0.28f, p)
+                if (p >= pHit && surgeP < 0.98f) {
+                    drawOGShockwaveFrame(
+                        OGShockwave.SPLASH.copy(color = "#4FC3F7", maxRadius = 0.65f, ringWidth = 0.024f, squash = 0.58f, alpha = 0.80f),
+                        cx, cy, surgeP,
                     )
-                    drawOval(
-                        color = Color(0xCC01579B),
-                        topLeft = Offset(vCenterX - vRadiusX * 0.65f, vCenterY - vRadiusY * 0.65f),
-                        size = Size(vRadiusX * 1.3f, vRadiusY * 1.3f),
-                    )
-                    drawOval(
-                        color = Color(0xFF03101C), // Deep abyssal trench eye
-                        topLeft = Offset(vCenterX - vRadiusX * 0.35f, vCenterY - vRadiusY * 0.35f),
-                        size = Size(vRadiusX * 0.70f, vRadiusY * 0.70f),
-                    )
-
-                    // B. 4 Rapidly Rotating Logarithmic Spiral Arms of Frothing Seafoam
-                    val spiralArms = 4
-                    val armSpin = p * 16f
-                    for (arm in 0 until spiralArms) {
-                        val baseTheta = arm * (2f * PI.toFloat() / spiralArms) + armSpin
-                        val armPath = Path()
-                        val armSteps = 16
-                        for (s in 0..armSteps) {
-                            val frac = s.toFloat() / armSteps
-                            val rFrac = 0.20f + 0.80f * frac
-                            val theta = baseTheta + frac * 2.8f
-                            val sx = vCenterX + cos(theta) * (vRadiusX * rFrac)
-                            val sy = vCenterY + sin(theta) * (vRadiusY * rFrac)
-                            if (s == 0) armPath.moveTo(sx, sy) else armPath.lineTo(sx, sy)
-                        }
-                        // Frothing seafoam spiral arm
-                        drawPath(
-                            armPath,
-                            color = Color(0x8080D8FF).copy(alpha = vortexP * 0.75f),
-                            style = Stroke(width = 6f, cap = StrokeCap.Round),
-                        )
-                        drawPath(
-                            armPath,
-                            color = Color.White.copy(alpha = vortexP * 0.90f),
-                            style = Stroke(width = 2.5f, cap = StrokeCap.Round),
-                        )
-                    }
-
-                    // C. Churning Whitewater Foam Discs around the vortex rim
-                    val foamCount = 14
-                    for (f in 0 until foamCount) {
-                        val fAngle = f * (2f * PI.toFloat() / foamCount) + armSpin * 0.8f
-                        val fDistX = cos(fAngle) * (vRadiusX * 0.85f)
-                        val fDistY = sin(fAngle) * (vRadiusY * 0.85f)
-                        drawCircle(
-                            color = Color.White.copy(alpha = vortexP * 0.80f),
-                            radius = 4f + 3f * OGFxMath.hash01(f, seed + 17),
-                            center = Offset(vCenterX + fDistX, vCenterY + fDistY),
-                        )
-                    }
-                }
-
-                // E. Expanding water shockwave ring on surge impact
-                val surgeP = nfSmooth(0.12f, 0.42f, p)
-                drawOGShockwaveFrame(
-                    OGShockwave.SPLASH.copy(color = "#4FC3F7", maxRadius = 0.65f, ringWidth = 0.024f, squash = 0.58f, alpha = 0.80f),
-                    cx, cy, surgeP,
-                )
-
-                // 3. Tile Swept & Swallowed into the Charybdis Whirlpool
-                val tileDropP = nfSmooth(0.24f, 0.84f, p)
-                if (tileDropP > 0f) {
-                    val spiralAng = tileDropP * 14f
-                    val spiralDist = (1f - tileDropP) * (tW * 1.5f)
-                    val tilePosX = (cx * w) + cos(spiralAng) * spiralDist
-                    val tilePosY = (cy * h) + sin(spiralAng) * spiralDist * 0.65f + tileDropP * (tH * 1.4f)
-                    val tileScale = (1f - tileDropP * 0.88f).coerceAtLeast(0f)
-                    val tileAlpha = (1f - nfSmooth(0.70f, 1f, tileDropP)).coerceIn(0f, 1f)
-                    val drawnW = tW * tileScale
-                    val drawnH = tH * tileScale
-
-                    if (drawnW > 1f) {
-                        withTransform({
-                            rotate(degrees = spiralAng * 38f, pivot = Offset(tilePosX, tilePosY))
-                        }) {
-                            // Water wake / shadow
-                            drawRoundRect(
-                                color = Color(0xFF01579B).copy(alpha = tileAlpha * 0.50f),
-                                topLeft = Offset(tilePosX - drawnW / 2f + 4f, tilePosY - drawnH / 2f + 6f),
-                                size = Size(drawnW, drawnH),
-                                cornerRadius = CornerRadius(8f * tileScale),
-                            )
-                            // Tile body
-                            drawRoundRect(
-                                color = Color(0xFFFAF7F0).copy(alpha = tileAlpha),
-                                topLeft = Offset(tilePosX - drawnW / 2f, tilePosY - drawnH / 2f),
-                                size = Size(drawnW, drawnH),
-                                cornerRadius = CornerRadius(8f * tileScale),
-                            )
-                            // Translucent sea glaze
-                            drawRoundRect(
-                                color = Color(0xFF00B0FF).copy(alpha = tileAlpha * 0.55f),
-                                topLeft = Offset(tilePosX - drawnW / 2f, tilePosY - drawnH / 2f),
-                                size = Size(drawnW, drawnH),
-                                cornerRadius = CornerRadius(8f * tileScale),
-                            )
-                            // Frothing seafoam spilling over tile edge
-                            drawRoundRect(
-                                color = Color.White.copy(alpha = tileAlpha * 0.85f),
-                                topLeft = Offset(tilePosX - drawnW / 2f, tilePosY - drawnH / 2f),
-                                size = Size(drawnW, drawnH * 0.40f),
-                                cornerRadius = CornerRadius(8f * tileScale),
-                            )
-                        }
-                    }
                 }
             }
 
