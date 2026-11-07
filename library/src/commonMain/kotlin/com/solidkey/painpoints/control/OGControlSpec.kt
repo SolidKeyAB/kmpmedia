@@ -29,9 +29,15 @@ data class OGControlSpec(
     val cornerRadius: Float = 11f,
     /** Control height in `dp` (width comes from the modifier the caller passes). */
     val height: Float = 46f,
+    /** 3D extrusion bottom lip depth in `dp`. `0` = flat button, `3..6` = juicy 3D game button. */
+    val depth: Float = 0f,
+    /** Optional color for the 3D bottom lip (`#RRGGBB`); null = auto-derived darker tone. */
+    val lipColor: String? = null,
+    /** When `true`, renders a glossy top-edge highlight chamfer. */
+    val highlight: Boolean = false,
     /** Label size in `sp`. */
     val fontSize: Float = 13f,
-    /** Pressed-state feedback: `scale` | `dim` | `brutalist` | `none` (case-insensitive). */
+    /** Pressed-state feedback: `tactile` | `scale` | `dim` | `brutalist` | `none`. */
     val pressEffect: String = "scale",
     /** Opacity of the whole fill when `enabled == false` (the label dims to half separately). */
     val disabledAlpha: Float = 0.4f,

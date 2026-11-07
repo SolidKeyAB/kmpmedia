@@ -66,12 +66,18 @@ class OGControlTest {
         assertNotEquals(null, OGControls.preset("slime")!!.garnish)
         assertNull(OGControls.presets["plain"]!!.outline)
         assertEquals("top", OGControls.garnish("snow")!!.edge)
+        // Game presets
+        assertEquals(4.5f, OGControls.preset("game")!!.depth)
+        assertEquals("tactile", OGControls.preset("game")!!.pressEffect)
+        assertTrue(OGControls.preset("game-hero")!!.highlight)
+        assertEquals(24f, OGControls.preset("game-pill")!!.cornerRadius)
     }
 
     // ── press-effect mapping ─────────────────────────────────────────────────────────────────
 
     @Test
     fun pressEffect_mapsByName() {
+        assertTrue(ogControlPressEffect("tactile") is OGPressEffect.Tactile)
         assertTrue(ogControlPressEffect("scale") is OGPressEffect.Scale)
         assertTrue(ogControlPressEffect("DIM") is OGPressEffect.Dim)
         assertTrue(ogControlPressEffect(" brutalist ") is OGPressEffect.Brutalist)

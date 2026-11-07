@@ -56,6 +56,21 @@ public class OGOfflineStageAuthor(
     public fun direct(instruction: String): OGStage {
         val text = instruction.lowercase()
         val seed = (instruction.hashCode() and 0x7fffffff)
+
+        // When the ask is a pure natural disaster event without an explicit character subject,
+        // yield the full cinematic multi-layer event stage.
+        if (subjectLayer(text) == null) {
+            if (text.hasAny("earthquake", "quake", "tremor", "seismic")) {
+                return com.solidkey.painpoints.fx.OGEvents.earthquakeStage(width, height, durationMs, fps)
+            }
+            if (text.hasAny("flood", "tsunami", "deluge")) {
+                return com.solidkey.painpoints.fx.OGEvents.floodStage(width, height, durationMs, fps)
+            }
+            if (text.hasAny("storm", "thunder", "lightning", "tempest")) {
+                return com.solidkey.painpoints.fx.OGEvents.thunderStage(width, height, durationMs, fps)
+            }
+        }
+
         val p = paletteFor(text)
         val durSec = durationMs / 1000f
 
@@ -130,6 +145,18 @@ public class OGOfflineStageAuthor(
             groundFar = "#122641", groundNear = "#0b1b34", groundDeep = "#030710",
             accent = "#8fb8ff", particleTint = "#9fc4ff", particleBlend = OGBlendMode.SCREEN,
             title = "#dce8ff", swingTo = null, celestial = false,
+        )
+        t.hasAny("earthquake", "quake", "tremor", "seismic", "chasm") -> Palette(
+            background = "#120b08", skyTop = "#1a0f0a", skyBottom = "#3e2723",
+            groundFar = "#2b1a14", groundNear = "#1a0f0a", groundDeep = "#0a0503",
+            accent = "#ffe082", particleTint = "#d7ccc8", particleBlend = OGBlendMode.NORMAL,
+            title = "#ffe082", swingTo = null, celestial = false,
+        )
+        t.hasAny("flood", "tsunami", "deluge", "inundation") -> Palette(
+            background = "#06101e", skyTop = "#040b15", skyBottom = "#102a45",
+            groundFar = "#0d233a", groundNear = "#09192a", groundDeep = "#030910",
+            accent = "#80d8ff", particleTint = "#b3e5fc", particleBlend = OGBlendMode.SCREEN,
+            title = "#80d8ff", swingTo = null, celestial = false,
         )
         t.hasAny("night", "midnight", "starry", "space", "galaxy", "cosmos", "moon") -> Palette(
             background = "#060a16", skyTop = "#03060f", skyBottom = "#132a52",
@@ -245,6 +272,22 @@ public class OGOfflineStageAuthor(
     // ── Particles ─────────────────────────────────────────────────────────────────────────────────
 
     private fun particlesFor(t: String, p: Palette, seed: Int): OGParticleSpec = when {
+        t.hasAny("earthquake", "quake", "tremor", "seismic") ->
+            OGParticleSpec(
+                name = "earth_dust", shape = "circle", maxParticles = 140, emissionRate = 60f,
+                x = 0.50f, y = 0.80f, spawnRadius = 0.35f, angleDeg = 270f, spreadDeg = 70f,
+                speed = 0.18f, gravityY = -0.04f, drag = 0.2f,
+                startSize = 0.018f, endSize = 0.032f,
+                startColor = p.particleTint, endColor = "#5D4037", startAlpha = 0.8f, seed = seed,
+            )
+        t.hasAny("flood", "tsunami", "deluge") ->
+            OGParticles.DROPLETS.copy(
+                maxParticles = 240, emissionRate = 95f,
+                x = 0.45f, y = 0.62f, spawnRadius = 0.50f,
+                angleDeg = 60f, spreadDeg = 45f,
+                speed = 0.42f, speedJitter = 0.5f, gravityY = 0.40f,
+                startColor = p.particleTint, endColor = "#81D4FA", seed = seed,
+            )
         t.hasAny("rain", "storm", "thunder", "shower", "drizzle") ->
             OGParticles.RAIN.copy(
                 maxParticles = 700, emissionRate = 420f, speed = 1.6f, gravityY = 1.0f,
@@ -327,7 +370,7 @@ public class OGOfflineStageAuthor(
     // ── Title card ────────────────────────────────────────────────────────────────────────────────
 
     private fun titleLayer(instruction: String, t: String, p: Palette): OGStageLayer {
-        val boil = t.hasAny("neon", "cyber", "rush", "speed", "fire", "flame", "lava", "glitch")
+        val boil = t.hasAny("neon", "cyber", "rush", "speed", "fire", "flame", "lava", "glitch", "thunder", "storm", "earthquake", "flood")
         val style = if (boil) {
             OGStyleSpec(name = "vibe", ops = listOf(OGStyleOp(op = "boil", amplitude = 0.018f, boilFps = 9f)))
         } else {

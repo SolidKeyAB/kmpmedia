@@ -52,6 +52,8 @@ an `OGBlendMode`, and gated by a `[startMs, endMs]` window.
 | `lightning` | a forked lightning bolt | [SLASH.md](SLASH.md) |
 | `speedlines` | manga speed / impact lines | [SLASH.md](SLASH.md) |
 | `text` | **styled vector text** — a title / caption / lower-third | [STYLES.md](STYLES.md) |
+| `cloth` | a **wind-blown cloth / hair strip** — a scarf, cape edge, banner or lock of hair | [MOTION.md](MOTION.md) |
+| `image` | a **raster cutout** — real drawn pixels (a bundled PNG / WebP), optionally frame-swapped | — |
 
 ### The text layer
 
@@ -77,6 +79,67 @@ OGStages.text(
 
 The live player and the off-screen exporter draw the text through one shared per-frame function, so an
 exported title matches the preview — the same single-code-path discipline the action-FX layers use.
+
+### The cloth layer
+
+`OGStageContent.Cloth` wraps the motion family's 1-D Verlet [`OGClothSpec`](MOTION.md) (gravity +
+prevailing wind + turbulent gusts) as a first-class stage layer: a scarf, cape edge, banner or a lock
+of **long hair** that hangs and *flutters*. Its head pins at (`anchorX`, `anchorY`) inside the layer
+box and streams out on the breeze. Pair it with a particle layer blowing the same direction and the
+whole scene reads as one wind — snow sweeps, hair streams, a dress ripples, together.
+
+```kotlin
+import com.solidkey.painpoints.motion.OGCloths
+
+OGStages.cloth(
+    id = "hair",
+    cloth = OGCloths.preset("hair")!!.copy(wind = -0.5f),   // reuse a preset, set the wind
+    anchorX = 0.5f, anchorY = 0.12f,   // the pinned head, 0..1 of the layer box
+    color = "#3A2A1C",
+    width = 0.05f,                     // ribbon half-thickness, fraction of the box's shorter side
+    taper = true,                      // narrow to a point at the free end (a hair lock / pennant)
+)
+```
+
+The cloth builder's parameters: `cloth` (the fabric feel), `anchorX` / `anchorY` (the pinned head),
+`tailX` / `tailY` (the far-end pin, used only when `OGClothSpec.pinTail` — a banner strung taut),
+`color`, `width`, `taper`, plus the usual layer transform tracks / `look` / `blend` / `onTap`. It is
+deterministic: the strip re-simulates from `0` to the layer-local time at a fixed internal substep, so
+a live frame and an exported frame are byte-identical on both platforms (one shared per-frame draw,
+`drawOGStageClothFrame`). The anchor is **fixed within the box** (the layer transform moves it), so the
+strip responds to *wind*, not to the character's own acceleration — inertial drag is out of scope.
+
+### The image layer
+
+`OGStageContent.Image` is a **raster cutout** — real drawn pixels (a bundled PNG / WebP), not a
+redrawn vector — so a hand-drawn character part lives on the stage as itself. One or more
+`OGImageFrame`s are shown in order on the layer's local clock (looping), so a cutout **animates by
+frame-swap** (a blink, a mouth shape, a wave) while the layer's own transform tracks move it and an
+`onTap` makes it poke-reactive — a paper-doll / Spine-style puppet, authored as data.
+
+```kotlin
+// A still cutout:
+OGStages.imageStill(id = "hero", resource = "hero_body", widthFrac = 0.6f, heightFrac = 0.9f)
+
+// A frame-swap blink (hold the resting frame long, the transients briefly):
+OGStages.image(
+    id = "face",
+    frames = listOf(
+        OGImageFrame("eyes_open", holdMs = 3000L),
+        OGImageFrame("eyes_half", holdMs = 40L),
+        OGImageFrame("eyes_shut", holdMs = 90L),
+    ),
+    widthFrac = 1f, heightFrac = 1f,
+)
+```
+
+Each `OGImageFrame(resource, holdMs = 120L)` names a resource the **host app bundles** (Android
+`res/drawable`, iOS bundle), resolved by the shared image loader — so unlike the other content kinds a
+blind describe → movie model can't author this one, but an app assembling a puppet from its own assets
+can. The image is centred in the layer box and scaled to **fit** within `widthFrac × heightFrac` of it
+(aspect preserved), so you place and size it with the layer transform, not by pre-scaling the art. A
+single-frame cutout is a still; `imageStill` is the one-frame shorthand. `frameIndexAt(timeMs)` on the
+content gives the frame shown at a layer-local time (looping over the total hold span).
 
 ## Describe → playable movie
 

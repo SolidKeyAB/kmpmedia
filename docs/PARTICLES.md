@@ -65,6 +65,37 @@ SVG colour string (`#RGB` / `#RRGGBB` / `#AARRGGBB` / `rgb()` / a name), parsed 
 parser the SVG renderer uses. Size and colour interpolate from `start*` to `end*` over each
 particle's life.
 
+## Wind — a living breeze
+
+Beyond the dead-constant `gravityX`/`gravityY` push, an emitter can carry a **prevailing wind** plus
+**turbulent gusts**, so a drift feels like weather instead of a straight line. This is the **same wind
+model** as the cloth strip ([`OGClothStrip`](./MOTION.md)), so cloth and particles blow alike — drive
+both from one breeze value and the whole scene reads as one wind (snow sweeps while hair streams and a
+flame leans the same way).
+
+```kotlin
+val leaves = OGParticleSpec(
+    emissionRate = 18f,
+    angleDeg = 90f, speed = 0.08f, gravityY = 0.04f,   // drift down
+    wind = 0.12f,            // a steady breeze blowing right
+    windAmplitude = 0.3f,    // peak turbulent gust on top of the steady wind
+    windFrequency = 0.7f,    // how fast the gusts wander
+    windSeed = 3,            // a different-but-repeatable gust pattern
+    shape = "leaf",
+)
+```
+
+- **`wind`** (`0f`) — a steady horizontal acceleration (normalized units/s², `+` blows right) that
+  gusts ride on top of. `0` = calm (the default keeps old output byte-identical).
+- **`windAmplitude`** (`0f`) — peak **turbulent gust** acceleration layered on top of `wind`, sampled
+  per-particle from a fractal-noise field, so gusts swell and fade organically and no two particles
+  lurch in lockstep (a light vertical flutter makes leaves tumble). `0` = steady wind only.
+- **`windFrequency`** (`0.7f`) — how fast the gusts wander; higher = choppier, flickier gusts.
+- **`windSeed`** (`0`) — the gust pattern; change it for a different-but-repeatable breeze.
+
+When all wind fields are off the integrator skips the noise work entirely, so a windless emitter is
+byte-identical to the pre-wind output.
+
 ## From JSON / from a model
 
 ```kotlin
@@ -99,8 +130,9 @@ system.reset()                            // clear + re-arm the opening burst
 
 ## Shapes
 
-`shape` is `"circle"` (default), `"square"`, `"triangle"` or `"star"`. For richer silhouettes, pair
-particles with a [parametric shape](./PARAMETRIC_SHAPES.md).
+`shape` is `"circle"` (default), `"square"`, `"triangle"`, `"star"`, `"petal"` (a leaf) or
+`"teardrop"` (a droplet). For richer silhouettes, pair particles with a
+[parametric shape](./PARAMETRIC_SHAPES.md).
 
 ## Honest limits
 

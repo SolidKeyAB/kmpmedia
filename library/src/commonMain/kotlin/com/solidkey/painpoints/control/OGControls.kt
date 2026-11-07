@@ -57,6 +57,49 @@ object OGControls {
         "slime" to OGControlSpec(garnish = garnishes.getValue("slime")),
         // Hand-drawn + winter snow.
         "snow" to OGControlSpec(garnish = garnishes.getValue("snow")),
+        // ── 3D Game Presets ──────────────────────────────────────────────────
+        // Tactile squircle game button: 3D extrusion lip, gloss highlight, press-down action
+        "game" to OGControlSpec(
+            cornerRadius = 16f,
+            height = 46f,
+            depth = 4.5f,
+            pressEffect = "tactile",
+            highlight = true,
+            outline = null,
+            labelStyle = OGStyleSpec(),
+        ),
+        // Tactile capsule / pill game button (rounded ends)
+        "game-pill" to OGControlSpec(
+            cornerRadius = 24f,
+            height = 46f,
+            depth = 4.5f,
+            pressEffect = "tactile",
+            highlight = true,
+            outline = null,
+            labelStyle = OGStyleSpec(),
+        ),
+        // Hero / CTA game button (bolder, deeper 3D lip)
+        "game-hero" to OGControlSpec(
+            cornerRadius = 18f,
+            height = 50f,
+            depth = 5.5f,
+            pressEffect = "tactile",
+            highlight = true,
+            fontSize = 14f,
+            outline = null,
+            labelStyle = OGStyleSpec(),
+        ),
+        // Compact chip / token button
+        "game-token" to OGControlSpec(
+            cornerRadius = 12f,
+            height = 36f,
+            depth = 3.5f,
+            pressEffect = "tactile",
+            highlight = true,
+            fontSize = 11f,
+            outline = null,
+            labelStyle = OGStyleSpec(),
+        ),
     )
 
     /** Look up a [presets] entry by name, or `null` if there is none. */
@@ -77,8 +120,11 @@ object OGControls {
         {
           "cornerRadius": <dp (11)>,
           "height":       <dp (46)>,
+          "depth":        <dp (0): 3D bottom extrusion lip, e.g. 4.5>,
+          "lipColor":     <#RRGGBB (null): 3D lip shade>,
+          "highlight":    <bool (false): top-edge gloss shine>,
           "fontSize":     <sp (13)>,
-          "pressEffect":  "scale" | "dim" | "brutalist" | "none"  ("scale"),
+          "pressEffect":  "tactile" | "scale" | "dim" | "brutalist" | "none" ("scale"),
           "disabledAlpha":<0..1 (0.4): fill opacity when disabled>,
           "outline": {                      // the hand-drawn ink edge; null for a clean button
             "width": <dp (2.2)>, "inset": <dp (3.5)>,
