@@ -31,6 +31,8 @@ import kotlin.math.sin
 
 /** The family of non-uniform 3D die-cast sculpted game tokens. */
 enum class OGMedallionShape {
+    /** 3D sculpted chiseled Play Triangle (▶) with raised perimeter bevel and center ridge lines. */
+    PLAY_TRIANGLE,
     /** 12-point scalloped star medal with concentric toroidal rim and 3D faceted star. */
     SCALLOP_STAR,
     /** Molded circular coin with concentric raised rims and embossed return arc (↺). */
@@ -116,6 +118,15 @@ fun OGMedallion(
             val minDim = minOf(size.width, size.height)
 
             when (shape) {
+                OGMedallionShape.PLAY_TRIANGLE -> {
+                    draw3DPlayTriangleMedallion(
+                        center = Offset(cx, cy),
+                        size = minDim * 0.92f,
+                        baseColor = if (isArmed) accentColor else baseColor,
+                        isPressed = isPressed,
+                        isArmed = isArmed,
+                    )
+                }
                 OGMedallionShape.SCALLOP_STAR -> {
                     draw3DScallopedMedallion(
                         center = Offset(cx, cy),
@@ -171,6 +182,113 @@ fun OGMedallion(
  * 1. 12-point Scalloped Star Medal with concentric 3D toroidal bevel rim and 3D faceted star.
  * Inspired by the die-cast molded reference medal.
  */
+/**
+ * 3D Sculpted Play Triangle button.
+ * The physical silhouette is an embossed, chiseled Play Triangle (▶) with raised perimeter bevels,
+ * recessed dish, and center ridge lines, built using the exact 3D die-cast technique.
+ */
+fun DrawScope.draw3DPlayTriangleMedallion(
+    center: Offset,
+    size: Float,
+    baseColor: Color,
+    isPressed: Boolean,
+    isArmed: Boolean,
+) {
+    val w = size * 0.95f
+    val h = size * 0.88f
+    val cx = center.x + size * 0.04f
+    val cy = center.y
+
+    val pTip = Offset(cx + w * 0.44f, cy)
+    val pTop = Offset(cx - w * 0.40f, cy - h * 0.48f)
+    val pBot = Offset(cx - w * 0.40f, cy + h * 0.48f)
+    val cr = 10f
+
+    val triPath = Path().apply {
+        moveTo(pTop.x + cr, pTop.y + cr * 0.3f)
+        lineTo(pTip.x - cr * 1.2f, pTip.y - cr * 0.7f)
+        quadraticTo(pTip.x, pTip.y, pTip.x - cr * 1.2f, pTip.y + cr * 0.7f)
+        lineTo(pBot.x + cr, pBot.y - cr * 0.3f)
+        quadraticTo(pBot.x, pBot.y, pBot.x, pBot.y - cr * 1.2f)
+        lineTo(pTop.x, pTop.y + cr * 1.2f)
+        quadraticTo(pTop.x, pTop.y, pTop.x + cr, pTop.y + cr * 0.3f)
+        close()
+    }
+
+    if (!isPressed) {
+        val shadowPath = Path().apply {
+            moveTo(pTop.x + cr + 2f, pTop.y + cr * 0.3f + 3.5f)
+            lineTo(pTip.x - cr * 1.2f + 2f, pTip.y - cr * 0.7f + 3.5f)
+            quadraticTo(pTip.x + 2f, pTip.y + 3.5f, pTip.x - cr * 1.2f + 2f, pTip.y + cr * 0.7f + 3.5f)
+            lineTo(pBot.x + cr + 2f, pBot.y - cr * 0.3f + 3.5f)
+            quadraticTo(pBot.x + 2f, pBot.y + 3.5f, pBot.x + 2f, pBot.y - cr * 1.2f + 3.5f)
+            lineTo(pTop.x + 2f, pTop.y + cr * 1.2f + 3.5f)
+            quadraticTo(pTop.x + 2f, pTop.y + 3.5f, pTop.x + cr + 2f, pTop.y + cr * 0.3f + 3.5f)
+            close()
+        }
+        drawPath(shadowPath, color = Color.Black.copy(alpha = 0.28f))
+    }
+
+    val baseGrad = Brush.linearGradient(
+        colors = listOf(baseColor.shift(0.40f), baseColor, baseColor.shift(-0.35f)),
+        start = Offset(cx - w * 0.5f, cy - h * 0.5f),
+        end = Offset(cx + w * 0.5f, cy + h * 0.5f),
+    )
+    drawPath(triPath, brush = baseGrad)
+
+    drawPath(
+        triPath,
+        color = baseColor.shift(-0.55f),
+        style = Stroke(width = 4.5f, join = StrokeJoin.Round),
+    )
+    drawPath(
+        triPath,
+        color = Color.White.copy(alpha = 0.65f),
+        style = Stroke(width = 1.8f, join = StrokeJoin.Round),
+    )
+
+    val apex = Offset(cx - w * 0.08f, cy)
+
+    val upperFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pTop.x + cr, pTop.y + cr * 0.5f)
+        lineTo(pTip.x - cr, pTip.y)
+        close()
+    }
+    drawPath(upperFacet, color = baseColor.shift(0.28f))
+
+    val lowerFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pTip.x - cr, pTip.y)
+        lineTo(pBot.x + cr, pBot.y - cr * 0.5f)
+        close()
+    }
+    drawPath(lowerFacet, color = baseColor.shift(-0.45f))
+
+    val backFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pBot.x + cr, pBot.y - cr * 0.5f)
+        lineTo(pTop.x + cr, pTop.y + cr * 0.5f)
+        close()
+    }
+    drawPath(backFacet, color = baseColor.shift(-0.15f))
+
+    drawLine(
+        color = Color.White.copy(alpha = 0.85f),
+        start = apex,
+        end = Offset(pTip.x - cr, pTip.y),
+        strokeWidth = 2.0f,
+        cap = StrokeCap.Round,
+    )
+    drawLine(
+        color = Color.White.copy(alpha = 0.65f),
+        start = apex,
+        end = Offset(pTop.x + cr, pTop.y + cr * 0.5f),
+        strokeWidth = 1.5f,
+        cap = StrokeCap.Round,
+    )
+}
+
 fun DrawScope.draw3DScallopedMedallion(
     center: Offset,
     radius: Float,

@@ -9,7 +9,8 @@ class OGMedallionTest {
     @Test
     fun medallionShapes_allValuesExist() {
         val shapes = OGMedallionShape.values()
-        assertEquals(5, shapes.size)
+        assertEquals(6, shapes.size)
+        assertTrue(shapes.contains(OGMedallionShape.PLAY_TRIANGLE))
         assertTrue(shapes.contains(OGMedallionShape.SCALLOP_STAR))
         assertTrue(shapes.contains(OGMedallionShape.RETURN_COIN))
         assertTrue(shapes.contains(OGMedallionShape.OVERLAPPING_TILES))
