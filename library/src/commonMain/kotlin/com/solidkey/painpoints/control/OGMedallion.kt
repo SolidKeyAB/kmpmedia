@@ -367,20 +367,106 @@ fun DrawScope.draw3DScallopedMedallion(
     drawCircle(Color.White.copy(alpha = 0.50f), radius = rTorus + 2f, center = center, style = Stroke(width = 1.2f))
     drawCircle(baseColor.shift(-0.50f), radius = rTorus - 2f, center = center, style = Stroke(width = 1.2f))
 
-    // F. 3D Faceted Star in the center!
-    draw3DFacetedStar(
-        center = center,
-        outerRadius = rStar,
-        innerRadius = rStar * 0.45f,
-        points = 5,
-        baseColor = coreColor,
-    )
+    // F. Center emblem: Dynamic Option C
+    // Idle/waiting: 3D chiseled Play Triangle (▶)
+    // Armed with tiles: Crowning 3D Faceted Star in radiant gold!
+    if (isArmed) {
+        draw3DFacetedStar(
+            center = center,
+            outerRadius = rStar,
+            innerRadius = rStar * 0.45f,
+            points = 5,
+            baseColor = coreColor,
+        )
+    } else {
+        draw3DChiseledPlayIcon(
+            center = center,
+            radius = rStar * 0.95f,
+            baseColor = coreColor,
+        )
+    }
 }
 
 /**
  * Renders a true 3D Faceted Star where each point has a central ridge dividing it into
  * illuminated specular faces and shaded ambient faces.
  */
+/**
+ * Renders a 3D chiseled Play Triangle (▶) inside the medallion dish with top-lit specular
+ * facet, shaded lower facet, and apex-to-tip ridge line.
+ */
+fun DrawScope.draw3DChiseledPlayIcon(
+    center: Offset,
+    radius: Float,
+    baseColor: Color,
+) {
+    val cx = center.x + radius * 0.08f
+    val cy = center.y
+    val r = radius
+
+    val pTip = Offset(cx + r * 0.82f, cy)
+    val pTop = Offset(cx - r * 0.60f, cy - r * 0.72f)
+    val pBot = Offset(cx - r * 0.60f, cy + r * 0.72f)
+    val apex = Offset(cx - r * 0.12f, cy)
+
+    val litColor = baseColor.shift(0.42f)
+    val midColor = baseColor.shift(0.10f)
+    val shadeColor = baseColor.shift(-0.45f)
+    val deepShadeColor = baseColor.shift(-0.58f)
+
+    // Drop shadow
+    val shadowPath = Path().apply {
+        moveTo(pTop.x, pTop.y + 2.5f)
+        lineTo(pTip.x, pTip.y + 2.5f)
+        lineTo(pBot.x, pBot.y + 2.5f)
+        close()
+    }
+    drawPath(shadowPath, color = Color.Black.copy(alpha = 0.35f))
+
+    // Top facet (facing top-left light)
+    val topFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pTop.x, pTop.y)
+        lineTo(pTip.x, pTip.y)
+        close()
+    }
+    drawPath(topFacet, color = litColor)
+
+    // Bottom facet (facing bottom-right shadow)
+    val botFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pTip.x, pTip.y)
+        lineTo(pBot.x, pBot.y)
+        close()
+    }
+    drawPath(botFacet, color = deepShadeColor)
+
+    // Back vertical facet
+    val backFacet = Path().apply {
+        moveTo(apex.x, apex.y)
+        lineTo(pBot.x, pBot.y)
+        lineTo(pTop.x, pTop.y)
+        close()
+    }
+    drawPath(backFacet, color = midColor)
+
+    // Ridge highlights
+    drawLine(
+        color = Color.White.copy(alpha = 0.85f),
+        start = apex,
+        end = pTip,
+        strokeWidth = 2.0f,
+        cap = StrokeCap.Round,
+    )
+    drawLine(
+        color = Color.White.copy(alpha = 0.65f),
+        start = apex,
+        end = pTop,
+        strokeWidth = 1.4f,
+        cap = StrokeCap.Round,
+    )
+}
+
 fun DrawScope.draw3DFacetedStar(
     center: Offset,
     outerRadius: Float,
