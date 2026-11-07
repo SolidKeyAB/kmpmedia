@@ -568,7 +568,6 @@ object OGEvents {
         playing: Boolean = true,
         durationMs: Long = 3400L,
         seed: Int = 42,
-        tileContent: (@Composable () -> Unit)? = null,
         onDone: (() -> Unit)? = null,
     ) {
         val progress = remember(seed) { Animatable(0f) }
@@ -582,22 +581,18 @@ object OGEvents {
         val tImpact = (180f / durationMs).coerceIn(0.03f, 0.20f)
         val tBurn = (980f / durationMs).coerceIn(0.20f, 0.40f)
 
-        // Randomized organic burn footprint & strike center for the selected tile
+        // Randomized organic burn footprint for the struck tile
         val burnData = remember(seed, tileWidth, tileHeight) {
             val rng = Random(seed)
-            val soX = (rng.nextFloat() - 0.5f) * (tileWidth * 0.22f)
-            val soY = (rng.nextFloat() - 0.5f) * (tileHeight * 0.22f)
-            val strikeOffset = Offset(soX, soY)
-
             val minDim = kotlin.math.min(tileWidth, tileHeight)
 
-            // Inner jagged charred core (14 vertices)
+            // Inner jagged charred star core (14 vertices)
             val numPts = 14
             val scorchPts = mutableListOf<Offset>()
             for (i in 0 until numPts) {
                 val angle = i * (2f * PI.toFloat() / numPts) + (rng.nextFloat() - 0.5f) * 0.22f
                 val r = (0.28f + rng.nextFloat() * 0.24f) * minDim
-                scorchPts.add(Offset(soX + cos(angle) * r, soY + sin(angle) * r))
+                scorchPts.add(Offset(cos(angle) * r, sin(angle) * r))
             }
 
             // Outer soft soot perimeter (12 vertices)
@@ -606,7 +601,7 @@ object OGEvents {
             for (i in 0 until numSoot) {
                 val angle = i * (2f * PI.toFloat() / numSoot) + (rng.nextFloat() - 0.5f) * 0.25f
                 val r = (0.42f + rng.nextFloat() * 0.28f) * minDim
-                sootPts.add(Offset(soX + cos(angle) * r, soY + sin(angle) * r))
+                sootPts.add(Offset(cos(angle) * r, sin(angle) * r))
             }
 
             // Radiating glowing ember fracture veins
@@ -614,8 +609,8 @@ object OGEvents {
             val cracks = mutableListOf<List<Offset>>()
             for (c in 0 until numCracks) {
                 val baseAng = c * (2f * PI.toFloat() / numCracks) + (rng.nextFloat() - 0.5f) * 0.40f
-                val crackPts = mutableListOf(strikeOffset)
-                var cur = strikeOffset
+                val crackPts = mutableListOf(Offset.Zero)
+                var cur = Offset.Zero
                 val segs = 3
                 val segLen = minDim * (0.12f + rng.nextFloat() * 0.08f)
                 var curAng = baseAng
@@ -627,19 +622,19 @@ object OGEvents {
                 cracks.add(crackPts)
             }
 
-            // Scorch pit spots
+            // Scorch pit spots with ember rims
             val numSpots = 4 + rng.nextInt(3)
             val spots = mutableListOf<Pair<Offset, Float>>()
             for (sp in 0 until numSpots) {
                 val spAng = rng.nextFloat() * 2f * PI.toFloat()
-                val spR = rng.nextFloat() * minDim * 0.32f
-                val spPt = Offset(soX + cos(spAng) * spR, soY + sin(spAng) * spR)
+                val spR = rng.nextFloat() * minDim * 0.30f
+                val spPt = Offset(cos(spAng) * spR, sin(spAng) * spR)
                 val spRadius = minDim * (0.032f + rng.nextFloat() * 0.040f)
                 spots.add(spPt to spRadius)
             }
 
             ThunderBurnData(
-                strikeOffset = strikeOffset,
+                strikeOffset = Offset.Zero,
                 scorchPolygon = scorchPts,
                 sootPolygon = sootPts,
                 emberCracks = cracks,
@@ -647,13 +642,10 @@ object OGEvents {
             )
         }
 
-        val strikeX = cx + burnData.strikeOffset.x
-        val strikeY = cy + burnData.strikeOffset.y
-
         // IMPACT — main bolt: massive, blinding, branching down to the cell with needle-point taper and impact flash
-        val mainBolt = remember(seed, strikeX, strikeY) {
+        val mainBolt = remember(seed, cx, cy) {
             OGLightningSpec(
-                x1 = strikeX + 0.015f, y1 = 0f, x2 = strikeX, y2 = strikeY,
+                x1 = cx + 0.015f, y1 = 0f, x2 = cx, y2 = cy,
                 width = 0.032f, jaggedness = 0.22f, detail = 9, branches = 12, branchLength = 0.48f,
                 color = "#81D4FA", coreColor = "#FFFFFF", glow = 3.5f, glowColor = "#00E5FF",
                 strikeMs = 140f, decayMs = 560f, gapMs = 10_000f, loop = false, seed = seed,
@@ -672,19 +664,19 @@ object OGEvents {
                 Triple(pool[rng.nextInt(pool.length)].toString(), angle, rng.nextFloat())
             }
         }
-        val impactSparks = remember(seed, strikeX, strikeY) {
+        val impactSparks = remember(seed, cx, cy) {
             OGParticles.SPARKS.copy(
                 burst = 60, emissionRate = 0f, maxParticles = 60,
-                x = strikeX, y = strikeY, spawnRadius = 0.012f,
+                x = cx, y = cy, spawnRadius = 0.012f,
                 angleDeg = 270f, spreadDeg = 360f, speed = 1.05f, speedJitter = 0.78f,
                 lifetimeMs = 780f, gravityY = 0.20f,
                 startColor = "#FFF176", endColor = "#FF6F00", endAlpha = 0f, seed = seed,
             )
         }
-        val impactSparkles = remember(seed, strikeX, strikeY) {
+        val impactSparkles = remember(seed, cx, cy) {
             OGParticles.SPARKLES.copy(
                 burst = 22, emissionRate = 0f, maxParticles = 22,
-                x = strikeX, y = strikeY, spawnRadius = 0.010f,
+                x = cx, y = cy, spawnRadius = 0.010f,
                 speed = 0.38f, speedJitter = 0.72f,
                 lifetimeMs = 520f, gravityY = 0.05f,
                 startColor = "#FFFFFF", endColor = "#FFD600", endAlpha = 0f,
@@ -703,19 +695,15 @@ object OGEvents {
             )
         }
         val burnFlame = remember(seed) {
-            val rng = Random(seed)
-            val tongues = 6 + (seed % 3)
-            val h = 0.80f + ((seed % 7) - 3) * 0.02f
-            val sway = 0.06f + ((seed % 5) - 2) * 0.01f
             OGFlameSpec(
                 name = "tile_fire",
                 coreColor = "#FFF59D",
                 tipColor = "#FF3D00",
-                tongues = tongues,
-                height = h,
+                tongues = 7,
+                height = 0.82f,
                 heightJitter = 0.35f,
                 width = 0.36f,
-                sway = sway,
+                sway = 0.07f,
                 swaySpeed = 1.3f,
                 flicker = 0.40f,
                 flickerSpeed = 2.6f,
@@ -725,13 +713,12 @@ object OGEvents {
                 seed = seed + 13,
             )
         }
-        val afterBolt = remember(seed, strikeX, strikeY) {
+        val afterBolt = remember(seed, cx, cy) {
             OGLightningSpec(
-                x1 = strikeX + 0.02f, y1 = 0f, x2 = strikeX, y2 = strikeY,
+                x1 = cx + 0.02f, y1 = 0f, x2 = cx, y2 = cy,
                 width = 0.012f, jaggedness = 0.20f, detail = 8, branches = 5, branchLength = 0.35f,
                 color = "#FFF9C4", coreColor = "#FFF9C4", glow = 1.2f, glowColor = "#FFFDE7",
-                strikeMs = 90f, decayMs = 400f, gapMs = 10_000f, loop = false, seed = seed + 99,
-                taper = true, flashRadius = 0.10f,
+                strikeMs = 10f, decayMs = 480f, gapMs = 10_000f, loop = false, seed = seed + 3,
             )
         }
         val rainParticles = remember {
@@ -741,71 +728,98 @@ object OGEvents {
         LaunchedEffect(seed, playing) {
             if (!playing) return@LaunchedEffect
             striking = true
-            burning = false
-            afterBoltPlaying = false
-
-            delay((durationMs * tBurn).toLong())
+            delay(980L)
+            striking = false
             burning = true
+            delay(200L)
             afterBoltPlaying = true
-
             delay((durationMs - 1180L).coerceAtLeast(0L))
             burning = false
-            striking = false
             afterBoltPlaying = false
+            onDone?.invoke()
         }
         LaunchedEffect(seed, playing) {
             if (!playing) return@LaunchedEffect
             progress.animateTo(1f, tween(durationMs.toInt(), easing = LinearEasing))
-            onDone?.invoke()
         }
 
         val p = progress.value
+
+        // Seismic camera trauma at strike impact (quadratic punch)
         val impactP = nfSmooth(tImpact, tImpact + 0.16f, p)
         val impactShake = ((1f - impactP) * (if (p >= tImpact && p < tImpact + 0.20f) 1f else 0f)).coerceIn(0f, 1f)
-        val jx = if (impactShake > 0.01f) (Random(seed + (p * 120).toInt()).nextFloat() - 0.5f) * 8f * impactShake else 0f
-        val jy = if (impactShake > 0.01f) (Random(seed + 1 + (p * 120).toInt()).nextFloat() - 0.5f) * 6f * impactShake else 0f
+        val shakeTrauma = impactShake * impactShake
+        val shakeJoltX = sin(p * 320f) * 28f * shakeTrauma
+        val shakeJoltY = cos(p * 260f) * 18f * shakeTrauma
+        val shakeTilt = sin(p * 190f) * 3.5f * shakeTrauma
 
-        Box(modifier.fillMaxSize()) {
-            // Atmospheric sky darken + heavy driving rain
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
+        Box(
+            modifier.fillMaxSize().graphicsLayer {
+                alpha = 1f - nfSmooth(0.92f, 1f, p)
+                translationX = shakeJoltX
+                translationY = shakeJoltY
+                rotationZ = shakeTilt
+            }.clipToBounds(),
+        ) {
+            // Torrential background rain
             OGParticleView(rainParticles, Modifier.fillMaxSize(), playing = playing)
 
-            // LIGHTNING BOLT — anime slash-burst
-            Box(Modifier.fillMaxSize().offset { IntOffset(jx.roundToInt(), jy.roundToInt()) }) {
-                OGLightningView(mainBolt, Modifier.fillMaxSize(), playing = striking)
-            }
-
-            // STROBE SCREEN FLASHES
+            // PRE-IMPACT: sky floods golden
             Box(
-                Modifier.fillMaxSize()
-                    .background(Color(0xFFE1F5FE))
-                    .graphicsLayer {
-                        alpha = nfSmooth(0f, tImpact * 0.55f, p) *
-                            (1f - nfSmooth(tImpact - 0.008f, tImpact + 0.002f, p)) * 0.12f
-                    },
-            )
-            Box(
-                Modifier.fillMaxSize()
-                    .background(Color.White)
-                    .graphicsLayer {
-                        alpha = (nfSmooth(tImpact - 0.004f, tImpact + 0.002f, p) *
-                            (1f - nfSmooth(tImpact + 0.008f, tImpact + 0.060f, p))).coerceIn(0f, 1f)
-                    },
+                Modifier.fillMaxSize().graphicsLayer {
+                    alpha = nfSmooth(0f, tImpact * 0.55f, p) *
+                        (1f - nfSmooth(tImpact - 0.008f, tImpact + 0.002f, p)) * 0.12f
+                }.background(Color(0xFFFFD600))
             )
 
-            // IMPACT PARTICLES
-            OGParticleView(impactSparks, Modifier.fillMaxSize(), playing = p >= tImpact && p < tImpact + 0.25f)
-            OGParticleView(impactSparkles, Modifier.fillMaxSize(), playing = p >= tImpact && p < tImpact + 0.18f)
+            // IMPACT: ONE-FRAME pure-white freeze-frame flash
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    alpha = (nfSmooth(tImpact - 0.004f, tImpact + 0.002f, p) *
+                        (1f - nfSmooth(tImpact + 0.008f, tImpact + 0.060f, p))).coerceIn(0f, 1f)
+                }.background(Color(0xFFFFFFFF))
+            )
+
+            // BURN: faint warm orange wash as the tile blazes
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    alpha = nfSmooth(tBurn, tBurn + 0.10f, p) * 0.06f
+                }.background(Color(0xFFFF8C00))
+            )
+
+            // Upward static pre-charge sparks
             OGParticleView(preChargeSparks, Modifier.fillMaxSize(), playing = p < tImpact + 0.04f)
 
-            // CANVAS: Ground arcs, letters, plasma flare
-            Canvas(Modifier.fillMaxSize().offset { IntOffset(jx.roundToInt(), jy.roundToInt()) }) {
+            // IMPACT: lightning bolt + sparks + sparkles (pure fractal bolt, no thick worm ribbon)
+            OGLightningView(mainBolt, Modifier.fillMaxSize(), playing = striking)
+            OGParticleView(impactSparks, Modifier.fillMaxSize(), playing = striking)
+            OGParticleView(impactSparkles, Modifier.fillMaxSize(), playing = striking)
+
+            // Overexposure flash bloom
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    alpha = (nfSmooth(tImpact, tImpact + 50f / durationMs, p) *
+                        (1f - nfSmooth(tImpact + 50f / durationMs, tImpact + 150f / durationMs, p)))
+                        .coerceIn(0f, 1f)
+                }.background(Color.White)
+            )
+
+            // Shockwave rings & radial letter bursts
+            Canvas(Modifier.fillMaxSize()) {
+                val ring1 = nfSmooth(tImpact, tImpact + 380f / durationMs, p)
+                val ring2 = nfSmooth(tImpact, tImpact + 700f / durationMs, p)
+                drawOGShockwaveFrame(OGShockwaveSpec(color = "#FFF59D", maxRadius = 0.22f, ringWidth = 0.018f, alpha = 0.95f), cx, cy, ring1)
+                drawOGShockwaveFrame(OGShockwaveSpec(color = "#FFE082", maxRadius = 0.44f, ringWidth = 0.026f, alpha = 0.72f), cx, cy, ring2)
+
+                // ── Struck Tile Electrocution & Scorching ─────────────────────────
                 val strikeOccurred = p >= tImpact
                 if (strikeOccurred) {
-                    val sPxX = strikeX * size.width
-                    val sPxY = strikeY * size.height
+                    val tW = tileWidth * size.width
+                    val tH = tileHeight * size.height
+                    val tLeft = (cx - tileWidth / 2f) * size.width
+                    val tTop = (cy - tileHeight / 2f) * size.height
 
-                    // 1. Dielectric Ground Streamers: hairline fractal discharge arcs
+                    // 1. Dielectric Ground Streamers: hairline fractal discharge arcs (no worms)
                     val groundArcP = nfSmooth(tImpact, tImpact + 0.18f, p)
                     if (groundArcP in 0.01f..0.98f) {
                         val arcFade = (1f - groundArcP) * (1f - groundArcP)
@@ -815,19 +829,20 @@ object OGEvents {
                             val baseAngle = a * (2f * PI.toFloat() / groundArms) + (arcRng.nextFloat() - 0.5f) * 0.35f
                             val arcLen = size.minDimension * (0.12f + arcRng.nextFloat() * 0.16f) * groundArcP
                             val arcPath = Path().apply {
-                                moveTo(sPxX, sPxY)
-                                var currX = sPxX
-                                var currY = sPxY
+                                moveTo(cx * size.width, cy * size.height)
+                                var currX = cx * size.width
+                                var currY = cy * size.height
                                 val segs = 6
                                 for (s in 1..segs) {
                                     val frac = s.toFloat() / segs
                                     val angDev = (arcRng.nextFloat() - 0.5f) * 0.9f
                                     val r = arcLen * frac
-                                    currX = sPxX + cos(baseAngle + angDev) * r
-                                    currY = sPxY + sin(baseAngle + angDev) * r
+                                    currX = cx * size.width + cos(baseAngle + angDev) * r
+                                    currY = cy * size.height + sin(baseAngle + angDev) * r
                                     lineTo(currX, currY)
                                 }
                             }
+                            // Cyan bloom halo + razor white-hot needle core
                             drawPath(
                                 arcPath,
                                 color = Color(0xFF00E5FF).copy(alpha = arcFade * 0.85f),
@@ -843,29 +858,119 @@ object OGEvents {
                         }
                     }
 
-                    // Radial plasma flare star at strike point
-                    val whiteFlashAlpha = (1f - nfSmooth(tImpact, tImpact + 0.08f, p)).coerceIn(0f, 1f)
-                    if (whiteFlashAlpha > 0.01f) {
-                        val flareR = tileWidth * size.width * 1.8f * whiteFlashAlpha
-                        drawCircle(Color(0xFF00E5FF).copy(alpha = whiteFlashAlpha * 0.8f), radius = flareR * 1.4f, center = Offset(sPxX, sPxY), blendMode = BlendMode.Plus)
-                        drawCircle(Color.White.copy(alpha = whiteFlashAlpha), radius = flareR * 0.6f, center = Offset(sPxX, sPxY), blendMode = BlendMode.Plus)
-                        for (sp in 0..3) {
-                            val ang = sp * (PI.toFloat() / 2f)
-                            val sx = cos(ang) * flareR * 2.5f
-                            val sy = sin(ang) * flareR * 2.5f
-                            drawLine(Color.White.copy(alpha = whiteFlashAlpha), Offset(sPxX, sPxY), Offset(sPxX + sx, sPxY + sy), strokeWidth = 2f, blendMode = BlendMode.Plus)
+                    // 2. Tile Body: White-hot impact -> Charred charcoal body -> Scorched ember glow
+                    val scorchAlpha = (1f - nfSmooth(0.85f, 1f, p)).coerceIn(0f, 1f)
+                    val tileJitterX = if (p < tImpact + 0.12f) (Random(seed + (p * 200).toInt()).nextFloat() - 0.5f) * 8f else 0f
+                    val tileJitterY = if (p < tImpact + 0.12f) (Random(seed + 1 + (p * 200).toInt()).nextFloat() - 0.5f) * 8f else 0f
+
+                    withTransform({
+                        translate(tileJitterX, tileJitterY)
+                    }) {
+                        // Cast shadow beneath charred tile
+                        drawRoundRect(
+                            color = Color(0x99000000),
+                            topLeft = Offset(tLeft + 4f, tTop + 6f),
+                            size = Size(tW, tH),
+                            cornerRadius = CornerRadius(8f),
+                        )
+                        // Charred black tile body
+                        drawRoundRect(
+                            color = Color(0xFF141414).copy(alpha = scorchAlpha),
+                            topLeft = Offset(tLeft, tTop),
+                            size = Size(tW, tH),
+                            cornerRadius = CornerRadius(8f),
+                        )
+
+                        // 3. Organic randomized scorch pattern burned onto the tile:
+                        // Soot outer halo
+                        if (burnData.sootPolygon.size >= 3) {
+                            val sootPath = Path().apply {
+                                val first = burnData.sootPolygon[0]
+                                moveTo(tLeft + tW * 0.5f + first.x * size.width, tTop + tH * 0.5f + first.y * size.height)
+                                for (i in 1 until burnData.sootPolygon.size) {
+                                    val pt = burnData.sootPolygon[i]
+                                    lineTo(tLeft + tW * 0.5f + pt.x * size.width, tTop + tH * 0.5f + pt.y * size.height)
+                                }
+                                close()
+                            }
+                            drawPath(sootPath, color = Color(0xFF26140B).copy(alpha = 0.75f * scorchAlpha))
+                        }
+
+                        // Charred black star core
+                        if (burnData.scorchPolygon.size >= 3) {
+                            val charPath = Path().apply {
+                                val first = burnData.scorchPolygon[0]
+                                moveTo(tLeft + tW * 0.5f + first.x * size.width, tTop + tH * 0.5f + first.y * size.height)
+                                for (i in 1 until burnData.scorchPolygon.size) {
+                                    val pt = burnData.scorchPolygon[i]
+                                    lineTo(tLeft + tW * 0.5f + pt.x * size.width, tTop + tH * 0.5f + pt.y * size.height)
+                                }
+                                close()
+                            }
+                            drawPath(charPath, color = Color(0xFF0C0907).copy(alpha = 0.95f * scorchAlpha))
+                        }
+
+                        // Glowing fiery ember fracture veins
+                        for (crack in burnData.emberCracks) {
+                            if (crack.size >= 2) {
+                                for (ci in 0 until crack.size - 1) {
+                                    val cp1 = Offset(tLeft + tW * 0.5f + crack[ci].x * size.width, tTop + tH * 0.5f + crack[ci].y * size.height)
+                                    val cp2 = Offset(tLeft + tW * 0.5f + crack[ci + 1].x * size.width, tTop + tH * 0.5f + crack[ci + 1].y * size.height)
+                                    drawLine(Color(0xFFFF5722).copy(alpha = 0.85f * scorchAlpha), cp1, cp2, strokeWidth = 2.8f, cap = StrokeCap.Round)
+                                    drawLine(Color(0xFFFFD54F).copy(alpha = 0.95f * scorchAlpha), cp1, cp2, strokeWidth = 1.0f, cap = StrokeCap.Round)
+                                }
+                            }
+                        }
+
+                        // Dark blast craters with ember rims
+                        for ((spotOffset, spotRadius) in burnData.scorchSpots) {
+                            val spX = tLeft + tW * 0.5f + spotOffset.x * size.width
+                            val spY = tTop + tH * 0.5f + spotOffset.y * size.height
+                            val spR = spotRadius * size.width
+                            drawCircle(Color(0xFF080503).copy(alpha = 0.95f * scorchAlpha), radius = spR, center = Offset(spX, spY))
+                            drawCircle(Color(0xFFFF9100).copy(alpha = 0.75f * scorchAlpha), radius = spR, center = Offset(spX, spY), style = Stroke(width = 1.2f))
+                        }
+
+                        // Scorched ember underglow rim
+                        drawRoundRect(
+                            color = Color(0xFFFF6D00).copy(alpha = scorchAlpha * 0.75f),
+                            topLeft = Offset(tLeft, tTop),
+                            size = Size(tW, tH),
+                            cornerRadius = CornerRadius(8f),
+                            style = Stroke(width = 3.5f),
+                        )
+
+                        // Blinding white-hot flash over the tile immediately upon strike
+                        val whiteFlashAlpha = (1f - nfSmooth(tImpact, tImpact + 0.08f, p)).coerceIn(0f, 1f)
+                        if (whiteFlashAlpha > 0.01f) {
+                            drawRoundRect(
+                                color = Color.White.copy(alpha = whiteFlashAlpha),
+                                topLeft = Offset(tLeft, tTop),
+                                size = Size(tW, tH),
+                                cornerRadius = CornerRadius(8f),
+                            )
+                            // Radial plasma flare star
+                            val flareR = tW * 1.8f * whiteFlashAlpha
+                            drawCircle(Color(0xFF00E5FF).copy(alpha = whiteFlashAlpha * 0.8f), radius = flareR * 1.4f, center = Offset(cx * size.width, cy * size.height), blendMode = BlendMode.Plus)
+                            drawCircle(Color.White.copy(alpha = whiteFlashAlpha), radius = flareR * 0.6f, center = Offset(cx * size.width, cy * size.height), blendMode = BlendMode.Plus)
+                            // Diamond spikes
+                            for (sp in 0..3) {
+                                val ang = sp * (PI.toFloat() / 2f)
+                                val sx = cos(ang) * flareR * 2.5f
+                                val sy = sin(ang) * flareR * 2.5f
+                                drawLine(Color.White.copy(alpha = whiteFlashAlpha), Offset(cx * size.width, cy * size.height), Offset(cx * size.width + sx, cy * size.height + sy), strokeWidth = 2f, blendMode = BlendMode.Plus)
+                            }
                         }
                     }
                 }
 
-                // Exploding letters
                 val letterP = nfSmooth(tImpact, tImpact + 280f / durationMs, p)
                 if (letterP > 0f) {
                     val letterAlpha = (1f - nfSmooth(tImpact + 70f / durationMs, tImpact + 280f / durationMs, p)).coerceIn(0f, 1f)
                     impactLetters.forEach { (letter, angle, jitter) ->
                         val dist = size.minDimension * (0.11f + jitter * 0.10f) * letterP
-                        val lx = strikeX * size.width + cos(angle) * dist
-                        val ly = strikeY * size.height + sin(angle) * dist
+                        val lx = cx * size.width + cos(angle) * dist
+                        val ly = cy * size.height + sin(angle) * dist
                         if (letterAlpha > 0.01f) {
                             val measured = letterMeasurer.measure(
                                 text = letter,
@@ -886,112 +991,6 @@ object OGEvents {
                 }
             }
 
-            // ── The Struck Tile & Randomized Burn Mark ─────────────────────────────────
-            val density = LocalDensity.current
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val bW = maxWidth
-                val bH = maxHeight
-                val tW = bW * tileWidth
-                val tH = bH * tileHeight
-
-                val tileJitterX = if (p in tImpact..(tImpact + 0.12f)) (Random(seed + (p * 200).toInt()).nextFloat() - 0.5f) * with(density) { 3.dp.toPx() } else 0f
-                val tileJitterY = if (p in tImpact..(tImpact + 0.12f)) (Random(seed + 1 + (p * 200).toInt()).nextFloat() - 0.5f) * with(density) { 3.dp.toPx() } else 0f
-
-                val scorchFade = (1f - nfSmooth(0.85f, 0.98f, p)).coerceIn(0f, 1f)
-                if (scorchFade > 0.005f) {
-                    Box(
-                        Modifier
-                            .offset(
-                                x = bW * cx - tW / 2f,
-                                y = bH * cy - tH / 2f,
-                            )
-                            .width(tW)
-                            .height(tH)
-                            .graphicsLayer {
-                                translationX = tileJitterX
-                                translationY = tileJitterY
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (tileContent != null) {
-                            tileContent()
-                        } else {
-                            DefaultThunderTile()
-                        }
-
-                        // Organic randomized scorch burned ONTO the tile
-                        if (p >= tImpact) {
-                            val scorchP = nfSmooth(tImpact, tImpact + 0.08f, p) * scorchFade
-                            Canvas(Modifier.fillMaxSize()) {
-                                val w = size.width
-                                val h = size.height
-                                val sScaleX = w / tileWidth
-                                val sScaleY = h / tileHeight
-
-                                // 1. Outer soot halo
-                                if (burnData.sootPolygon.size >= 3) {
-                                    val sootPath = Path().apply {
-                                        val first = burnData.sootPolygon[0]
-                                        moveTo(w * 0.5f + first.x * sScaleX, h * 0.5f + first.y * sScaleY)
-                                        for (i in 1 until burnData.sootPolygon.size) {
-                                            val pt = burnData.sootPolygon[i]
-                                            lineTo(w * 0.5f + pt.x * sScaleX, h * 0.5f + pt.y * sScaleY)
-                                        }
-                                        close()
-                                    }
-                                    drawPath(sootPath, color = Color(0xFF26140B).copy(alpha = 0.72f * scorchP))
-                                }
-
-                                // 2. Charred black core
-                                if (burnData.scorchPolygon.size >= 3) {
-                                    val charPath = Path().apply {
-                                        val first = burnData.scorchPolygon[0]
-                                        moveTo(w * 0.5f + first.x * sScaleX, h * 0.5f + first.y * sScaleY)
-                                        for (i in 1 until burnData.scorchPolygon.size) {
-                                            val pt = burnData.scorchPolygon[i]
-                                            lineTo(w * 0.5f + pt.x * sScaleX, h * 0.5f + pt.y * sScaleY)
-                                        }
-                                        close()
-                                    }
-                                    drawPath(charPath, color = Color(0xFF0F0B08).copy(alpha = 0.94f * scorchP))
-                                }
-
-                                // 3. Dark blast pits with ember rims
-                                for ((spotOffset, spotRadius) in burnData.scorchSpots) {
-                                    val spX = w * 0.5f + spotOffset.x * sScaleX
-                                    val spY = h * 0.5f + spotOffset.y * sScaleY
-                                    val spR = spotRadius * sScaleX
-                                    drawCircle(Color(0xFF0A0705).copy(alpha = 0.95f * scorchP), radius = spR, center = Offset(spX, spY))
-                                    drawCircle(Color(0xFFFF9100).copy(alpha = 0.75f * scorchP), radius = spR, center = Offset(spX, spY), style = Stroke(width = 1.2f))
-                                }
-
-                                // 4. Glowing ember fracture veins
-                                for (crack in burnData.emberCracks) {
-                                    if (crack.size >= 2) {
-                                        for (ci in 0 until crack.size - 1) {
-                                            val cp1 = Offset(w * 0.5f + crack[ci].x * sScaleX, h * 0.5f + crack[ci].y * sScaleY)
-                                            val cp2 = Offset(w * 0.5f + crack[ci + 1].x * sScaleX, h * 0.5f + crack[ci + 1].y * sScaleY)
-                                            drawLine(Color(0xFFFF5722).copy(alpha = 0.85f * scorchP), cp1, cp2, strokeWidth = 2.8f, cap = StrokeCap.Round)
-                                            drawLine(Color(0xFFFFD54F).copy(alpha = 0.95f * scorchP), cp1, cp2, strokeWidth = 1.0f, cap = StrokeCap.Round)
-                                        }
-                                    }
-                                }
-
-                                // 5. White-hot plasma flash immediately upon impact
-                                val whiteFlashAlpha = (1f - nfSmooth(tImpact, tImpact + 0.08f, p)).coerceIn(0f, 1f)
-                                if (whiteFlashAlpha > 0.01f) {
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = whiteFlashAlpha),
-                                        size = size,
-                                        cornerRadius = CornerRadius(8f),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             // BURN: afterimage ghost bolt
             OGLightningView(afterBolt, Modifier.fillMaxSize(), playing = afterBoltPlaying)
 
@@ -999,13 +998,13 @@ object OGEvents {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val tW = maxWidth * tileWidth
                 val tH = maxHeight * tileHeight
-                val flameW = tW * 1.45f
+                val flameW = tW * 1.45f  // nicely engulfs the single struck tile without flooding the board
                 val flameH = tH * 2.8f
                 Box(
                     Modifier
                         .offset(
-                            x = maxWidth * strikeX - flameW / 2f,
-                            y = maxHeight * strikeY + tH * 0.45f - flameH * 0.88f,
+                            x = maxWidth * cx - flameW / 2f,
+                            y = maxHeight * cy + tH * 0.45f - flameH * 0.88f,
                         )
                         .width(flameW).height(flameH)
                         .graphicsLayer { alpha = nfSmooth(tBurn, tBurn + 0.08f, p) * (1f - nfSmooth(0.82f, 0.96f, p)) },
