@@ -23,38 +23,48 @@ object OGShockwave {
     fun shockwavePrompt(instruction: String): String = """
         You output ONLY a JSON object describing an expanding impact shockwave ring for the KMPMedia library.
 
-        It renders as a single expanding stroke ring driven by an external progress 0..1: the radius grows
-        to maxRadius (fraction of the shorter side), alpha fades from alpha to 0, and the stroke tapers to
-        half of ringWidth. squash 1.0 is a circle; 0.5 is a 2:1 ground-plane oval.
+        It renders using a Sedov blast curve (fast explosive start) with: an epicenter fireball flash at
+        t<25%, a soft inner compression wake, a sharp Mach-stem leading edge, and a trailing secondary
+        rebound ring. squash 1.0 is a circle; 0.5 is a 2:1 ground-plane oval. turbulence 0..0.15 adds
+        harmonic ring flutter.
 
-        Fields (all optional): name, color, maxRadius, ringWidth, squash, alpha, seed.
+        Fields (all optional): name, color, maxRadius, ringWidth, squash, alpha, seed,
+        innerGlow, secondaryRing, coreFlash, turbulence.
 
         Schema: {"name":"<short name>", ...fields...}
-        Example: {"name":"ground","color":"#FF9800","maxRadius":0.55,"ringWidth":0.03,"squash":0.5,"alpha":0.8}
+        Example: {"name":"ground","color":"#FF9800","maxRadius":0.60,"ringWidth":0.038,"squash":0.45,"alpha":0.88,"turbulence":0.055}
 
         Output the JSON only, with no prose and no markdown fences.
 
         Task: $instruction
     """.trimIndent()
 
-    /** White thunder airburst — a full circle expanding from the strike point. */
+    /** White thunder airburst — full circle expanding from the strike point with core flash. */
     val AIRBURST = OGShockwaveSpec(
-        name = "airburst", color = "#FFFFFF", maxRadius = 0.45f, ringWidth = 0.025f, squash = 1.0f, alpha = 0.85f,
+        name = "airburst", color = "#E0F7FA", maxRadius = 0.50f, ringWidth = 0.028f,
+        squash = 1.0f, alpha = 0.90f, innerGlow = true, secondaryRing = true,
+        coreFlash = true, turbulence = 0.02f,
     )
 
-    /** Orange earthquake ground roll — a wide 2:1 oval hugging the floor plane. */
+    /** Orange earthquake ground roll — wide 2:1 oval, high turbulence, heavy flash. */
     val GROUND = OGShockwaveSpec(
-        name = "ground", color = "#FF9800", maxRadius = 0.55f, ringWidth = 0.030f, squash = 0.50f, alpha = 0.80f,
+        name = "ground", color = "#FF9800", maxRadius = 0.60f, ringWidth = 0.038f,
+        squash = 0.45f, alpha = 0.88f, innerGlow = true, secondaryRing = true,
+        coreFlash = true, turbulence = 0.055f,
     )
 
-    /** Light-blue flood splash — a water ring spreading across a surface. */
+    /** Light-blue flood splash — water ring with gentle turbulence, no core flash. */
     val SPLASH = OGShockwaveSpec(
-        name = "splash", color = "#4FC3F7", maxRadius = 0.50f, ringWidth = 0.022f, squash = 0.55f, alpha = 0.75f,
+        name = "splash", color = "#4FC3F7", maxRadius = 0.52f, ringWidth = 0.025f,
+        squash = 0.55f, alpha = 0.80f, innerGlow = true, secondaryRing = true,
+        coreFlash = false, turbulence = 0.015f,
     )
 
-    /** Pale-gold electric/spark burst — a tight, bright, fast-reading circle. */
+    /** Pale-gold electric burst — tight circle, strong flash, wild turbulence. */
     val ELECTRIC = OGShockwaveSpec(
-        name = "electric", color = "#FFE082", maxRadius = 0.40f, ringWidth = 0.020f, squash = 1.0f, alpha = 0.90f,
+        name = "electric", color = "#FFF59D", maxRadius = 0.45f, ringWidth = 0.022f,
+        squash = 1.0f, alpha = 0.95f, innerGlow = true, secondaryRing = true,
+        coreFlash = true, turbulence = 0.075f,
     )
 
     /** All built-in presets, keyed by lowercase name. */

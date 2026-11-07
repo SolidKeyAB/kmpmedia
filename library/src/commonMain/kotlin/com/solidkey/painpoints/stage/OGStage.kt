@@ -5,9 +5,15 @@ import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.ai.isLive
 import com.solidkey.painpoints.ai.liveAt
 import com.solidkey.painpoints.compositor.OGKeyframedFloat
+import com.solidkey.painpoints.fx.OGAuroraSpec
+import com.solidkey.painpoints.fx.OGCrackSpec
+import com.solidkey.painpoints.fx.OGFireflySpec
 import com.solidkey.painpoints.fx.OGLightningSpec
+import com.solidkey.painpoints.fx.OGRippleSpec
+import com.solidkey.painpoints.fx.OGShockwaveSpec
 import com.solidkey.painpoints.fx.OGSlashSpec
 import com.solidkey.painpoints.fx.OGSpeedLinesSpec
+import com.solidkey.painpoints.fx.OGWaveSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
@@ -182,6 +188,46 @@ sealed interface OGStageContent {
         val width: Float = 0.05f,
         val taper: Boolean = true,
     ) : OGStageContent
+
+    /** Rolling procedural waves ([wave]) — calm, ocean, flood, lava. */
+    @Serializable
+    @SerialName("wave")
+    data class Wave(val wave: OGWaveSpec) : OGStageContent
+
+    /** Growing impact fracture / crack lines ([crack]). */
+    @Serializable
+    @SerialName("crack")
+    data class Crack(
+        val crack: OGCrackSpec,
+        val originX: Float = 0.5f,
+        val originY: Float = 0.5f,
+        val progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+    ) : OGStageContent
+
+    /** Expanding impact shockwave ring ([shockwave]). */
+    @Serializable
+    @SerialName("shockwave")
+    data class Shockwave(
+        val shockwave: OGShockwaveSpec,
+        val originX: Float = 0.5f,
+        val originY: Float = 0.5f,
+        val progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+    ) : OGStageContent
+
+    /** Waving aurora borealis curtain ([aurora]). */
+    @Serializable
+    @SerialName("aurora")
+    data class Aurora(val aurora: OGAuroraSpec) : OGStageContent
+
+    /** Raindrop ripple capillary rings ([ripple]). */
+    @Serializable
+    @SerialName("ripple")
+    data class Ripple(val ripple: OGRippleSpec) : OGStageContent
+
+    /** Synchronized Kuramoto fireflies ([firefly]). */
+    @Serializable
+    @SerialName("firefly")
+    data class Firefly(val firefly: OGFireflySpec) : OGStageContent
 }
 
 /**
@@ -287,6 +333,12 @@ data class OGStage(
                 is OGStageContent.Text -> c.style?.ops?.any { it.op.lowercase() in TEXT_LIVE_OPS } == true
                 is OGStageContent.Image -> c.isAnimated
                 is OGStageContent.Cloth -> true
+                is OGStageContent.Wave -> true
+                is OGStageContent.Crack -> true
+                is OGStageContent.Shockwave -> true
+                is OGStageContent.Aurora -> true
+                is OGStageContent.Ripple -> true
+                is OGStageContent.Firefly -> true
                 is OGStageContent.Solid -> false
             }
             contentLive ||

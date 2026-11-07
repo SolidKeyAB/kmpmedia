@@ -7,13 +7,20 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Modifier FX for the `com.solidkey.painpoints.fx` action family. Each captures the composable's drawn
@@ -161,5 +168,125 @@ fun Modifier.ogBloom(
             drawLayer(layer)
         }
         drawContent() // the crisp current frame on top
+    }
+}
+
+/**
+ * **Camera Trauma / Cinematic Screen Shake** — Applies quadratic screen shake (Squirrel Eiserloh's
+ * game-feel standard: `shake = trauma²`) to any composable. Trauma decay, high-frequency rotational
+ * and translational displacement gives authentic anime / blockbuster impact feel.
+ *
+ * [trauma] is `0..1` (values > 0 trigger shake; decaying each frame or animated via `Animatable`).
+ * [timeSec] drives the continuous deterministic wobble (pass animation progress or elapsed seconds).
+ * [maxTranslationPx] is the peak horizontal/vertical displacement at trauma=1.
+ * [maxRotationDeg] is the peak rotational tilt in degrees at trauma=1.
+ * [frequency] controls the vibration speed (default ~24Hz).
+ * [seed] decorrelates distinct screen instances.
+ */
+fun Modifier.ogCameraTrauma(
+    trauma: Float,
+    timeSec: Float = 0f,
+    maxTranslationPx: Float = 24f,
+    maxRotationDeg: Float = 3.5f,
+    frequency: Float = 24f,
+    seed: Int = 42,
+): Modifier = graphicsLayer {
+    val t = trauma.coerceIn(0f, 1f)
+    if (t > 0.001f) {
+        val shake = t * t // Non-linear falloff: low trauma feels subtle, high trauma feels violent
+        val phase = timeSec * frequency * 2f * PI.toFloat()
+        val rnd1 = sin(phase + seed * 1.7f)
+        val rnd2 = cos(phase * 1.25f + seed * 3.1f)
+        val rnd3 = sin(phase * 0.85f + seed * 5.3f)
+
+        translationX = rnd1 * maxTranslationPx * shake
+        translationY = rnd2 * maxTranslationPx * 0.75f * shake
+        rotationZ = rnd3 * maxRotationDeg * shake
+    }
+}
+
+/**
+ * **Electrocute / High-Voltage Plasma Arc** modifier — applies electrical spasm jitter,
+ * inverted/overexposed plasma flash, and branching electric arcing over the composable's bounds.
+ *
+ * [intensity] is `0..1` (driving the flash and arc density).
+ * [color] is the electric arc corona colour (default bright cyan `#80D8FF`).
+ * [seed] decorrelates the fractal arcs.
+ */
+fun Modifier.ogElectrocute(
+    intensity: Float,
+    color: Color = Color(0xFF80D8FF),
+    seed: Int = 42,
+): Modifier = composed {
+    val i = intensity.coerceIn(0f, 1f)
+    if (i <= 0.001f) return@composed this
+    drawWithContent {
+        drawContent()
+        if (i > 0.02f) {
+            // High-voltage electric corona wash
+            drawRect(color = color.copy(alpha = i * 0.28f), blendMode = BlendMode.Plus)
+            // Branching electrical spark discharge arcs around the perimeter
+            val w = size.width; val h = size.height
+            if (w > 0f && h > 0f) {
+                val rng = kotlin.random.Random(seed + (i * 200).toInt())
+                val arcCount = (3 + (i * 4).toInt()).coerceAtMost(8)
+                for (a in 0 until arcCount) {
+                    val startX = rng.nextFloat() * w
+                    val startY = rng.nextFloat() * h
+                    val path = Path().apply {
+                        moveTo(startX, startY)
+                        var curX = startX; var curY = startY
+                        repeat(4) {
+                            curX += (rng.nextFloat() - 0.5f) * w * 0.35f
+                            curY += (rng.nextFloat() - 0.5f) * h * 0.35f
+                            lineTo(curX, curY)
+                        }
+                    }
+                    drawPath(path, color = Color.White, style = Stroke(width = 2.5f, cap = StrokeCap.Round), blendMode = BlendMode.Plus)
+                    drawPath(path, color = color, style = Stroke(width = 5.5f, cap = StrokeCap.Round), blendMode = BlendMode.Plus)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **Underwater Caustic Light Web** modifier — draws shimmering solar refraction ribbons across
+ * submerged content, simulating deep underwater lighting.
+ *
+ * [timeSec] drives the continuous caustic undulation.
+ * [depth] is `0..1` (controlling caustic brightness and water murk).
+ * [color] is the caustic refraction light colour.
+ */
+fun Modifier.ogWaterCaustics(
+    timeSec: Float,
+    depth: Float = 0.5f,
+    color: Color = Color(0xFF81D4FA),
+): Modifier = composed {
+    val d = depth.coerceIn(0f, 1f)
+    if (d <= 0.001f) return@composed this
+    drawWithContent {
+        drawContent()
+        val w = size.width; val h = size.height
+        if (w <= 0f || h <= 0f) return@drawWithContent
+        val ribbonCount = 5
+        for (r in 0 until ribbonCount) {
+            val yBase = (r.toFloat() / ribbonCount) * h + sin(timeSec * 3f + r) * 12f
+            val path = Path().apply {
+                moveTo(0f, yBase)
+                val steps = 8
+                for (s in 1..steps) {
+                    val x = (s.toFloat() / steps) * w
+                    val y = yBase + sin(x * 0.03f + timeSec * 4f + r * 1.5f) * 10f
+                    lineTo(x, y)
+                }
+            }
+            drawPath(
+                path,
+                color = color.copy(alpha = d * 0.35f),
+                style = Stroke(width = 6f, cap = StrokeCap.Round),
+                blendMode = BlendMode.Plus,
+            )
+        }
     }
 }

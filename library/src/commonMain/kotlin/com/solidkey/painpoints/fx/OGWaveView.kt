@@ -96,17 +96,38 @@ internal fun DrawScope.drawOGWaveFrame(
         drawPath(path, brush = fill)
 
         if (band.foam) {
-            val foamPath = Path().apply {
-                moveTo(crests[0].x * w, crests[0].y * h)
-                for (j in 1 until crests.size) lineTo(crests[j].x * w, crests[j].y * h)
+            // Draw multi-layered, broken cinematic foam instead of a single "worm" line
+            val rngF = kotlin.random.Random(spec.seed + i)
+            val foamColor = Color.White.copy(alpha = band.fillAlpha * 0.75f)
+            val baseW = (spec.amplitude * spec.foamThickness * h).coerceAtLeast(1f)
+            
+            for (layer in 0..2) {
+                val foamPath = Path()
+                var isDown = false
+                for (j in 0 until crests.size) {
+                    val cx = crests[j].x * w
+                    val cy = crests[j].y * h + if (layer == 0) 0f else (rngF.nextFloat() - 0.5f) * baseW * 1.5f
+                    if (j == 0) {
+                        foamPath.moveTo(cx, cy)
+                        isDown = true
+                    } else {
+                        // Randomly break the path for a dashed/scattered foam look
+                        if (rngF.nextFloat() > 0.15f) {
+                            if (!isDown) foamPath.moveTo(cx, cy)
+                            else foamPath.lineTo(cx, cy)
+                            isDown = true
+                        } else {
+                            isDown = false
+                        }
+                    }
+                }
+                val fw = if (layer == 0) baseW else baseW * (0.4f + 0.6f * rngF.nextFloat())
+                drawPath(
+                    foamPath,
+                    brush = SolidColor(if (layer == 0) foamColor.copy(alpha = foamColor.alpha * 0.6f) else foamColor),
+                    style = Stroke(width = fw, cap = StrokeCap.Round)
+                )
             }
-            val foamColor = Color.White.copy(alpha = band.fillAlpha * 0.65f)
-            val foamWidth = (spec.amplitude * spec.foamThickness * h).coerceAtLeast(1f)
-            drawPath(
-                foamPath,
-                brush = SolidColor(foamColor),
-                style = Stroke(width = foamWidth, cap = StrokeCap.Round),
-            )
         }
     }
 }
@@ -176,14 +197,34 @@ fun DrawScope.drawOGWaveFrontFrame(
 
     // Foam flecks
     if (s.foam) {
-        val foamPath = Path()
-        for (si in 0..steps) {
-            val xFrac = si.toFloat() / steps
-            val x = xFrac * w
-            val y = yBase + bandH * 0.22f + sin(xFrac * s.frequency * twoPI + phase + 0.5f) * s.amplitude * h * 0.7f
-            if (si == 0) foamPath.moveTo(x, y) else foamPath.lineTo(x, y)
+        val rngF = kotlin.random.Random(s.seed + phase.toInt())
+        val foamW = h * 0.015f
+        for (layer in 0..2) {
+            val fPath = Path()
+            var isDown = false
+            for (si in 0..steps) {
+                val xFrac = si.toFloat() / steps
+                val x = xFrac * w
+                val y = yBase + bandH * 0.22f + sin(xFrac * s.frequency * twoPI + phase + 0.5f) * s.amplitude * h * 0.7f + if (layer == 0) 0f else (rngF.nextFloat() - 0.5f) * foamW * 4.5f
+                if (si == 0) {
+                    fPath.moveTo(x, y)
+                    isDown = true
+                } else {
+                    if (rngF.nextFloat() > 0.15f) {
+                        if (!isDown) fPath.moveTo(x, y)
+                        else fPath.lineTo(x, y)
+                        isDown = true
+                    } else {
+                        isDown = false
+                    }
+                }
+            }
+            val fw = if (layer == 0) foamW else foamW * (0.5f + 0.5f * rngF.nextFloat())
+            drawPath(
+                fPath,
+                Color.White.copy(alpha = bandAlpha * (if(layer == 0) 0.45f else 0.75f)),
+                style = Stroke(width = fw, cap = StrokeCap.Round)
+            )
         }
-        drawPath(foamPath, Color.White.copy(alpha = bandAlpha * 0.55f),
-            style = Stroke(width = h * 0.012f, cap = StrokeCap.Round))
     }
 }

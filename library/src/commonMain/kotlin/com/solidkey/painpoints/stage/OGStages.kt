@@ -5,9 +5,15 @@ import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.compositor.OGEasing
 import com.solidkey.painpoints.compositor.OGKeyframe
 import com.solidkey.painpoints.compositor.OGKeyframedFloat
+import com.solidkey.painpoints.fx.OGAuroraSpec
+import com.solidkey.painpoints.fx.OGCrackSpec
+import com.solidkey.painpoints.fx.OGFireflySpec
 import com.solidkey.painpoints.fx.OGLightningSpec
+import com.solidkey.painpoints.fx.OGRippleSpec
+import com.solidkey.painpoints.fx.OGShockwaveSpec
 import com.solidkey.painpoints.fx.OGSlashSpec
 import com.solidkey.painpoints.fx.OGSpeedLinesSpec
+import com.solidkey.painpoints.fx.OGWaveSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
 import com.solidkey.painpoints.motion.OGClothSpec
@@ -131,6 +137,79 @@ object OGStages {
         endMs: Long? = null,
         blend: OGBlendMode = OGBlendMode.NORMAL,
     ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.SpeedLines(spec), startMs = startMs, endMs = endMs, blend = blend)
+
+    /** A procedural wave surface layer (calm, ocean, flood, lava). */
+    fun wave(
+        id: String,
+        spec: OGWaveSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Wave(spec), startMs = startMs, endMs = endMs, x = x, y = y, scale = scale, opacity = opacity, blend = blend)
+
+    /** An impact crack / fracture layer. */
+    fun crack(
+        id: String,
+        spec: OGCrackSpec,
+        originX: Float = 0.5f,
+        originY: Float = 0.5f,
+        progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Crack(spec, originX, originY, progress), startMs = startMs, endMs = endMs, x = x, y = y, opacity = opacity, blend = blend)
+
+    /** An expanding impact shockwave ring layer. */
+    fun shockwave(
+        id: String,
+        spec: OGShockwaveSpec,
+        originX: Float = 0.5f,
+        originY: Float = 0.5f,
+        progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Shockwave(spec, originX, originY, progress), startMs = startMs, endMs = endMs, x = x, y = y, opacity = opacity, blend = blend)
+
+    /** An aurora borealis curtain layer. */
+    fun aurora(
+        id: String,
+        spec: OGAuroraSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.SCREEN,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Aurora(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
+
+    /** A raindrop ripple capillary ring layer. */
+    fun ripple(
+        id: String,
+        spec: OGRippleSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Ripple(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
+
+    /** A synchronized Kuramoto firefly layer. */
+    fun firefly(
+        id: String,
+        spec: OGFireflySpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.PLUS,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Firefly(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
 
     /**
      * A **styled-vector-text** layer — a title / caption / lower-third, centred in the box (position it
@@ -320,6 +399,12 @@ object OGStages {
           { "type":"slash", "slash": <an OGSlashSpec> }                 // a water/flame/thunder sweep
           { "type":"lightning", "lightning": <an OGLightningSpec> }     // a forked bolt
           { "type":"speedlines", "speedLines": <an OGSpeedLinesSpec> }  // manga impact lines
+          { "type":"wave", "wave": <an OGWaveSpec> }                    // procedural wave surface (calm/ocean/flood)
+          { "type":"crack", "crack": <an OGCrackSpec>, "originX":0.5, "originY":0.5, "progress":1.0 } // ground fractures
+          { "type":"shockwave", "shockwave": <an OGShockwaveSpec>, "originX":0.5, "originY":0.5, "progress":1.0 } // air/ground burst
+          { "type":"aurora", "aurora": <an OGAuroraSpec> }              // polar light curtain
+          { "type":"ripple", "ripple": <an OGRippleSpec> }              // raindrop impact capillary ripples
+          { "type":"firefly", "firefly": <an OGFireflySpec> }           // synchronized Kuramoto fireflies
           { "type":"text", "text":"TITLE", "size":0.14, "color":"#RRGGBB", "bold":false,
             "italic":false, "family":null, "style": <an OGStyleSpec, optional> }  // styled vector text
         The slash/lightning/speedlines specs are the KMPMedia action-FX packs, authored as their own

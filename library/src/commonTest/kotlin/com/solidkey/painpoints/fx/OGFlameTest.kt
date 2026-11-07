@@ -82,4 +82,18 @@ class OGFlameTest {
         assertTrue(abs(calm[0].spine.first().x - windy[0].spine.first().x) < 1e-4f, "base stays rooted")
         assertTrue(windy[0].spine.last().x > calm[0].spine.last().x, "tip should lean downwind")
     }
+
+    @Test
+    fun flameTongues_multiTongueHasParabolicBowlRoots() {
+        // Multi-tongue flame roots should not form a dead-flat line across baseY; edge tongues should curve upward
+        val spec = OGFlameSpec(tongues = 9, height = 0.8f, baseY = 1.0f, seed = 42).sanitized()
+        val tongues = flameTongues(spec, 0f)
+        val centerBaseY = tongues[4].spine.first().y // center tongue
+        val edgeBaseY0 = tongues[0].spine.first().y  // leftmost tongue
+        val edgeBaseY8 = tongues[8].spine.first().y  // rightmost tongue
+
+        // Screen coordinates: smaller y = higher up
+        assertTrue(edgeBaseY0 < centerBaseY, "left edge root should be elevated compared to center")
+        assertTrue(edgeBaseY8 < centerBaseY, "right edge root should be elevated compared to center")
+    }
 }

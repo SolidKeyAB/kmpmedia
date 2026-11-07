@@ -10,10 +10,10 @@ class OGCrackTest {
 
     @Test
     fun presets_exist_and_are_case_insensitive() {
-        for (n in listOf("ground", "ice", "tile", "glass")) assertNotNull(OGCrack.preset(n), "preset $n")
+        for (n in listOf("ground", "ice", "tile", "glass", "quake")) assertNotNull(OGCrack.preset(n), "preset $n")
         assertNotNull(OGCrack.preset("GROUND"))
         assertNotNull(OGCrack.preset("Ice"))
-        assertEquals(4, OGCrack.presets.size)
+        assertEquals(5, OGCrack.presets.size)
     }
 
     @Test

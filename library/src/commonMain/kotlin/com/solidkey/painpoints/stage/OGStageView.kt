@@ -23,6 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import com.solidkey.painpoints.fx.OGAuroraView
+import com.solidkey.painpoints.fx.OGCrackView
+import com.solidkey.painpoints.fx.OGFireflyView
+import com.solidkey.painpoints.fx.OGRippleView
+import com.solidkey.painpoints.fx.OGShockwaveView
+import com.solidkey.painpoints.fx.OGWaveView
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -258,6 +264,24 @@ private fun StageLayerBox(
 
             is OGStageContent.Cloth ->
                 ClothLayerCanvas(c, r.localTimeMs, Modifier.fillMaxSize())
+
+            is OGStageContent.Wave ->
+                OGWaveView(c.wave, Modifier.fillMaxSize(), playing = livePlay)
+
+            is OGStageContent.Crack ->
+                OGCrackView(c.crack, Modifier.fillMaxSize(), originX = c.originX, originY = c.originY, progress = c.progress.valueAt(r.localTimeMs))
+
+            is OGStageContent.Shockwave ->
+                OGShockwaveView(c.shockwave, Modifier.fillMaxSize(), cx = c.originX, cy = c.originY, progress = c.progress.valueAt(r.localTimeMs))
+
+            is OGStageContent.Aurora ->
+                OGAuroraView(c.aurora, Modifier.fillMaxSize(), playing = livePlay)
+
+            is OGStageContent.Ripple ->
+                OGRippleView(c.ripple, Modifier.fillMaxSize(), playing = livePlay)
+
+            is OGStageContent.Firefly ->
+                OGFireflyView(c.firefly, Modifier.fillMaxSize(), playing = livePlay)
         }
     }
 }

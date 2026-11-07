@@ -107,7 +107,13 @@ fun flameTongues(spec: OGFlameSpec, timeSec: Float): List<OGFlameTongue> {
         val hJit = 1f + spec.heightJitter * OGFxMath.hashSigned(k * 3 + 7, spec.seed)
         // Fast height pulsing; fbm is ~[-1,1] so flicker scales the crown up and down.
         val flick = 1f + spec.flicker * OGFxNoise.fbm(timeSec * spec.flickerSpeed + k * 2.3f, 0f, oct, spec.seed + 61)
-        val h = (spec.height * hJit * flick).coerceAtLeast(0.01f)
+
+        // Organic fire dynamics: center tongues are tallest, edge tongues curve up in a natural cluster
+        val u = if (n > 1) (k.toFloat() / (n - 1) - 0.5f) * 2f else 0f
+        val distFromCenter = kotlin.math.abs(u)
+        val heightProfile = 1f - distFromCenter * 0.22f
+        val h = (spec.height * heightProfile * hJit * flick).coerceAtLeast(0.01f)
+
         // Slow per-tongue girth breathing so the body swells and relaxes, not just the crown.
         val widthBreathe = 1f + 0.18f * OGFxNoise.fbm(
             timeSec * spec.swaySpeed * 0.5f + k * 5.9f, 0f, 2, spec.seed + 113,
@@ -115,9 +121,14 @@ fun flameTongues(spec: OGFlameSpec, timeSec: Float): List<OGFlameTongue> {
         val halfWidth = spec.width * 0.5f * (0.7f + 0.6f * OGFxMath.hash01(k * 9 + 2, spec.seed)) * widthBreathe
         val alpha = (spec.opacity * (0.8f + 0.2f * OGFxMath.hash01(k * 11 + 4, spec.seed))).coerceIn(0f, 1f)
 
+        // Parabolic bowl curve so tongues do not sit on a flat line: center is deepest, edges lift up
+        val bowlCurve = distFromCenter * distFromCenter * 0.08f * spec.height
+        val rootYJitter = spec.height * 0.03f * OGFxMath.hashSigned(k * 7 + 3, spec.seed)
+        val tongueBaseY = (spec.baseY - bowlCurve + rootYJitter).coerceIn(0.05f, 1.0f)
+
         val spine = List(SPINE_SAMPLES + 1) { j ->
             val s = j.toFloat() / SPINE_SAMPLES                     // 0 at base → 1 at tip
-            val y = spec.baseY - h * s                             // rise upward (smaller y)
+            val y = tongueBaseY - h * s                            // rise upward (smaller y)
             // Sway grows toward the tip (rooted at the base) and wanders along the length over time.
             val wave = spec.sway * s * OGFxNoise.fbm(
                 s * 2.5f + timeSec * spec.swaySpeed + k * 1.7f,

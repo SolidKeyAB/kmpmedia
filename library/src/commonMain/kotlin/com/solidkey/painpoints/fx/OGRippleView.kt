@@ -53,6 +53,19 @@ class OGRippleState {
 fun rememberOGRippleState(): OGRippleState = remember { OGRippleState() }
 
 /**
+ * Convenience overload that maintains its own [OGRippleState].
+ */
+@Composable
+fun OGRippleView(
+    spec: OGRippleSpec,
+    modifier: Modifier = Modifier,
+    playing: Boolean = true,
+) {
+    val state = rememberOGRippleState()
+    OGRippleView(state = state, spec = spec, modifier = modifier, playing = playing)
+}
+
+/**
  * Renders active ripple rings from [state] according to [spec]. Attach [Modifier.ogRippleInput]
  * to wire tap-to-spawn; or call [OGRippleState.spawn] manually (e.g. for a rain simulation that
  * spawns at random positions).
@@ -114,10 +127,10 @@ fun Modifier.ogRippleInput(state: OGRippleState): Modifier =
  *
  * Each active [OGRippleEvent] contributes:
  * 1. A primary ring expanding at r(t) = speed · t^0.65 · minDim.
- * 2. [OGRippleSpec.secondaryRings] trailing rings at r − n·spacing.
+ * 2. [OGRippleSpec.secondaryRings] trailing rings grouped with a Gaussian wave-packet envelope.
  * 3. Exponential amplitude decay on all rings: alpha = A₀ · e^(−λ·t).
- * 4. A bright crest stroke on the leading primary ring.
- * 5. Worthington splash crown arcs at t < 150ms (when [OGRippleSpec.crownDroplets] is true).
+ * 4. **3D meniscus**: dark refraction trough + diffuse water body + razor specular crest.
+ * 5. Worthington crown — ballistic streak droplets + central rebound jet bead at t < 150ms.
  */
 fun DrawScope.drawOGRippleFrame(
     spec: OGRippleSpec,
@@ -126,71 +139,108 @@ fun DrawScope.drawOGRippleFrame(
     ringColor: Color,
     crestColor: Color,
 ) {
-    val w       = size.width;  val h = size.height
+    val w = size.width; val h = size.height
     if (w <= 0f || h <= 0f) return
-    val minDim  = min(w, h)
-    val s       = spec.sanitized()
-    val maxR    = s.maxRadius * minDim
+    val minDim = min(w, h)
+    val s = spec.sanitized()
+    val maxR = s.maxRadius * minDim
     val strokeW = s.lineWidth * minDim
+    val troughCol = s.troughColor.toSpecColor() ?: Color(0xFF051D33)
 
     for (event in state.events) {
         val ageSec = ((nowMs - event.startMs) / 1000f).coerceAtLeast(0f)
 
-        // Primary ring radius with Worthington dispersion deceleration: r ∝ t^0.65
         val primaryR = s.propagationSpeed * ageSec.pow(0.65f) * minDim
         if (primaryR > maxR) continue
 
-        // Exponential amplitude envelope
         val amp = exp(-s.decayLambda * ageSec)
         if (amp < 0.015f) continue
 
         val ox = event.cx * w
         val oy = event.cy * h
 
-        // Worthington crown droplets — parabolic micro-arcs at t < 150ms
+        // 1. Worthington Splash Crown — ballistic streak droplets + rebound bead
         if (s.crownDroplets && ageSec < 0.15f) {
             val crownProgress = ageSec / 0.15f
-            val crownAlpha    = (1f - crownProgress) * amp
-            val dropR         = primaryR * 1.3f
-            val twoPI         = 2f * PI.toFloat()
+            val crownAlpha = (1f - crownProgress) * amp
+            val twoPI = 2f * PI.toFloat()
+
             for (k in 0 until s.crownCount) {
-                val angle    = k * twoPI / s.crownCount
-                val arcPeak  = 0.06f * minDim * (1f - crownProgress)
-                val arcX     = ox + (dropR + arcPeak * sin(crownProgress * PI.toFloat())) * cos(angle)
-                val arcY     = oy + (dropR + arcPeak * sin(crownProgress * PI.toFloat())) * sin(angle) * s.squash
+                val angle = k * twoPI / s.crownCount
+                val speedJitter = 1.0f + 0.5f * OGFxMath.hash01(k, s.seed)
+                val dist = primaryR * (1.1f + crownProgress * 0.6f * speedJitter)
+                val arcHeight = 0.045f * minDim * sin(crownProgress * PI.toFloat()) * speedJitter
+
+                val dropX = ox + dist * cos(angle)
+                val dropY = oy + dist * sin(angle) * s.squash - arcHeight
+
+                // Motion streak along the launch vector
+                val prevDist = dist * 0.88f
+                val prevX = ox + prevDist * cos(angle)
+                val prevY = oy + prevDist * sin(angle) * s.squash - arcHeight * 0.85f
+
+                drawLine(
+                    color = crestColor.copy(alpha = crownAlpha * 0.85f),
+                    start = Offset(prevX, prevY),
+                    end = Offset(dropX, dropY),
+                    strokeWidth = strokeW * 0.9f,
+                    cap = StrokeCap.Round,
+                )
+            }
+
+            // Central Worthington rebound bead
+            if (s.reboundJet && ageSec < 0.10f) {
+                val jetT = ageSec / 0.10f
+                val jetH = 0.035f * minDim * sin(jetT * PI.toFloat())
                 drawCircle(
-                    color  = crestColor.copy(alpha = crownAlpha * 0.75f),
-                    radius = strokeW * 0.8f,
-                    center = Offset(arcX, arcY),
+                    color = crestColor.copy(alpha = (1f - jetT) * amp * 0.9f),
+                    radius = strokeW * 1.3f,
+                    center = Offset(ox, oy - jetH),
                 )
             }
         }
 
-        // Primary + secondary rings
+        // 2. Wave Packet Rings with 3D Meniscus
         for (ring in 0..s.secondaryRings) {
             val r = primaryR - ring * s.ringSpacing * minDim
             if (r <= 0f || r > maxR) continue
 
-            val ringAlpha = amp * (1f - ring.toFloat() / (s.secondaryRings + 1).toFloat())
-            val rx = r;  val ry = r * s.squash
-            val left   = ox - rx;  val top    = oy - ry
-            val right  = ox + rx;  val bottom = oy + ry
+            // Gaussian wave-packet envelope — natural capillary grouping
+            val packetWeight = exp(-((ring - 0.5f) * (ring - 0.5f)) / (2f * 1.6f * 1.6f))
+            val ringAlpha = amp * packetWeight
 
-            if (ring == 0) {
-                // Leading crest: bright + wide
+            val rx = r; val ry = r * s.squash
+
+            // Layer A: 3D dark refraction trough (water depression just inside the crest)
+            if (s.troughDepth > 0f) {
+                val troughR = (r - strokeW * 0.7f).coerceAtLeast(0.5f)
+                val trX = troughR; val trY = troughR * s.squash
                 drawOval(
-                    color     = crestColor.copy(alpha = ringAlpha * 0.80f),
-                    topLeft   = Offset(left, top),
-                    size      = Size(right - left, bottom - top),
-                    style     = Stroke(width = strokeW * 1.5f, cap = StrokeCap.Round),
+                    color = troughCol.copy(alpha = ringAlpha * s.troughDepth),
+                    topLeft = Offset(ox - trX, oy - trY),
+                    size = Size(trX * 2f, trY * 2f),
+                    style = Stroke(width = strokeW * 1.25f),
                 )
             }
+
+            // Layer B: diffuse water body
             drawOval(
-                color   = ringColor.copy(alpha = ringAlpha * (if (ring == 0) 0.65f else 0.42f)),
-                topLeft = Offset(left, top),
-                size    = Size(right - left, bottom - top),
-                style   = Stroke(width = strokeW * (1f - ring * 0.18f).coerceAtLeast(0.3f)),
+                color = ringColor.copy(alpha = ringAlpha * (if (ring == 0) 0.70f else 0.45f)),
+                topLeft = Offset(ox - rx, oy - ry),
+                size = Size(rx * 2f, ry * 2f),
+                style = Stroke(width = strokeW * (1f - ring * 0.12f).coerceAtLeast(0.4f)),
             )
+
+            // Layer C: razor specular crest highlight on the two leading rings
+            if (ring <= 1) {
+                val crestAlpha = ringAlpha * (if (ring == 0) 0.95f else 0.50f)
+                drawOval(
+                    color = crestColor.copy(alpha = crestAlpha),
+                    topLeft = Offset(ox - rx, oy - ry),
+                    size = Size(rx * 2f, ry * 2f),
+                    style = Stroke(width = strokeW * 0.55f, cap = StrokeCap.Round),
+                )
+            }
         }
     }
 }

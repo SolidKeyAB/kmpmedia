@@ -23,6 +23,18 @@ import com.solidkey.painpoints.ai.liveAt
 import com.solidkey.painpoints.ai.toSpecColor
 import com.solidkey.painpoints.compositor.OGGifDither
 import com.solidkey.painpoints.compositor.OGGifEncoder
+import com.solidkey.painpoints.fx.OGCrackArm
+import com.solidkey.painpoints.fx.OGFireflySpec
+import com.solidkey.painpoints.fx.OGFireflyState
+import com.solidkey.painpoints.fx.OGRippleSpec
+import com.solidkey.painpoints.fx.OGRippleState
+import com.solidkey.painpoints.fx.crackArms
+import com.solidkey.painpoints.fx.drawOGAuroraFrame
+import com.solidkey.painpoints.fx.drawOGCrackFrame
+import com.solidkey.painpoints.fx.drawOGFireflyFrame
+import com.solidkey.painpoints.fx.drawOGRippleFrame
+import com.solidkey.painpoints.fx.drawOGShockwaveFrame
+import com.solidkey.painpoints.fx.drawOGWaveFrame
 import com.solidkey.painpoints.compositor.OGMp4Encoder
 import com.solidkey.painpoints.compositor.cropFlattenFrame
 import com.solidkey.painpoints.compositor.defaultMp4BitRate
@@ -38,6 +50,8 @@ import com.solidkey.painpoints.fx.slashCenterline
 import com.solidkey.painpoints.fx.speedLineParams
 import com.solidkey.painpoints.particle.OGParticleSpec
 import com.solidkey.painpoints.particle.unitOutline
+import kotlin.math.pow
+import kotlin.random.Random
 
 // ============================================================================================
 // OGStage EXPORT — the end-to-end loop that completes the unique path: a movie you GENERATE (as
@@ -67,11 +81,30 @@ import com.solidkey.painpoints.particle.unitOutline
  */
 fun DrawScope.drawStage(stage: OGStage, timeMs: Long) {
     stage.background?.toSpecColor()?.let { drawRect(it) }
-    for (layer in stage.resolveAt(timeMs)) drawStageLayerExport(layer, stage.fps)
+    // Build crackArms once here — geometry is deterministic (same every frame) but computing
+    // it inside drawStageLayerExport would re-allocate on every frame during export.
+    val crackCache = buildCrackArmsCache(stage)
+    for (layer in stage.resolveAt(timeMs)) drawStageLayerExport(layer, stage.fps, crackCache)
+}
+
+/** Pre-compute crack arm geometry for every Crack layer in [stage], keyed by content identity. */
+private fun buildCrackArmsCache(stage: OGStage): Map<OGStageContent.Crack, List<OGCrackArm>> {
+    val map = HashMap<OGStageContent.Crack, List<OGCrackArm>>()
+    for (layer in stage.layers) {
+        val c = layer.content
+        if (c is OGStageContent.Crack) {
+            map[c] = crackArms(c.crack.sanitized(), c.originX, c.originY)
+        }
+    }
+    return map
 }
 
 /** One resolved layer, transformed + painted with its opacity / look / blend. */
-private fun DrawScope.drawStageLayerExport(r: OGResolvedStageLayer, fps: Int) {
+private fun DrawScope.drawStageLayerExport(
+    r: OGResolvedStageLayer,
+    fps: Int,
+    crackCache: Map<OGStageContent.Crack, List<OGCrackArm>> = emptyMap(),
+) {
     if (r.opacity <= 0f) return
     val w = size.width
     val h = size.height
@@ -112,6 +145,46 @@ private fun DrawScope.drawStageLayerExport(r: OGResolvedStageLayer, fps: Int) {
             // view uses (re-simulated from 0 to the layer-local time), with the layer's opacity/look/blend.
             is OGStageContent.Cloth ->
                 drawOGStageClothFrame(c, r.localTimeMs / 1000f, r.opacity, r.look.cf(), r.blend.toBlendMode())
+
+            is OGStageContent.Wave -> fxGroup(r, w, h) {
+                val s = c.wave.sanitized()
+                val deep = s.deepColor.toSpecColor() ?: Color(0xFF1565C0)
+                val shallow = s.shallowColor.toSpecColor() ?: Color(0xFF4FC3F7)
+                drawOGWaveFrame(s, r.localTimeMs / 1000f, deep, shallow)
+            }
+            is OGStageContent.Crack -> fxGroup(r, w, h) {
+                val s = c.crack.sanitized()
+                // Use the pre-built cache to avoid re-computing geometry on every frame
+                val arms = crackCache[c] ?: crackArms(s, c.originX, c.originY)
+                drawOGCrackFrame(s, arms, c.originX, c.originY, c.progress.valueAt(r.localTimeMs), w, h)
+            }
+            is OGStageContent.Shockwave -> fxGroup(r, w, h) {
+                drawOGShockwaveFrame(c.shockwave, c.originX, c.originY, c.progress.valueAt(r.localTimeMs))
+            }
+            is OGStageContent.Aurora -> fxGroup(r, w, h) {
+                val s = c.aurora.sanitized()
+                val bot = s.bottomColor.toSpecColor() ?: Color(0xFF00E676)
+                val mid = s.midColor.toSpecColor() ?: Color(0xFF00BCD4)
+                val top = s.topColor.toSpecColor() ?: Color(0xFFCE93D8)
+                drawOGAuroraFrame(s, r.localTimeMs / 1000f, bot, mid, top)
+            }
+            // Ripple: simulate a deterministic rain pattern from the spec's seed. Spawns at random
+            // positions using a fixed cadence so the export looks like ambient rainfall/impacts.
+            is OGStageContent.Ripple -> fxGroup(r, w, h) {
+                val s = c.ripple.sanitized()
+                val ringColor = s.color.toSpecColor() ?: Color(0xFF4FC3F7)
+                val crestColor = s.crestColor.toSpecColor() ?: Color.White
+                val state = buildRippleStateAt(s, r.localTimeMs)
+                drawOGRippleFrame(s, state, r.localTimeMs, ringColor, crestColor)
+            }
+            // Firefly: simulate Kuramoto state from t=0 to localTimeMs with fixed 16ms steps.
+            is OGStageContent.Firefly -> fxGroup(r, w, h) {
+                val s = c.firefly.sanitized()
+                val coreColor = s.color.toSpecColor() ?: Color(0xFFCCFF90)
+                val haloColor = s.glowColor.toSpecColor() ?: Color(0xFFF1F8E9)
+                val state = buildFireflyStateAt(s, r.localTimeMs)
+                drawOGFireflyFrame(s, state, coreColor, haloColor)
+            }
         }
     }
 }
@@ -332,4 +405,41 @@ fun OGStage.exportMp4(
         encoder.abort()
         throw t
     }
+}
+
+// ── Ripple / Firefly deterministic bake helpers ───────────────────────────────────────────────
+
+/**
+ * Build an [OGRippleState] populated with deterministic spawn events up to [localTimeMs].
+ * Uses the spec's seed to generate a steady ambient spawn cadence (~4/sec) at random positions,
+ * so the export looks like active rainfall without needing live tap/spawn input.
+ */
+private fun buildRippleStateAt(spec: OGRippleSpec, localTimeMs: Long): OGRippleState {
+    val state = OGRippleState()
+    val rng = Random(spec.seed.toLong())
+    val intervalMs = 250L // ~4 drops/second
+    var t = 0L
+    while (t <= localTimeMs) {
+        val cx = 0.05f + rng.nextFloat() * 0.90f
+        val cy = 0.05f + rng.nextFloat() * 0.90f
+        state.spawn(cx, cy, t)
+        t += intervalMs + (rng.nextFloat() * 150f).toLong()
+    }
+    state.cull(localTimeMs, spec)
+    return state
+}
+
+/**
+ * Build an [OGFireflyState] advanced to [localTimeMs] by stepping with 16ms ticks.
+ * Deterministic from the spec's seed — identical on every export frame.
+ */
+private fun buildFireflyStateAt(spec: OGFireflySpec, localTimeMs: Long): OGFireflyState {
+    val state = OGFireflyState(spec)
+    val stepMs = 16f
+    val steps = (localTimeMs / stepMs).toInt()
+    val dt = stepMs / 1000f
+    repeat(steps) { state.update(spec, dt) }
+    val remainder = (localTimeMs % stepMs.toLong()).toFloat() / 1000f
+    if (remainder > 0f) state.update(spec, remainder)
+    return state
 }

@@ -6,7 +6,7 @@ import com.solidkey.painpoints.ai.OGAiVector
  * Codec + presets for [OGRippleSpec].
  *
  * Presets:
- * - [RAIN]   — realistic rain on still water, tight rings, crown droplets
+ * - [RAIN]   — realistic rain on still water, tight rings, crown droplets, deep trough
  * - [POND]   — wider, slower, fewer rings — calm Ghibli pond
  * - [PUDDLE] — shallow perspective, fast decay, heavy squash
  */
@@ -31,47 +31,50 @@ object OGRipple {
         decayLambda: exponential ring fade rate (higher = faster fade).
         maxRadius: how far rings travel before culling, fraction of min(W,H).
         squash: 1.0 = circles, 0.5 = 2:1 ground-plane ovals (perspective).
-        crownDroplets: show splash crown micro-droplets on impact (true/false).
+        crownDroplets: show ballistic streak droplets on impact (true/false).
+        troughColor: dark refraction colour for 3D water depression.
+        troughDepth: 0..1 strength of the refraction trough (0=flat, 0.7=rich water depth).
+        reboundJet: central Worthington bead at impact.
 
         Fields (all optional): name, propagationSpeed, decayLambda, maxRadius, secondaryRings,
-        ringSpacing, color, crestColor, lineWidth, squash, crownDroplets, crownCount, seed.
+        ringSpacing, color, crestColor, lineWidth, squash, crownDroplets, crownCount, seed,
+        troughColor, troughDepth, reboundJet.
 
-        Examples:
-          {"name":"rain","propagationSpeed":0.38,"decayLambda":3.2,"squash":0.65,"crownDroplets":true}
-          {"name":"pond","propagationSpeed":0.22,"decayLambda":1.8,"maxRadius":0.68,"squash":0.72,"secondaryRings":6}
-          {"name":"puddle","propagationSpeed":0.50,"decayLambda":4.5,"squash":0.40,"color":"#90CAF9"}
+        Output ONLY the JSON object.
 
         $instruction
-        Output ONLY the JSON object.
     """.trimIndent()
 
     // ── Presets ──────────────────────────────────────────────────────────────────────────────────
 
-    /** Realistic rain — crisp rings, Worthington crown, slight perspective squash. */
+    /** Realistic rain — crisp rings, ballistic crown, deep refraction trough. */
     val RAIN = OGRippleSpec(
         name = "rain",
-        propagationSpeed = 0.38f, decayLambda = 3.2f, maxRadius = 0.52f,
-        secondaryRings = 4, ringSpacing = 0.055f,
-        color = "#4FC3F7", crestColor = "#FFFFFF", lineWidth = 0.007f,
+        propagationSpeed = 0.38f, decayLambda = 3.0f, maxRadius = 0.52f,
+        secondaryRings = 4, ringSpacing = 0.050f,
+        color = "#4FC3F7", crestColor = "#FFFFFF", lineWidth = 0.0075f,
         squash = 0.65f, crownDroplets = true, crownCount = 12,
+        troughColor = "#051D33", troughDepth = 0.70f, reboundJet = true,
     )
 
-    /** Calm Ghibli pond — slow, wide rings, subtle. */
+    /** Calm Ghibli pond — slow wide rings, subtle trough, no crown. */
     val POND = OGRippleSpec(
         name = "pond",
-        propagationSpeed = 0.22f, decayLambda = 1.8f, maxRadius = 0.68f,
+        propagationSpeed = 0.22f, decayLambda = 1.7f, maxRadius = 0.68f,
         secondaryRings = 6, ringSpacing = 0.065f,
-        color = "#81D4FA", crestColor = "#E1F5FE", lineWidth = 0.005f,
+        color = "#81D4FA", crestColor = "#E1F5FE", lineWidth = 0.0055f,
         squash = 0.72f, crownDroplets = false, crownCount = 8,
+        troughColor = "#002538", troughDepth = 0.55f, reboundJet = false,
     )
 
-    /** Shallow ground puddle — fast, heavy squash (view from above at an angle). */
+    /** Shallow ground puddle — fast, heavy squash, dark earthy trough. */
     val PUDDLE = OGRippleSpec(
         name = "puddle",
-        propagationSpeed = 0.50f, decayLambda = 4.5f, maxRadius = 0.42f,
-        secondaryRings = 3, ringSpacing = 0.045f,
-        color = "#90CAF9", crestColor = "#FFFFFF", lineWidth = 0.008f,
-        squash = 0.40f, crownDroplets = true, crownCount = 10,
+        propagationSpeed = 0.50f, decayLambda = 4.2f, maxRadius = 0.42f,
+        secondaryRings = 3, ringSpacing = 0.042f,
+        color = "#90CAF9", crestColor = "#FFFFFF", lineWidth = 0.0085f,
+        squash = 0.40f, crownDroplets = true, crownCount = 14,
+        troughColor = "#1A1510", troughDepth = 0.80f, reboundJet = true,
     )
 
     val presets: Map<String, OGRippleSpec> = listOf(RAIN, POND, PUDDLE).associateBy { it.name!! }

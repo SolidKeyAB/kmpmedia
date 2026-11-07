@@ -55,6 +55,10 @@ data class OGLightningSpec(
     val loop: Boolean = true,
     /** Seed for the deterministic jag/branches. */
     val seed: Int = 0,
+    /** Whether the bolt thickness tapers to a sharp point at the end (removes worm-like look). */
+    val taper: Boolean = true,
+    /** Size of the flash bloom at the target impact point (as a fraction of shorter side, 0 = none). */
+    val flashRadius: Float = 0.08f,
 ) {
     /** One strike cycle (strike + decay + gap) in ms. */
     val cycleMs: Float get() = strikeMs.coerceAtLeast(0f) + decayMs.coerceAtLeast(0f) + gapMs.coerceAtLeast(0f)

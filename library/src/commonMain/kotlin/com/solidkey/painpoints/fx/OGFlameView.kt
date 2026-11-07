@@ -51,7 +51,7 @@ fun OGFlameView(
         while (true) withFrameMillis { elapsed = (it - start).toFloat() }
     }
 
-    Canvas(modifier.clipToBounds()) {
+    Canvas(modifier) {
         drawOGFlameFrame(s, elapsed / 1000f, core, tip)
     }
 }
@@ -60,7 +60,7 @@ fun OGFlameView(
  * Draw one frame of a [spec]'s fire at [timeSec] with its resolved [core] (base) and [tip] colours, into
  * the current [DrawScope]. The per-frame body shared by the live [OGFlameView] and any off-screen baker —
  * one code path, so an export matches the preview. Each tongue is a tapered path around its waving spine,
- * filled with a vertical base→tip gradient. Clip to the bounds first.
+ * filled with a vertical base→tip gradient.
  */
 internal fun DrawScope.drawOGFlameFrame(spec: OGFlameSpec, timeSec: Float, core: Color, tip: Color) {
     val w = size.width; val h = size.height
@@ -89,7 +89,9 @@ internal fun DrawScope.drawOGFlameFrame(spec: OGFlameSpec, timeSec: Float, core:
             haze,
             brush = Brush.linearGradient(
                 colorStops = arrayOf(
-                    0f to tip.copy(alpha = tip.alpha * tongue.alpha * 0.45f),
+                    0f to tip.copy(alpha = 0f),
+                    0.10f to tip.copy(alpha = tip.alpha * tongue.alpha * 0.25f),
+                    0.45f to tip.copy(alpha = tip.alpha * tongue.alpha * 0.65f),
                     1f to tip.copy(alpha = 0f),
                 ),
                 start = Offset(cx, baseYPx),
@@ -106,8 +108,10 @@ internal fun DrawScope.drawOGFlameFrame(spec: OGFlameSpec, timeSec: Float, core:
             inner,
             brush = Brush.linearGradient(
                 colorStops = arrayOf(
-                    0f to core.copy(alpha = core.alpha * coreAlpha),
-                    0.4f to mid.copy(alpha = mid.alpha * coreAlpha * 0.85f),
+                    0f to core.copy(alpha = 0f),
+                    0.10f to core.copy(alpha = core.alpha * coreAlpha * 0.35f),
+                    0.28f to core.copy(alpha = core.alpha * coreAlpha),
+                    0.65f to mid.copy(alpha = mid.alpha * coreAlpha * 0.85f),
                     1f to tip.copy(alpha = 0f),
                 ),
                 start = Offset(cx, baseYPx),
@@ -206,7 +210,12 @@ private fun tonguePath(
  */
 private fun bellTaper(s: Float, noise: Float): Float {
     val base = if (s < 0.38f) {
-        0.4f + (s / 0.38f) * 0.6f
+        // Root taper: smooth teardrop root curving to 0 width at s=0 so the fire base is organic, never a cut line!
+        val rootTaper = if (s < 0.16f) {
+            val u = s / 0.16f
+            u * u * (3f - 2f * u) // smoothstep ramp from 0 at s=0 to 1 at s=0.16
+        } else 1f
+        (0.4f + (s / 0.38f) * 0.6f) * rootTaper
     } else {
         val t = (s - 0.38f) / 0.62f
         val smooth = t * t * (3f - 2f * t) // smoothstep
