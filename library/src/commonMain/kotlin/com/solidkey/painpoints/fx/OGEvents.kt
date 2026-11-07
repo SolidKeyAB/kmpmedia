@@ -921,7 +921,7 @@ object OGEvents {
         tileWidth: Float = 0.125f,
         tileHeight: Float = 0.125f,
         playing: Boolean = true,
-        durationMs: Long = 3500L,
+        durationMs: Long = 4800L,
         seed: Int = 100,
         cameraShake: Boolean = false,
         tileContent: (@Composable () -> Unit)? = null,
@@ -933,190 +933,87 @@ object OGEvents {
         val cx = targetX
         val cy = targetY
 
-        // 1. Tectonic Fractures across random regions of the board + Primary rupture into (cx, cy)
-        val (boardCracks, primaryFault, exitFault) = remember(seed, cx, cy) {
+        // 1. Fault line & crack geometry:
+        // A single realistic seismic fault cuts across the board straight through (cx, cy).
+        // Under the selected tile, it ENLARGES along the exact direction of the fault line.
+        val faultGeometry = remember(seed, cx, cy, tileWidth) {
             val rng = Random(seed)
-            val cracks = mutableListOf<TectonicFracture>()
 
-            // 7 distinct fracture origins distributed across random quadrants of the board
-            val crackOrigins = listOf(
-                Offset(0.18f, 0.16f), // Top-left
-                Offset(0.82f, 0.22f), // Top-right
-                Offset(0.14f, 0.78f), // Bottom-left
-                Offset(0.84f, 0.76f), // Bottom-right
-                Offset(0.48f, 0.14f), // Top-center
-                Offset(0.52f, 0.86f), // Bottom-center
-                Offset(0.16f, 0.48f), // Mid-left
-            )
+            // Fault angle across the board: diagonal orientation
+            val baseAngle = if (rng.nextBoolean()) 36f else 144f
+            val faultAngleDeg = baseAngle + (rng.nextFloat() - 0.5f) * 16f
+            val faultRad = faultAngleDeg * (PI.toFloat() / 180f)
+            val uDir = Offset(cos(faultRad), sin(faultRad))  // along crack
+            val nDir = Offset(-sin(faultRad), cos(faultRad)) // perpendicular normal
 
-            crackOrigins.forEachIndexed { idx, origin ->
-                val jx = (rng.nextFloat() - 0.5f) * 0.12f
-                val jy = (rng.nextFloat() - 0.5f) * 0.12f
-                var sx = (origin.x + jx).coerceIn(0.06f, 0.94f)
-                var sy = (origin.y + jy).coerceIn(0.06f, 0.94f)
+            val numNodes = 28
+            val faultNodes = mutableListOf<FaultNode>()
+            val sSpan = 0.70f // normalized span across the board
 
-                // Push away from target cell so cracks are on random OTHER places of the board
-                val dx = sx - cx
-                val dy = sy - cy
-                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-                if (dist < 0.20f) {
-                    val push = 0.22f / dist.coerceAtLeast(0.01f)
-                    sx = (cx + dx * push).coerceIn(0.06f, 0.94f)
-                    sy = (cy + dy * push).coerceIn(0.06f, 0.94f)
-                }
+            for (i in 0..numNodes) {
+                val t = i.toFloat() / numNodes
+                val s = -sSpan + t * (2f * sSpan)
+                val distCenter = kotlin.math.abs(s)
+                // Perpendicular jagged jitter, tapering smoothly near epicenter (cx, cy)
+                val jitterAmp = (0.007f + 0.011f * (distCenter / sSpan)) * (if (i % 2 == 0) 1f else -1f)
+                val jag = (rng.nextFloat() - 0.5f) * 0.006f
+                val pt = Offset(cx + uDir.x * s + nDir.x * (jitterAmp + jag), cy + uDir.y * s + nDir.y * (jitterAmp + jag))
+                faultNodes.add(FaultNode(s = s, basePt = pt))
+            }
 
-                var curAngle = rng.nextFloat() * 360f
-                val segCount = 5 + (idx % 3)
-                val totalLen = 0.14f + rng.nextFloat() * 0.16f
-                val segLen = totalLen / segCount
-
-                val pts = mutableListOf(Offset(sx, sy))
-                val subBranches = mutableListOf<List<Offset>>()
-                var curPt = Offset(sx, sy)
-
-                for (s in 0 until segCount) {
-                    val sLen = segLen * (0.75f + rng.nextFloat() * 0.5f)
-                    val dev = (rng.nextFloat() - 0.5f) * 55f
-                    curAngle += dev
-                    val rad = curAngle * (PI.toFloat() / 180f)
-                    val nextPt = Offset(
-                        (curPt.x + cos(rad) * sLen).coerceIn(0.02f, 0.98f),
-                        (curPt.y + sin(rad) * sLen).coerceIn(0.02f, 0.98f),
-                    )
-                    pts.add(nextPt)
-
-                    // Acute sub-branch at step 1 or 2
-                    if ((s == 1 || s == 2) && rng.nextFloat() < 0.80f) {
-                        val bSide = if (rng.nextBoolean()) 38f else -38f
-                        val bAngle = (curAngle + bSide) * (PI.toFloat() / 180f)
-                        val bPts = mutableListOf(nextPt)
-                        var bCur = nextPt
-                        for (bs in 0 until 3) {
-                            val bLen = segLen * 0.55f * (0.8f + rng.nextFloat() * 0.4f)
-                            val bNext = Offset(
-                                (bCur.x + cos(bAngle) * bLen).coerceIn(0.02f, 0.98f),
-                                (bCur.y + sin(bAngle) * bLen).coerceIn(0.02f, 0.98f),
-                            )
-                            bPts.add(bNext)
-                            bCur = bNext
-                        }
-                        subBranches.add(bPts)
+            // Hairline secondary stress micro-cracks branching off the fault line
+            val branches = mutableListOf<List<Offset>>()
+            val branchIndices = listOf(5, 8, 20, 23)
+            for ((bIdx, nodeIdx) in branchIndices.withIndex()) {
+                if (nodeIdx < faultNodes.size) {
+                    val root = faultNodes[nodeIdx].basePt
+                    val side = if (bIdx % 2 == 0) 1f else -1f
+                    val bAngle = (faultAngleDeg + side * (38f + rng.nextFloat() * 12f)) * (PI.toFloat() / 180f)
+                    val bDir = Offset(cos(bAngle), sin(bAngle))
+                    val bNormal = Offset(-sin(bAngle), cos(bAngle))
+                    val bPts = mutableListOf(root)
+                    var cur = root
+                    val segs = 3 + (bIdx % 2)
+                    val bSegLen = 0.024f
+                    for (s in 1..segs) {
+                        val sDev = (rng.nextFloat() - 0.5f) * 0.005f
+                        cur = Offset(cur.x + bDir.x * bSegLen + bNormal.x * sDev, cur.y + bDir.y * bSegLen + bNormal.y * sDev)
+                        bPts.add(cur)
                     }
-                    curPt = nextPt
+                    branches.add(bPts)
                 }
-
-                // Phase 2: cracks begin after initial shake (p >= 0.20f)
-                val startP = 0.20f + (idx * 0.025f) + rng.nextFloat() * 0.020f
-                val durationP = 0.16f + rng.nextFloat() * 0.06f
-                val widthFrac = 0.004f + rng.nextFloat() * 0.003f
-                cracks.add(TectonicFracture(pts, subBranches, startP, durationP, widthFrac))
             }
 
-            // Primary tectonic rupture tearing straight into and across (cx, cy)
-            // This is the BIGGEST, deepest crack on the board.
-            val mainAngle = 215f + (rng.nextFloat() * 20f - 10f)
-            val mainRad = mainAngle * (PI.toFloat() / 180f)
-            val inLen = 0.38f
-            val inStart = Offset(
-                (cx - cos(mainRad) * inLen).coerceIn(0.02f, 0.98f),
-                (cy - sin(mainRad) * inLen).coerceIn(0.02f, 0.98f),
-            )
-            val inPts = mutableListOf<Offset>()
-            inPts.add(inStart)
-            var mCur = inStart
-            val mSegs = 7
-            for (s in 0 until mSegs) {
-                val sLen = (inLen / mSegs) * (0.8f + rng.nextFloat() * 0.4f)
-                val dev = (rng.nextFloat() - 0.5f) * 28f
-                val a = (mainAngle + dev) * (PI.toFloat() / 180f)
-                val nextX = if (s == mSegs - 1) cx else (mCur.x + cos(a) * sLen).coerceIn(0.02f, 0.98f)
-                val nextY = if (s == mSegs - 1) cy else (mCur.y + sin(a) * sLen).coerceIn(0.02f, 0.98f)
-                val nextPt = Offset(nextX, nextY)
-                inPts.add(nextPt)
-                mCur = nextPt
-            }
+            // Rift reach: chasm widens along the crack for 1.25x tile width on either side of epicenter
+            val riftReach = tileWidth * 1.25f
+            val riftHalfMax = tileWidth * 0.62f // total gap width = 1.24x tileWidth
 
-            // Exit fracture tearing out from the hole on the opposite side
-            val outPts = mutableListOf<Offset>()
-            outPts.add(Offset(cx, cy))
-            var outCur = Offset(cx, cy)
-            val outLen = 0.22f
-            val outSegs = 5
-            for (s in 0 until outSegs) {
-                val sLen = (outLen / outSegs) * (0.8f + rng.nextFloat() * 0.4f)
-                val dev = (rng.nextFloat() - 0.5f) * 28f
-                val a = (mainAngle + dev) * (PI.toFloat() / 180f)
-                val nextPt = Offset(
-                    (outCur.x + cos(a) * sLen).coerceIn(0.02f, 0.98f),
-                    (outCur.y + sin(a) * sLen).coerceIn(0.02f, 0.98f),
-                )
-                outPts.add(nextPt)
-                outCur = nextPt
-            }
-
-            // Primary fault: biggest crack, advances from p=0.22 to reach (cx, cy) at p=0.40
-            val pFault = TectonicFracture(inPts, emptyList(), startProgress = 0.22f, durationProgress = 0.18f, widthFrac = 0.018f)
-            // Exit fault: tears out from the hole after primary strikes
-            val eFault = TectonicFracture(outPts, emptyList(), startProgress = 0.40f, durationProgress = 0.16f, widthFrac = 0.011f)
-
-            Triple(cracks, pFault, eFault)
-        }
-
-        // 2. Bigger crack hole aperture geometry directly under the selected tile
-        // Wider than the tile (1.45× tileWidth) and 2.8× tileHeight — a true yawning subterranean chasm
-        val riftW = tileWidth * 1.45f
-        val riftH = tileHeight * 2.8f
-        val riftLeftPts = remember(seed, cx, cy) {
-            val rng = Random(seed + 50)
-            val n = 20
-            (0..n).map { i ->
-                val t = i.toFloat() / n
-                val sinT = sin(t * PI.toFloat())
-                val widthProfile = sinT.coerceAtLeast(0.18f) * (0.82f + 0.18f * sinT)
-                val halfW = riftW * 0.5f * widthProfile
-                val jitter = (rng.nextFloat() - 0.5f) * riftW * 0.25f * sinT
-                Offset(cx - halfW + jitter, cy - riftH * 0.5f + t * riftH)
-            }
-        }
-        val riftRightPts = remember(seed, cx, cy) {
-            val rng = Random(seed + 150)
-            val n = 20
-            (0..n).map { i ->
-                val t = i.toFloat() / n
-                val sinT = sin(t * PI.toFloat())
-                val widthProfile = sinT.coerceAtLeast(0.18f) * (0.82f + 0.18f * sinT)
-                val halfW = riftW * 0.5f * widthProfile
-                val jitter = (rng.nextFloat() - 0.5f) * riftW * 0.25f * sinT
-                Offset(cx + halfW + jitter, cy - riftH * 0.5f + t * riftH)
-            }
-        }
-
-        // Particles: rock debris and stone dust burst ONLY when the fissure ruptures at p=0.40 (NO bubbling at p=0!)
-        val debris = remember(seed, cx, cy) {
-            OGParticles.EMBERS.copy(
-                burst = 50, emissionRate = 0f, maxParticles = 60,
-                x = cx, y = cy, spawnRadius = 0.08f,
-                angleDeg = 270f, spreadDeg = 360f, speed = 0.48f, speedJitter = 0.75f,
-                lifetimeMs = 900f, gravityY = 0.45f,
-                startColor = "#4E342E", endColor = "#1A0800", endAlpha = 0f, seed = seed,
+            QuakeFaultData(
+                uDir = uDir,
+                nDir = nDir,
+                nodes = faultNodes,
+                branches = branches,
+                riftReach = riftReach,
+                riftHalfMax = riftHalfMax,
             )
         }
+
+        // Rock dust motes erupting as the chasm splits
         val stoneDust = remember(seed, cx, cy) {
             OGParticles.EMBERS.copy(
-                burst = 30, emissionRate = 0f, maxParticles = 40,
-                x = cx, y = cy, spawnRadius = 0.06f,
-                angleDeg = 270f, spreadDeg = 75f, speed = 0.55f, speedJitter = 0.60f,
-                lifetimeMs = 700f, gravityY = 0.20f,
+                burst = 25, emissionRate = 0f, maxParticles = 35,
+                x = cx, y = cy, spawnRadius = 0.05f,
+                angleDeg = 270f, spreadDeg = 90f, speed = 0.40f, speedJitter = 0.50f,
+                lifetimeMs = 800f, gravityY = 0.18f,
                 startColor = "#D7CCC8", endColor = "#5D4037", endAlpha = 0f, seed = seed + 3,
             )
         }
 
         LaunchedEffect(seed, playing) {
             if (!playing) return@LaunchedEffect
-            // Delay rupture until primary crack strikes the tile at p = 0.40
-            delay((durationMs * 0.40f).toLong())
+            delay((durationMs * 0.32f).toLong())
             rupturing = true
-            delay((durationMs * 0.35f).toLong())
+            delay((durationMs * 0.30f).toLong())
             rupturing = false
         }
         LaunchedEffect(seed, playing) {
@@ -1127,14 +1024,13 @@ object OGEvents {
         }
 
         val p = progress.value
-        // Standalone camera shake (only when cameraShake is true)
-        val pWave = nfSmooth(0f, 0.22f, p) * (1f - nfSmooth(0.20f, 0.26f, p)) * 0.45f
-        val sWave = nfSmooth(0.22f, 0.32f, p) * (1f - nfSmooth(0.55f, 0.72f, p)) * 1.0f
-        val aftershock = nfSmooth(0.86f, 0.88f, p) * (1f - nfSmooth(0.90f, 0.94f, p)) * 0.6f
-        val seismicTrauma = (pWave + sWave + aftershock).coerceIn(0f, 1f)
-        val joltX = sin(p * 320f) * 15f * seismicTrauma
-        val joltY = cos(p * 250f) * 9f * seismicTrauma
-        val joltTilt = sin(p * 180f) * 1.8f * seismicTrauma
+        val fadeAlpha = (1f - nfSmooth(0.90f, 0.99f, p)).coerceIn(0f, 1f)
+
+        // Camera tremor (only if requested)
+        val seismicTrauma = nfSmooth(0.08f, 0.28f, p) * (1f - nfSmooth(0.70f, 0.92f, p))
+        val joltX = sin(p * 300f) * 12f * seismicTrauma
+        val joltY = cos(p * 240f) * 8f * seismicTrauma
+        val joltTilt = sin(p * 180f) * 1.5f * seismicTrauma
 
         val rootModifier = if (cameraShake) {
             modifier.fillMaxSize().graphicsLayer {
@@ -1146,52 +1042,64 @@ object OGEvents {
             modifier.fillMaxSize().clipToBounds()
         }
 
-        val fadeAlpha = (1f - nfSmooth(0.88f, 0.98f, p)).coerceIn(0f, 1f)
-
         Box(rootModifier) {
             val originX = cx
             val originY = cy
 
-            // ── LAYER 1: Pure Black Rift Void (BEHIND the falling tile) ─────────────────
-            // The earth tears open — ONLY after primary crack reaches the tile at p = 0.40f!
+            // Crack propagation: hairline fracture tears across the board from p=0.14 to p=0.38
+            val crackProp = nfSmooth(0.14f, 0.38f, p)
+            // Rift opening under the tile: opens along fault line from p=0.32 to p=0.52
+            val riftOpen = nfSmooth(0.32f, 0.52f, p)
+
+            // ── LAYER 1: Subterranean Chasm Abyss (BEHIND the falling tile) ───────────────
             Canvas(Modifier.fillMaxSize()) {
                 val bW = size.width
                 val bH = size.height
-                val ox = originX * bW
-                val oy = originY * bH
 
-                val riftOpen = nfSmooth(0.40f, 0.58f, p)
                 if (riftOpen > 0.01f) {
-                    // Build the rift polygon: left edge down, right edge up, closed shape.
-                    val riftPath = Path().apply {
-                        riftLeftPts.forEachIndexed { i, v ->
-                            val rx = ox + (v.x - originX) * bW * riftOpen
-                            val ry = oy + (v.y - originY) * bH * riftOpen
-                            if (i == 0) moveTo(rx, ry) else lineTo(rx, ry)
+                    val riftNodes = faultGeometry.nodes.filter { kotlin.math.abs(it.s) <= faultGeometry.riftReach }
+                    if (riftNodes.size >= 2) {
+                        val riftPath = Path()
+                        // Negative edge along normal
+                        riftNodes.forEachIndexed { i, node ->
+                            val absS = kotlin.math.abs(node.s)
+                            val normS = absS / faultGeometry.riftReach
+                            val env = (1f - normS * normS)
+                            val currentHalf = faultGeometry.riftHalfMax * env * riftOpen
+                            val px = (node.basePt.x - faultGeometry.nDir.x * currentHalf) * bW
+                            val py = (node.basePt.y - faultGeometry.nDir.y * currentHalf) * bH
+                            if (i == 0) riftPath.moveTo(px, py) else riftPath.lineTo(px, py)
                         }
-                        for (v in riftRightPts.reversed()) {
-                            val rx = ox + (v.x - originX) * bW * riftOpen
-                            val ry = oy + (v.y - originY) * bH * riftOpen
-                            lineTo(rx, ry)
+                        // Positive edge along normal in reverse
+                        for (i in riftNodes.indices.reversed()) {
+                            val node = riftNodes[i]
+                            val absS = kotlin.math.abs(node.s)
+                            val normS = absS / faultGeometry.riftReach
+                            val env = (1f - normS * normS)
+                            val currentHalf = faultGeometry.riftHalfMax * env * riftOpen
+                            val px = (node.basePt.x + faultGeometry.nDir.x * currentHalf) * bW
+                            val py = (node.basePt.y + faultGeometry.nDir.y * currentHalf) * bH
+                            riftPath.lineTo(px, py)
                         }
-                        close()
+                        riftPath.close()
+
+                        // Dark subterranean depth void interior
+                        drawPath(riftPath, color = Color.Black.copy(alpha = fadeAlpha))
+                        // Subtle dark rock-earth edge depth
+                        drawPath(
+                            riftPath,
+                            color = Color(0xFF140A05).copy(alpha = riftOpen * 0.70f * fadeAlpha),
+                            style = Stroke(width = 2.5f, cap = StrokeCap.Square),
+                        )
                     }
-                    // Pure abyss interior — dark void
-                    drawPath(riftPath, color = Color.Black.copy(alpha = fadeAlpha))
-                    // Faint rock-dark outer glow
-                    drawPath(
-                        riftPath,
-                        color = Color(0xFF150A05).copy(alpha = riftOpen * 0.55f * fadeAlpha),
-                        style = Stroke(width = 10f, cap = StrokeCap.Round),
-                    )
                 }
 
-                // Ground-roll shockwave expanding from the rupture
-                val ovalP = nfSmooth(0.38f, 0.62f, p)
-                if (ovalP in 0.01f..0.98f) {
+                // Ground-roll shockwave ring expanding from rupture
+                val shockP = nfSmooth(0.32f, 0.60f, p)
+                if (shockP in 0.01f..0.98f) {
                     drawOGShockwaveFrame(
-                        OGShockwave.GROUND.copy(color = "#6D4C41", maxRadius = 0.52f, squash = 0.52f, alpha = 0.70f * fadeAlpha),
-                        originX, originY, ovalP,
+                        OGShockwave.GROUND.copy(color = "#5D4037", maxRadius = 0.50f, squash = 0.55f, alpha = 0.55f * fadeAlpha),
+                        originX, originY, shockP,
                     )
                 }
             }
@@ -1207,23 +1115,31 @@ object OGEvents {
                 val tW_px = with(density) { tW.toPx() }
                 val tH_px = with(density) { tH.toPx() }
 
-                // Plunge physics: starts after fissure opens at p=0.45, completes by p=0.75
-                val plungeP = ((p - 0.45f) / 0.30f).coerceIn(0f, 1f)
-                val dropCurve = plungeP * plungeP * plungeP // cubic gravity acceleration
-                val transY = dropCurve * (tH_px * 2.2f)
-                val transX = sin(plungeP * PI.toFloat()) * (tW_px * 0.20f)
-                val scale = (1f - dropCurve * 0.85f).coerceAtLeast(0.05f)
+                // P-wave subtle tremor before plunge (p in 0.12f..0.35f)
+                val tremorEnv = nfSmooth(0.12f, 0.28f, p) * (1f - nfSmooth(0.34f, 0.42f, p))
+                val tileTremorX = sin(p * 280f) * with(density) { 1.8.dp.toPx() } * tremorEnv
+                val tileTremorY = cos(p * 240f) * with(density) { 1.2.dp.toPx() } * tremorEnv
 
-                val rotX = if (p < 0.45f) 0f else (18f + dropCurve * 70f)
-                val rotZ = if (p < 0.45f) 0f else (-12f - dropCurve * 36f)
-                val rotY = dropCurve * 25f
+                // Plunge physics: starts as rift opens at p=0.38, clearly tumbling & falling until p=0.82
+                val plungeP = ((p - 0.38f) / 0.44f).coerceIn(0f, 1f)
+                val dropCurve = plungeP * plungeP * (1.10f - 0.10f * plungeP)
 
-                // Tremor before plunge (p in 0.15f..0.45f): tile trembles on the cracking ground
-                val tileTremorX = if (p in 0.15f..0.45f) sin(p * 280f) * with(density) { 2.5.dp.toPx() } else 0f
-                val tileTremorY = if (p in 0.15f..0.45f) cos(p * 240f) * with(density) { 1.8.dp.toPx() } else 0f
+                // The tile falls deep into the hole: vertical drop & slide along fault line
+                val transY = tileTremorY + (if (p < 0.38f) 0f else dropCurve * (tH_px * 2.6f))
+                val transX = tileTremorX + (if (p < 0.38f) 0f else sin(plungeP * PI.toFloat()) * (tW_px * 0.16f))
 
-                val darkAlpha = (plungeP * 1.5f).coerceIn(0f, 1f)
-                val tileAlpha = if (p < 0.45f) 1f else (1f - ((plungeP - 0.55f) / 0.45f).coerceIn(0f, 1f))
+                // Perspective depth scale: clearly shrinks as it descends into the chasm
+                val scale = if (p < 0.38f) 1f else (1f - dropCurve * 0.74f).coerceAtLeast(0.22f)
+
+                // 3D tumble rotations: tilts along the fault angle into the opening fissure
+                val rotZ = if (p < 0.38f) 0f else (16f + dropCurve * 55f)
+                val rotX = if (p < 0.38f) 0f else (18f + dropCurve * 75f)
+                val rotY = if (p < 0.38f) 0f else (12f + dropCurve * 40f)
+
+                // Shadow overlay: gradually envelops the tile in subterranean darkness as it sinks
+                val darkAlpha = if (p < 0.42f) 0f else ((plungeP - 0.10f) * 1.15f).coerceIn(0f, 0.88f)
+                // Visible tile alpha: remains 100% visible throughout descent, only fading at the very bottom
+                val tileAlpha = if (plungeP < 0.82f) 1f else (1f - ((plungeP - 0.82f) / 0.18f).coerceIn(0f, 1f))
 
                 if (tileAlpha > 0.005f) {
                     Box(
@@ -1235,8 +1151,8 @@ object OGEvents {
                             .width(tW)
                             .height(tH)
                             .graphicsLayer {
-                                translationX = transX + tileTremorX
-                                translationY = transY + tileTremorY
+                                translationX = transX
+                                translationY = transY
                                 scaleX = scale
                                 scaleY = scale
                                 rotationX = rotX
@@ -1251,7 +1167,7 @@ object OGEvents {
                         } else {
                             DefaultQuakeTile()
                         }
-                        // Progressive darkness scrim: envelops the tile in deep subterranean darkness!
+                        // Deep subterranean darkness scrim as it drops below board level
                         if (darkAlpha > 0.01f) {
                             Box(
                                 Modifier.fillMaxSize()
@@ -1263,156 +1179,100 @@ object OGEvents {
                 }
             }
 
-            // ── LAYER 3: Foreground Rock Lip, Overhang, Rubble, & Random Board Fractures ──
+            // ── LAYER 3: Realistic Board Cracks & Torn Fractured Lips ───────────────────
             Canvas(Modifier.fillMaxSize()) {
                 val bW = size.width
                 val bH = size.height
-                val minSide = min(bW, bH)
-                val ox = originX * bW
-                val oy = originY * bH
 
-                val riftOpen = nfSmooth(0.40f, 0.58f, p)
+                // Draw hairline crack function: razor-sharp, fine line with lit bevel (NO worms, NO round blobs)
+                fun drawSharpCrackSegment(p1: Offset, p2: Offset, width: Float) {
+                    // Lit highlight on sunny side
+                    val hlOffset = Offset(0.6f, -0.6f)
+                    drawLine(
+                        Color(0xFFFAF3EB).copy(alpha = 0.70f * fadeAlpha),
+                        p1 + hlOffset, p2 + hlOffset,
+                        strokeWidth = (width * 0.5f).coerceAtLeast(0.8f),
+                        cap = StrokeCap.Square,
+                    )
+                    // Deep dark fissure core
+                    drawLine(
+                        Color(0xFF1E130B).copy(alpha = fadeAlpha),
+                        p1, p2,
+                        strokeWidth = width,
+                        cap = StrokeCap.Square,
+                    )
+                }
 
-                // 1. RIFT ROCK EDGES (Drawn over the falling tile so it slips BEHIND into the void)
-                if (riftOpen > 0.01f) {
-                    val n = riftLeftPts.size - 1
+                val totalNodes = faultGeometry.nodes.size
+                val nodesToDraw = (crackProp * totalNodes).toInt().coerceIn(0, totalNodes)
 
-                    // Build LEFT rock-wall path (outer edge of left rift wall)
-                    val leftPath = Path().apply {
-                        riftLeftPts.forEachIndexed { i, v ->
-                            val rx = ox + (v.x - originX) * bW * riftOpen
-                            val ry = oy + (v.y - originY) * bH * riftOpen
-                            if (i == 0) moveTo(rx, ry) else lineTo(rx, ry)
-                        }
-                    }
-                    // Build RIGHT rock-wall path
-                    val rightPath = Path().apply {
-                        riftRightPts.forEachIndexed { i, v ->
-                            val rx = ox + (v.x - originX) * bW * riftOpen
-                            val ry = oy + (v.y - originY) * bH * riftOpen
-                            if (i == 0) moveTo(rx, ry) else lineTo(rx, ry)
-                        }
-                    }
+                // 1. Primary fault line (thin, sharp, realistic board crack)
+                for (i in 0 until nodesToDraw - 1) {
+                    val n1 = faultGeometry.nodes[i]
+                    val n2 = faultGeometry.nodes[i + 1]
 
-                    // Heavy dark rock wall base
-                    val wallStroke = riftW * bW * riftOpen * 0.28f
-                    drawPath(leftPath,  color = Color(0xFF0C0603).copy(alpha = riftOpen * fadeAlpha), style = Stroke(width = wallStroke, cap = StrokeCap.Round))
-                    drawPath(rightPath, color = Color(0xFF0C0603).copy(alpha = riftOpen * fadeAlpha), style = Stroke(width = wallStroke, cap = StrokeCap.Round))
-                    // Illuminated fractured-stone bevel highlight on inner edge
-                    drawPath(leftPath,  color = Color(0xFFD7CCC8).copy(alpha = riftOpen * 0.80f * fadeAlpha), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
-                    drawPath(rightPath, color = Color(0xFFD7CCC8).copy(alpha = riftOpen * 0.80f * fadeAlpha), style = Stroke(width = 2.4f, cap = StrokeCap.Round))
-                    // Crisp white specular glint
-                    drawPath(leftPath,  color = Color.White.copy(alpha = riftOpen * 0.55f * fadeAlpha), style = Stroke(width = 1.0f, cap = StrokeCap.Round))
-                    drawPath(rightPath, color = Color.White.copy(alpha = riftOpen * 0.55f * fadeAlpha), style = Stroke(width = 1.0f, cap = StrokeCap.Round))
+                    // If inside the opened rift zone, draw the separated lips instead of the center line
+                    val absS1 = kotlin.math.abs(n1.s)
+                    val absS2 = kotlin.math.abs(n2.s)
+                    val inRift = absS1 < faultGeometry.riftReach || absS2 < faultGeometry.riftReach
 
-                    // Jagged rock TEETH pointing inward from both walls
-                    for (i in 2 until n - 1) {
-                        val t = i.toFloat() / n
-                        val sinT = sin(t * PI.toFloat())
-                        if (sinT < 0.18f) continue
-                        val toothSize = riftW * bW * 0.12f * sinT * riftOpen
+                    if (inRift && riftOpen > 0.05f) {
+                        val env1 = (1f - (absS1 / faultGeometry.riftReach).coerceIn(0f, 1f).let { it * it })
+                        val env2 = (1f - (absS2 / faultGeometry.riftReach).coerceIn(0f, 1f).let { it * it })
+                        val hg1 = faultGeometry.riftHalfMax * env1 * riftOpen
+                        val hg2 = faultGeometry.riftHalfMax * env2 * riftOpen
 
-                        val lv = riftLeftPts[i]
-                        val lrx = ox + (lv.x - originX) * bW * riftOpen
-                        val lry = oy + (lv.y - originY) * bH * riftOpen
-                        val lDy = (riftH * bH * riftOpen / n) * (if (i % 2 == 0) 0.6f else -0.6f)
-                        drawPath(Path().apply {
-                            moveTo(lrx, lry + lDy * 0.4f)
-                            lineTo(lrx, lry - lDy * 0.4f)
-                            lineTo(lrx + toothSize, lry)
-                            close()
-                        }, color = Color(0xFF1E1008).copy(alpha = riftOpen * 0.90f * fadeAlpha))
-                        drawLine(
-                            Color(0xFFBCAAA4).copy(alpha = riftOpen * 0.65f * fadeAlpha),
-                            Offset(lrx, lry + lDy * 0.3f), Offset(lrx + toothSize, lry), 1.5f,
-                        )
+                        val edgeA1 = Offset((n1.basePt.x - faultGeometry.nDir.x * hg1) * bW, (n1.basePt.y - faultGeometry.nDir.y * hg1) * bH)
+                        val edgeA2 = Offset((n2.basePt.x - faultGeometry.nDir.x * hg2) * bW, (n2.basePt.y - faultGeometry.nDir.y * hg2) * bH)
+                        val edgeB1 = Offset((n1.basePt.x + faultGeometry.nDir.x * hg1) * bW, (n1.basePt.y + faultGeometry.nDir.y * hg1) * bH)
+                        val edgeB2 = Offset((n2.basePt.x + faultGeometry.nDir.x * hg2) * bW, (n2.basePt.y + faultGeometry.nDir.y * hg2) * bH)
 
-                        val rv = riftRightPts[i]
-                        val rrx = ox + (rv.x - originX) * bW * riftOpen
-                        val rry = oy + (rv.y - originY) * bH * riftOpen
-                        val rDy = (riftH * bH * riftOpen / n) * (if (i % 2 == 0) -0.6f else 0.6f)
-                        drawPath(Path().apply {
-                            moveTo(rrx, rry + rDy * 0.4f)
-                            lineTo(rrx, rry - rDy * 0.4f)
-                            lineTo(rrx - toothSize, rry)
-                            close()
-                        }, color = Color(0xFF1E1008).copy(alpha = riftOpen * 0.90f * fadeAlpha))
-                        drawLine(
-                            Color(0xFFBCAAA4).copy(alpha = riftOpen * 0.65f * fadeAlpha),
-                            Offset(rrx, rry + rDy * 0.3f), Offset(rrx - toothSize, rry), 1.5f,
-                        )
+                        // Torn lip A
+                        drawSharpCrackSegment(edgeA1, edgeA2, width = 1.8f)
+                        // Torn lip B
+                        drawSharpCrackSegment(edgeB1, edgeB2, width = 1.8f)
+                    } else {
+                        val p1 = Offset(n1.basePt.x * bW, n1.basePt.y * bH)
+                        val p2 = Offset(n2.basePt.x * bW, n2.basePt.y * bH)
+                        drawSharpCrackSegment(p1, p2, width = 2.2f)
                     }
                 }
 
-                // 2. TECTONIC FRACTURES (Both random board cracks + primary fault)
-                val allFractures = boardCracks + primaryFault + exitFault
-                val shadowOff = Offset(1.8f, 2.4f)
-
-                fun drawFractureBranch(pts: List<Offset>, progressFrac: Float, width: Float) {
-                    if (pts.size < 2 || progressFrac <= 0f) return
-                    val totalSegs = pts.size - 1
-                    val drawnSegs = progressFrac * totalSegs
-                    val full = floor(drawnSegs).toInt()
-
-                    for (seg in 0 until min(full, totalSegs)) {
-                        val segT = seg.toFloat() / totalSegs
-                        val stroke = (width * (1f - 0.70f * segT)).coerceAtLeast(1.2f)
-                        val p1 = Offset(pts[seg].x * bW, pts[seg].y * bH)
-                        val p2 = Offset(pts[seg + 1].x * bW, pts[seg + 1].y * bH)
-
-                        // A. Cast shadow
-                        drawLine(Color(0xFF050302).copy(alpha = 0.92f * fadeAlpha), p1 + shadowOff, p2 + shadowOff, stroke * 1.6f, cap = StrokeCap.Round)
-                        // B. Dark crevice core
-                        drawLine(Color(0xFF150A05).copy(alpha = fadeAlpha), p1, p2, stroke, cap = StrokeCap.Round)
-                        // C. Lit granite bevel highlight
-                        drawLine(Color(0xFFEDE7E3).copy(alpha = 0.80f * fadeAlpha), p1, p2, (stroke * 0.35f).coerceAtLeast(1.0f), cap = StrokeCap.Round)
-                    }
-
-                    val frac = drawnSegs - full
-                    if (full < totalSegs && frac > 0.01f) {
-                        val segT = full.toFloat() / totalSegs
-                        val stroke = (width * (1f - 0.70f * segT)).coerceAtLeast(1.2f)
-                        val p1 = Offset(pts[full].x * bW, pts[full].y * bH)
-                        val p2Full = Offset(pts[full + 1].x * bW, pts[full + 1].y * bH)
-                        val p2 = Offset(OGFxMath.lerp(p1.x, p2Full.x, frac), OGFxMath.lerp(p1.y, p2Full.y, frac))
-
-                        drawLine(Color(0xFF050302).copy(alpha = 0.92f * fadeAlpha), p1 + shadowOff, p2 + shadowOff, stroke * 1.6f, cap = StrokeCap.Round)
-                        drawLine(Color(0xFF150A05).copy(alpha = fadeAlpha), p1, p2, stroke, cap = StrokeCap.Round)
-                        drawLine(Color(0xFFEDE7E3).copy(alpha = 0.80f * fadeAlpha), p1, p2, (stroke * 0.35f).coerceAtLeast(1.0f), cap = StrokeCap.Round)
-
-                        // Advancing fracture spark at leading tip!
-                        if (progressFrac in 0.05f..0.98f && fadeAlpha > 0.1f) {
-                            val sparkR = stroke * 1.5f
-                            drawCircle(Color(0xFFFFD54F).copy(alpha = 0.7f * fadeAlpha), radius = sparkR * 1.8f, center = p2)
-                            drawCircle(Color.White.copy(alpha = fadeAlpha), radius = sparkR * 0.7f, center = p2)
-                        }
-                    }
+                // Advancing fracture spark at the leading crack tip
+                if (crackProp in 0.05f..0.98f && nodesToDraw in 1 until totalNodes && fadeAlpha > 0.1f) {
+                    val tip = faultGeometry.nodes[nodesToDraw].basePt
+                    val tipPx = Offset(tip.x * bW, tip.y * bH)
+                    drawCircle(Color(0xFFFFD54F).copy(alpha = 0.75f * fadeAlpha), radius = 3.5f, center = tipPx)
+                    drawCircle(Color.White.copy(alpha = fadeAlpha), radius = 1.8f, center = tipPx)
                 }
 
-                for (crack in allFractures) {
-                    val cP = nfSmooth(crack.startProgress, crack.startProgress + crack.durationProgress, p)
-                    if (cP > 0f) {
-                        val baseStroke = crack.widthFrac * minSide
-                        drawFractureBranch(crack.segments, cP, baseStroke)
-                        for (sub in crack.subBranches) {
-                            val subP = ((cP - 0.25f) / 0.75f).coerceIn(0f, 1f)
-                            drawFractureBranch(sub, subP, baseStroke * 0.65f)
+                // 2. Secondary hairline stress branches
+                for (branch in faultGeometry.branches) {
+                    val branchP = nfSmooth(0.24f, 0.44f, p)
+                    if (branchP > 0f && branch.size >= 2) {
+                        val bTotal = branch.size - 1
+                        val bDrawCount = (branchP * bTotal).toInt().coerceIn(0, bTotal)
+                        for (bi in 0 until bDrawCount) {
+                            val bp1 = Offset(branch[bi].x * bW, branch[bi].y * bH)
+                            val bp2 = Offset(branch[bi + 1].x * bW, branch[bi + 1].y * bH)
+                            drawSharpCrackSegment(bp1, bp2, width = 1.2f)
                         }
                     }
                 }
             }
 
-            OGParticleView(debris, Modifier.fillMaxSize(), playing = rupturing)
             OGParticleView(stoneDust, Modifier.fillMaxSize(), playing = rupturing)
         }
     }
 
     /**
      * Drop-in anime-grade **Flood Event** view.
-     * Features a sweeping flood torrent from one side across to the other,
-     * with an advancing inundation water sheet, surging Gerstner wave crest,
-     * churning frothing breaker lip, wind-whipped spray motes,
-     * Worthington capillary ripples, and tile washout into the depths.
+     * Features:
+     * - Sweeping flood torrent across the board with advancing inundation water sheet.
+     * - Surging Gerstner wave crest with churning frothing breaker lip and spray motes.
+     * - Realistic Floating Tile: When hit by the wave, water buoyancy lifts the tile off the board;
+     *   it bobs on the rolling swells, rocks naturally (pitch and roll), carries along with the current,
+     *   and washes away with foam and splash ripples.
      */
     @Composable
     fun Flood(
@@ -1422,8 +1282,9 @@ object OGEvents {
         tileWidth: Float = 0.125f,
         tileHeight: Float = 0.125f,
         playing: Boolean = true,
-        durationMs: Long = 4200L,
+        durationMs: Long = 5200L,
         seed: Int = 42,
+        tileContent: (@Composable () -> Unit)? = null,
         onDone: (() -> Unit)? = null,
     ) {
         val progress = remember(seed) { Animatable(0f) }
@@ -1431,9 +1292,6 @@ object OGEvents {
 
         val cx = targetX
         val cy = targetY
-
-        val tileHitSweep = ((cx - tileWidth * 0.5f + 0.15f) / 1.50f).coerceIn(0.05f, 0.85f)
-        val pHit = 0.08f + tileHitSweep * (0.82f - 0.08f)
 
         val waterMist = remember(seed) {
             OGFog.MIST.copy(
@@ -1478,14 +1336,17 @@ object OGEvents {
         val rippleState = remember(seed) { OGRippleState() }
         val rippleSpec = remember(seed) {
             OGRipple.POND.copy(
-                propagationSpeed = 0.30f, decayLambda = 2.4f, maxRadius = 0.58f,
+                propagationSpeed = 0.28f, decayLambda = 2.2f, maxRadius = 0.58f,
                 secondaryRings = 5, ringSpacing = 0.062f,
                 color = "#81D4FA", crestColor = "#E1F5FE", lineWidth = 0.006f,
                 squash = 0.68f, crownDroplets = false, seed = seed,
             )
         }
 
-        val sweepSpring = remember { OGSpringSpec(stiffness = 160f, dampingRatio = 0.98f) }
+        // Wave arrival progress at the target tile
+        val pHit = remember(cx) {
+            0.08f + ((cx + 0.15f) / 1.50f).coerceIn(0f, 1f) * (0.80f - 0.08f)
+        }
 
         // Flood sequence: spray begins, wave sweeps across
         LaunchedEffect(seed, playing) {
@@ -1498,10 +1359,10 @@ object OGEvents {
             delay(hitMs)
             var nowMs = 0L; withFrameMillis { nowMs = it }
             rippleState.spawn(cx, cy, nowMs)
-            rippleState.spawn(cx - 0.12f, cy + 0.08f, nowMs)
+            rippleState.spawn(cx - 0.10f, cy + 0.06f, nowMs)
             val rng = Random(seed + 99)
             repeat(6) {
-                delay(280L); withFrameMillis { nowMs = it }
+                delay(320L); withFrameMillis { nowMs = it }
                 rippleState.spawn(rng.nextFloat() * 0.7f + 0.15f, rng.nextFloat() * 0.7f + 0.15f, nowMs)
             }
         }
@@ -1514,11 +1375,11 @@ object OGEvents {
         val p = progress.value
 
         // Tidal surge heave (camera undulates gently with the rising flood mass)
-        val heaveY = sin(p * 5f * PI.toFloat()) * 9f * nfSmooth(0.08f, 0.40f, p) * (1f - nfSmooth(0.82f, 1f, p))
+        val heaveY = sin(p * 5f * PI.toFloat()) * 8f * nfSmooth(0.08f, 0.40f, p) * (1f - nfSmooth(0.82f, 1f, p))
 
         Box(
             modifier.fillMaxSize().graphicsLayer {
-                alpha = nfSmooth(0f, 0.05f, p) * (1f - nfSmooth(0.84f, 1f, p))
+                alpha = nfSmooth(0f, 0.05f, p) * (1f - nfSmooth(0.88f, 1f, p))
                 translationY = heaveY
             }.clipToBounds(),
         ) {
@@ -1533,12 +1394,13 @@ object OGEvents {
             // Rising water spray from below
             OGParticleView(floodSpray, Modifier.fillMaxSize(), playing = sprayPlaying)
 
-            // Canvas: Inundation water sheet, surging wave breaker, and the washed tile
+            // ── LAYER 1: Inundation Water Sheet (Submerged board behind wave) ─────────────
             Canvas(Modifier.fillMaxSize()) {
-                val w = size.width; val h = size.height
+                val w = size.width
+                val h = size.height
 
                 // Wave progress: sweeps across from left to right (from -0.15 to 1.35)
-                val floodSweep = nfSmooth(0.08f, 0.82f, p)
+                val floodSweep = nfSmooth(0.06f, 0.82f, p)
                 val frontX = (-0.15f + floodSweep * 1.50f) * w
 
                 if (frontX > -50f && frontX < w + 200f) {
@@ -1548,11 +1410,11 @@ object OGEvents {
                     fun waveProfile(y: Float): Float {
                         val normY = y / h
                         return frontX +
-                            sin(normY * 4f * PI.toFloat() + p * 12f) * (w * 0.035f) +
-                            cos(normY * 7f * PI.toFloat() - p * 8f) * (w * 0.020f)
+                            sin(normY * 4f * PI.toFloat() + p * 10f) * (w * 0.035f) +
+                            cos(normY * 7f * PI.toFloat() - p * 7f) * (w * 0.020f)
                     }
 
-                    // A. Submerged Inundation Water Sheet (Covers the board tiles behind the wave)
+                    // Submerged Inundation Water Sheet
                     val waterSheetPath = Path().apply {
                         moveTo(0f, 0f)
                         lineTo(waveProfile(0f), 0f)
@@ -1563,7 +1425,6 @@ object OGEvents {
                         lineTo(0f, h)
                         close()
                     }
-                    // Depth volumetric water gradient: dark navy trench -> deep oceanic azure -> tropical turquoise -> translucent shelf
                     val waterDepthBrush = Brush.horizontalGradient(
                         colorStops = arrayOf(
                             0f to Color(0xE60D233A),
@@ -1576,14 +1437,14 @@ object OGEvents {
                     )
                     drawPath(waterSheetPath, brush = waterDepthBrush)
 
-                    // B. Rising Cavitation Bubbles churning in the flooded volume
+                    // Rising Cavitation Bubbles churning in the flooded volume
                     if (frontX > 10f) {
                         val bubbleRng = Random(seed + 19)
                         val bubbleCount = 18
                         for (b in 0 until bubbleCount) {
                             val bxFrac = bubbleRng.nextFloat()
                             val bx = bxFrac * frontX
-                            val by = ((bubbleRng.nextFloat() + p * 0.65f + b * 0.11f) % 1f) * h
+                            val by = ((bubbleRng.nextFloat() + p * 0.55f + b * 0.11f) % 1f) * h
                             val br = 3.5f + bubbleRng.nextFloat() * 8.5f
                             val bAlpha = (nfSmooth(0.05f, 0.25f, bx / frontX) * (1f - nfSmooth(0.90f, 1f, bx / frontX))).coerceIn(0f, 1f)
                             if (bx > 5f && bAlpha > 0.05f) {
@@ -1591,11 +1452,104 @@ object OGEvents {
                             }
                         }
                     }
+                }
+            }
 
-                    // C. Shimmering Caustic Light Ribbons on the flooded surface
+            // ── LAYER 2: The Floating Tile (Bobbing, Rocking & Washing with the Waves) ───
+            val density = LocalDensity.current
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val bW = maxWidth
+                val bH = maxHeight
+                val tW = bW * tileWidth
+                val tH = bH * tileHeight
+
+                val isFloating = p >= pHit
+                val floatP = if (isFloating) ((p - pHit) / (0.92f - pHit)).coerceIn(0f, 1f) else 0f
+
+                // Pre-hit subtle water lap tremor as wave approaches
+                val preHitP = ((p - (pHit - 0.05f)) / 0.05f).coerceIn(0f, 1f)
+                val preTremorY = if (!isFloating && p >= pHit - 0.05f) -preHitP * with(density) { 2.dp.toPx() } else 0f
+
+                // 1. Buoyancy lift: tile pops up off the board as water rushes beneath
+                val liftProgress = (floatP / 0.12f).coerceIn(0f, 1f)
+                val liftY = sin(liftProgress * PI.toFloat() / 2f) * with(density) { 16.dp.toPx() }
+
+                // 2. Wave bobbing oscillation: rhythmic vertical bob in the churning water
+                val bobY = sin(floatP * 14f * PI.toFloat()) * with(density) { 5.dp.toPx() }
+                val totalTransY = if (!isFloating) preTremorY else (-liftY + bobY)
+
+                // 3. Current drift: rushes to the right with the wave
+                val driftCurve = floatP * floatP * (1.10f - 0.10f * floatP)
+                val transX = if (!isFloating) 0f else driftCurve * with(density) { (bW * 0.42f).toPx() }
+
+                // 4. Floating pitch & roll: rocks naturally like a wooden block on rolling swells
+                val rollZ = if (!isFloating) 0f else sin(floatP * 11f * PI.toFloat()) * 12f
+                val pitchX = if (!isFloating) 0f else (12f + cos(floatP * 9f * PI.toFloat()) * 8f)
+                val yawY = if (!isFloating) 0f else sin(floatP * 7f * PI.toFloat()) * 8f
+
+                // 5. Fade out as it washes off the board
+                val washFade = if (floatP < 0.78f) 1f else (1f - ((floatP - 0.78f) / 0.22f)).coerceIn(0f, 1f)
+                val scale = if (!isFloating) 1f else (1f - (floatP - 0.78f).coerceAtLeast(0f) * 0.25f)
+
+                if (washFade > 0.005f) {
+                    Box(
+                        Modifier
+                            .offset(
+                                x = bW * cx - tW / 2f,
+                                y = bH * cy - tH / 2f,
+                            )
+                            .width(tW)
+                            .height(tH)
+                            .graphicsLayer {
+                                translationX = transX
+                                translationY = totalTransY
+                                scaleX = scale
+                                scaleY = scale
+                                rotationZ = rollZ
+                                rotationX = pitchX
+                                rotationY = yawY
+                                alpha = washFade
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (tileContent != null) {
+                            tileContent()
+                        } else {
+                            DefaultFloodTile()
+                        }
+                        // Wet water sheen overlay when afloat
+                        if (isFloating) {
+                            Box(
+                                Modifier.fillMaxSize()
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Color(0x3080D8FF)),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── LAYER 3: Frothing Wave Breaker, Spray, Caustics & Splashes ──────────────
+            Canvas(Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+
+                val floodSweep = nfSmooth(0.06f, 0.82f, p)
+                val frontX = (-0.15f + floodSweep * 1.50f) * w
+
+                if (frontX > -50f && frontX < w + 200f) {
+                    val segments = 32
+                    fun waveProfile(y: Float): Float {
+                        val normY = y / h
+                        return frontX +
+                            sin(normY * 4f * PI.toFloat() + p * 10f) * (w * 0.035f) +
+                            cos(normY * 7f * PI.toFloat() - p * 7f) * (w * 0.020f)
+                    }
+
+                    // Shimmering Caustic Light Ribbons on the flooded surface
                     val causticsCount = 6
                     for (c in 0 until causticsCount) {
-                        val caustY = (c.toFloat() / causticsCount) * h + sin(p * 8f + c) * 15f
+                        val caustY = (c.toFloat() / causticsCount) * h + sin(p * 7f + c) * 15f
                         val caustPath = Path()
                         val caustEnd = (waveProfile(caustY) - 20f).coerceAtLeast(0f)
                         if (caustEnd > 10f) {
@@ -1603,7 +1557,7 @@ object OGEvents {
                             val cSteps = 12
                             for (ci in 1..cSteps) {
                                 val cxVal = (ci.toFloat() / cSteps) * caustEnd
-                                val cyVal = caustY + sin(cxVal * 0.04f + p * 10f + c) * 8f
+                                val cyVal = caustY + sin(cxVal * 0.04f + p * 8f + c) * 8f
                                 caustPath.lineTo(cxVal, cyVal)
                             }
                             drawPath(
@@ -1614,7 +1568,7 @@ object OGEvents {
                         }
                     }
 
-                    // C. Frothing Wave Breaker Lip (Smooth rolling ocean wave crest with aerated foam)
+                    // Frothing Wave Breaker Lip (Smooth rolling ocean wave crest with aerated foam)
                     val lipPath = Path().apply {
                         moveTo(waveProfile(0f), 0f)
                         for (i in 1..segments) {
@@ -1635,7 +1589,7 @@ object OGEvents {
                         drawCircle(Color.White.copy(alpha = 0.80f), radius = fr, center = Offset(fx, fy))
                     }
 
-                    // D. Wind-Whipped Spray Motes flying off the wave lip
+                    // Wind-Whipped Spray Motes flying off the wave lip
                     val rng = Random(seed + (p * 80).toInt())
                     for (k in 0 until 18) {
                         val py = rng.nextFloat() * h
@@ -1671,12 +1625,18 @@ object OGEvents {
 
 // ── Shared Animation Math Helpers ─────────────────────────────────────────────────────────────
 
-private data class TectonicFracture(
-    val segments: List<Offset>,
-    val subBranches: List<List<Offset>>,
-    val startProgress: Float,
-    val durationProgress: Float,
-    val widthFrac: Float,
+private data class FaultNode(
+    val s: Float,
+    val basePt: Offset,
+)
+
+private data class QuakeFaultData(
+    val uDir: Offset,
+    val nDir: Offset,
+    val nodes: List<FaultNode>,
+    val branches: List<List<Offset>>,
+    val riftReach: Float,
+    val riftHalfMax: Float,
 )
 
 @Composable
@@ -1692,12 +1652,18 @@ private fun DefaultQuakeTile() {
     }
 }
 
-private data class TectonicFaultSeg(
-    val start: Offset,
-    val end: Offset,
-    val widthFrac: Float,
-    val revealOrder: Float,
-)
+@Composable
+private fun DefaultFloodTile() {
+    Box(
+        Modifier.fillMaxSize()
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color(0xFFFAF7F0))
+            .border(1.dp, Color(0xFF0288D1), RoundedCornerShape(3.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Text("🌊", fontSize = 18.sp, color = Color(0xFF01579B))
+    }
+}
 
 private fun nfSmooth(edge0: Float, edge1: Float, x: Float): Float {
     if (edge1 <= edge0) return if (x >= edge1) 1f else 0f
