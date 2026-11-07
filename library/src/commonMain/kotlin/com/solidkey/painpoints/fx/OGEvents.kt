@@ -568,6 +568,7 @@ object OGEvents {
         playing: Boolean = true,
         durationMs: Long = 3400L,
         seed: Int = 42,
+        tileContent: (@Composable () -> Unit)? = null,
         onDone: (() -> Unit)? = null,
     ) {
         val progress = remember(seed) { Animatable(0f) }
@@ -581,18 +582,22 @@ object OGEvents {
         val tImpact = (180f / durationMs).coerceIn(0.03f, 0.20f)
         val tBurn = (980f / durationMs).coerceIn(0.20f, 0.40f)
 
-        // Randomized organic burn footprint for the struck tile
+        // Randomized organic burn pattern on the struck tile
         val burnData = remember(seed, tileWidth, tileHeight) {
             val rng = Random(seed)
+            val soX = (rng.nextFloat() - 0.5f) * (tileWidth * 0.18f)
+            val soY = (rng.nextFloat() - 0.5f) * (tileHeight * 0.18f)
+            val strikeOffset = Offset(soX, soY)
+
             val minDim = kotlin.math.min(tileWidth, tileHeight)
 
-            // Inner jagged charred star core (14 vertices)
+            // Inner jagged charred core (14 vertices)
             val numPts = 14
             val scorchPts = mutableListOf<Offset>()
             for (i in 0 until numPts) {
                 val angle = i * (2f * PI.toFloat() / numPts) + (rng.nextFloat() - 0.5f) * 0.22f
                 val r = (0.28f + rng.nextFloat() * 0.24f) * minDim
-                scorchPts.add(Offset(cos(angle) * r, sin(angle) * r))
+                scorchPts.add(Offset(soX + cos(angle) * r, soY + sin(angle) * r))
             }
 
             // Outer soft soot perimeter (12 vertices)
@@ -600,8 +605,8 @@ object OGEvents {
             val sootPts = mutableListOf<Offset>()
             for (i in 0 until numSoot) {
                 val angle = i * (2f * PI.toFloat() / numSoot) + (rng.nextFloat() - 0.5f) * 0.25f
-                val r = (0.42f + rng.nextFloat() * 0.28f) * minDim
-                sootPts.add(Offset(cos(angle) * r, sin(angle) * r))
+                val r = (0.42f + rng.nextFloat() * 0.26f) * minDim
+                sootPts.add(Offset(soX + cos(angle) * r, soY + sin(angle) * r))
             }
 
             // Radiating glowing ember fracture veins
@@ -609,8 +614,8 @@ object OGEvents {
             val cracks = mutableListOf<List<Offset>>()
             for (c in 0 until numCracks) {
                 val baseAng = c * (2f * PI.toFloat() / numCracks) + (rng.nextFloat() - 0.5f) * 0.40f
-                val crackPts = mutableListOf(Offset.Zero)
-                var cur = Offset.Zero
+                val crackPts = mutableListOf(strikeOffset)
+                var cur = strikeOffset
                 val segs = 3
                 val segLen = minDim * (0.12f + rng.nextFloat() * 0.08f)
                 var curAng = baseAng
@@ -622,19 +627,19 @@ object OGEvents {
                 cracks.add(crackPts)
             }
 
-            // Scorch pit spots with ember rims
+            // Scorch pit spots
             val numSpots = 4 + rng.nextInt(3)
             val spots = mutableListOf<Pair<Offset, Float>>()
             for (sp in 0 until numSpots) {
                 val spAng = rng.nextFloat() * 2f * PI.toFloat()
                 val spR = rng.nextFloat() * minDim * 0.30f
-                val spPt = Offset(cos(spAng) * spR, sin(spAng) * spR)
+                val spPt = Offset(soX + cos(spAng) * spR, soY + sin(spAng) * spR)
                 val spRadius = minDim * (0.032f + rng.nextFloat() * 0.040f)
                 spots.add(spPt to spRadius)
             }
 
             ThunderBurnData(
-                strikeOffset = Offset.Zero,
+                strikeOffset = strikeOffset,
                 scorchPolygon = scorchPts,
                 sootPolygon = sootPts,
                 emberCracks = cracks,
@@ -695,15 +700,19 @@ object OGEvents {
             )
         }
         val burnFlame = remember(seed) {
+            val rng = Random(seed)
+            val tongues = 6 + (seed % 3)
+            val h = 0.80f + ((seed % 7) - 3) * 0.02f
+            val sway = 0.06f + ((seed % 5) - 2) * 0.01f
             OGFlameSpec(
                 name = "tile_fire",
                 coreColor = "#FFF59D",
                 tipColor = "#FF3D00",
-                tongues = 7,
-                height = 0.82f,
+                tongues = tongues,
+                height = h,
                 heightJitter = 0.35f,
                 width = 0.36f,
-                sway = 0.07f,
+                sway = sway,
                 swaySpeed = 1.3f,
                 flicker = 0.40f,
                 flickerSpeed = 2.6f,
@@ -858,7 +867,7 @@ object OGEvents {
                         }
                     }
 
-                    // 2. Tile Body: White-hot impact -> Charred charcoal body -> Scorched ember glow
+                    // 2. Tile Body: White-hot impact -> Charred charcoal body -> Scorched ember glow with organic scorch
                     val scorchAlpha = (1f - nfSmooth(0.85f, 1f, p)).coerceIn(0f, 1f)
                     val tileJitterX = if (p < tImpact + 0.12f) (Random(seed + (p * 200).toInt()).nextFloat() - 0.5f) * 8f else 0f
                     val tileJitterY = if (p < tImpact + 0.12f) (Random(seed + 1 + (p * 200).toInt()).nextFloat() - 0.5f) * 8f else 0f
@@ -881,54 +890,59 @@ object OGEvents {
                             cornerRadius = CornerRadius(8f),
                         )
 
-                        // 3. Organic randomized scorch pattern burned onto the tile:
-                        // Soot outer halo
+                        // Organic randomized scorch pattern on the tile surface
+                        val tileMidX = tLeft + tW * 0.5f
+                        val tileMidY = tTop + tH * 0.5f
+                        val sScaleX = size.width
+                        val sScaleY = size.height
+
+                        // 2a. Outer soft soot perimeter
                         if (burnData.sootPolygon.size >= 3) {
                             val sootPath = Path().apply {
                                 val first = burnData.sootPolygon[0]
-                                moveTo(tLeft + tW * 0.5f + first.x * size.width, tTop + tH * 0.5f + first.y * size.height)
+                                moveTo(tileMidX + first.x * sScaleX, tileMidY + first.y * sScaleY)
                                 for (i in 1 until burnData.sootPolygon.size) {
                                     val pt = burnData.sootPolygon[i]
-                                    lineTo(tLeft + tW * 0.5f + pt.x * size.width, tTop + tH * 0.5f + pt.y * size.height)
+                                    lineTo(tileMidX + pt.x * sScaleX, tileMidY + pt.y * sScaleY)
                                 }
                                 close()
                             }
-                            drawPath(sootPath, color = Color(0xFF26140B).copy(alpha = 0.75f * scorchAlpha))
+                            drawPath(sootPath, color = Color(0xFF26140B).copy(alpha = 0.70f * scorchAlpha))
                         }
 
-                        // Charred black star core
+                        // 2b. Charred black core
                         if (burnData.scorchPolygon.size >= 3) {
                             val charPath = Path().apply {
                                 val first = burnData.scorchPolygon[0]
-                                moveTo(tLeft + tW * 0.5f + first.x * size.width, tTop + tH * 0.5f + first.y * size.height)
+                                moveTo(tileMidX + first.x * sScaleX, tileMidY + first.y * sScaleY)
                                 for (i in 1 until burnData.scorchPolygon.size) {
                                     val pt = burnData.scorchPolygon[i]
-                                    lineTo(tLeft + tW * 0.5f + pt.x * size.width, tTop + tH * 0.5f + pt.y * size.height)
+                                    lineTo(tileMidX + pt.x * sScaleX, tileMidY + pt.y * sScaleY)
                                 }
                                 close()
                             }
-                            drawPath(charPath, color = Color(0xFF0C0907).copy(alpha = 0.95f * scorchAlpha))
+                            drawPath(charPath, color = Color(0xFF0C0907).copy(alpha = 0.92f * scorchAlpha))
                         }
 
-                        // Glowing fiery ember fracture veins
+                        // 2c. Dark blast pits with ember rims
+                        for ((spotOffset, spotRadius) in burnData.scorchSpots) {
+                            val spX = tileMidX + spotOffset.x * sScaleX
+                            val spY = tileMidY + spotOffset.y * sScaleY
+                            val spR = spotRadius * sScaleX
+                            drawCircle(Color(0xFF0A0705).copy(alpha = 0.95f * scorchAlpha), radius = spR, center = Offset(spX, spY))
+                            drawCircle(Color(0xFFFF9100).copy(alpha = 0.75f * scorchAlpha), radius = spR, center = Offset(spX, spY), style = Stroke(width = 1.2f))
+                        }
+
+                        // 2d. Glowing ember fracture veins
                         for (crack in burnData.emberCracks) {
                             if (crack.size >= 2) {
                                 for (ci in 0 until crack.size - 1) {
-                                    val cp1 = Offset(tLeft + tW * 0.5f + crack[ci].x * size.width, tTop + tH * 0.5f + crack[ci].y * size.height)
-                                    val cp2 = Offset(tLeft + tW * 0.5f + crack[ci + 1].x * size.width, tTop + tH * 0.5f + crack[ci + 1].y * size.height)
+                                    val cp1 = Offset(tileMidX + crack[ci].x * sScaleX, tileMidY + crack[ci].y * sScaleY)
+                                    val cp2 = Offset(tileMidX + crack[ci + 1].x * sScaleX, tileMidY + crack[ci + 1].y * sScaleY)
                                     drawLine(Color(0xFFFF5722).copy(alpha = 0.85f * scorchAlpha), cp1, cp2, strokeWidth = 2.8f, cap = StrokeCap.Round)
                                     drawLine(Color(0xFFFFD54F).copy(alpha = 0.95f * scorchAlpha), cp1, cp2, strokeWidth = 1.0f, cap = StrokeCap.Round)
                                 }
                             }
-                        }
-
-                        // Dark blast craters with ember rims
-                        for ((spotOffset, spotRadius) in burnData.scorchSpots) {
-                            val spX = tLeft + tW * 0.5f + spotOffset.x * size.width
-                            val spY = tTop + tH * 0.5f + spotOffset.y * size.height
-                            val spR = spotRadius * size.width
-                            drawCircle(Color(0xFF080503).copy(alpha = 0.95f * scorchAlpha), radius = spR, center = Offset(spX, spY))
-                            drawCircle(Color(0xFFFF9100).copy(alpha = 0.75f * scorchAlpha), radius = spR, center = Offset(spX, spY), style = Stroke(width = 1.2f))
                         }
 
                         // Scorched ember underglow rim
@@ -953,7 +967,6 @@ object OGEvents {
                             val flareR = tW * 1.8f * whiteFlashAlpha
                             drawCircle(Color(0xFF00E5FF).copy(alpha = whiteFlashAlpha * 0.8f), radius = flareR * 1.4f, center = Offset(cx * size.width, cy * size.height), blendMode = BlendMode.Plus)
                             drawCircle(Color.White.copy(alpha = whiteFlashAlpha), radius = flareR * 0.6f, center = Offset(cx * size.width, cy * size.height), blendMode = BlendMode.Plus)
-                            // Diamond spikes
                             for (sp in 0..3) {
                                 val ang = sp * (PI.toFloat() / 2f)
                                 val sx = cos(ang) * flareR * 2.5f
