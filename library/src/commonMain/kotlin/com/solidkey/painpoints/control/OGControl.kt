@@ -15,6 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -113,28 +116,41 @@ fun OGControl(
     labelPadding: Dp = 14.dp,
 ) {
     val style = remember(spec.labelStyle, labelStyle) { spec.labelStyle?.toStyle() ?: labelStyle }
-    val effect = remember(spec.pressEffect) { ogControlPressEffect(spec.pressEffect) }
+    val effect = remember(spec.pressEffect, spec.depth) { ogControlPressEffect(spec.pressEffect, spec.depth.dp) }
     val fillColor = if (enabled) backgroundColor else backgroundColor.copy(alpha = spec.disabledAlpha)
     val textColor = if (enabled) contentColor else contentColor.copy(alpha = 0.5f)
     val inkColor = spec.outline?.let {
         contentColor.copy(alpha = if (enabled) it.inkAlpha else it.inkAlpha * 0.44f)
     }
     val specFill = spec.fill
+    val hasDepth = spec.depth > 0f
+
+    val resolvedLipColor = remember(spec.lipColor, fillColor) {
+        spec.lipColor?.toSpecColor() ?: Color(
+            red = (fillColor.red * 0.72f).coerceIn(0f, 1f),
+            green = (fillColor.green * 0.72f).coerceIn(0f, 1f),
+            blue = (fillColor.blue * 0.72f).coerceIn(0f, 1f),
+            alpha = fillColor.alpha,
+        )
+    }
 
     Box(
         modifier
-            .height(spec.height.dp)
+            .height((spec.height + spec.depth).dp)
             .clip(RoundedCornerShape(spec.cornerRadius.dp))
             .drawWithCache {
-                val brush: Brush? = fill ?: specFill?.sanitized()?.toBrush(0f, 0f, size.width, size.height)
+                val depthPx = if (hasDepth) spec.depth.dp.toPx() else 0f
+                val cornerRadiusPx = spec.cornerRadius.dp.toPx()
+                val faceH = (size.height - depthPx).coerceAtLeast(0f)
+                val brush: Brush? = fill ?: specFill?.sanitized()?.toBrush(0f, 0f, size.width, faceH)
                 val o = spec.outline
                 val outlinePath: Path? = o?.let {
                     val pts = ogControlOutline(
                         width = size.width,
-                        height = size.height,
-                        cornerRadius = spec.cornerRadius.dp.toPx(),
+                        height = faceH,
+                        cornerRadius = cornerRadiusPx,
                         inset = it.inset.dp.toPx(),
-                        amplitude = size.height * it.amplitude,
+                        amplitude = faceH * it.amplitude,
                         detail = it.detail,
                         seed = seed,
                     )
@@ -144,8 +160,49 @@ fun OGControl(
                     Stroke(width = it.width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 }
                 onDrawBehind {
-                    if (brush != null) drawRect(brush, alpha = if (enabled) 1f else spec.disabledAlpha)
-                    else drawRect(fillColor)
+                    // 1. 3D bottom extrusion lip
+                    if (hasDepth) {
+                        drawRoundRect(
+                            color = resolvedLipColor,
+                            topLeft = Offset(0f, 0f),
+                            size = Size(size.width, size.height),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadiusPx),
+                        )
+                    }
+
+                    // 2. Top face surface
+                    if (brush != null) {
+                        drawRoundRect(
+                            brush,
+                            topLeft = Offset(0f, 0f),
+                            size = Size(size.width, faceH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadiusPx),
+                            alpha = if (enabled) 1f else spec.disabledAlpha,
+                        )
+                    } else {
+                        drawRoundRect(
+                            fillColor,
+                            topLeft = Offset(0f, 0f),
+                            size = Size(size.width, faceH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadiusPx),
+                        )
+                    }
+
+                    // 3. Top-edge glossy highlight chamfer
+                    if (spec.highlight && faceH > 0f && enabled) {
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0.02f)),
+                                startY = 0f,
+                                endY = faceH * 0.44f,
+                            ),
+                            topLeft = Offset(0f, 0f),
+                            size = Size(size.width, faceH * 0.44f),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(cornerRadiusPx),
+                        )
+                    }
+
+                    // 4. Sketched ink outline
                     if (outlinePath != null && inkColor != null && stroke != null) {
                         drawPath(outlinePath, inkColor, style = stroke)
                     }
@@ -156,7 +213,8 @@ fun OGControl(
                 pressEffect = effect,
                 contentDescription = contentDescription,
                 onClick = onClick,
-            ),
+            )
+            .padding(bottom = if (hasDepth) spec.depth.dp else 0.dp),
         contentAlignment = Alignment.Center,
     ) {
         if (enabled) {
@@ -179,7 +237,8 @@ fun OGControl(
 }
 
 /** The [OGPressEffect] named by an [OGControlSpec.pressEffect] string. */
-fun ogControlPressEffect(name: String): OGPressEffect = when (name.trim().lowercase()) {
+fun ogControlPressEffect(name: String, depth: Dp = 4.dp): OGPressEffect = when (name.trim().lowercase()) {
+    "tactile" -> OGPressEffect.Tactile(depth = depth)
     "dim" -> OGPressEffect.Dim()
     "brutalist" -> OGPressEffect.Brutalist()
     "none" -> OGPressEffect.None
