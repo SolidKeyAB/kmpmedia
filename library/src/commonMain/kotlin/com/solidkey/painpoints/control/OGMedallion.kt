@@ -85,23 +85,26 @@ fun OGMedallion(
 
     Box(
         modifier = modifier
-            .pointerInput(enabled) {
-                if (!enabled) {
-                    detectTapGestures(
-                        onTap = { onLongClick?.invoke() ?: onClick() },
-                        onLongPress = { onLongClick?.invoke() },
-                    )
-                } else {
-                    detectTapGestures(
-                        onPress = {
+            .pointerInput(enabled, onLongClick, onClick) {
+                detectTapGestures(
+                    onPress = {
+                        if (enabled) {
                             isPressed = true
-                            val success = tryAwaitRelease()
+                            tryAwaitRelease()
                             isPressed = false
-                            if (success) onClick()
-                        },
-                        onLongPress = { onLongClick?.invoke() },
-                    )
-                }
+                        }
+                    },
+                    onTap = {
+                        if (enabled) {
+                            onClick()
+                        } else {
+                            onLongClick?.invoke()
+                        }
+                    },
+                    onLongPress = {
+                        onLongClick?.invoke()
+                    },
+                )
             }
             .graphicsLayer {
                 val s = if (isPressed) 0.96f else 1f
