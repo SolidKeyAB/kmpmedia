@@ -134,8 +134,8 @@ fun OGMedallion(
                     draw3DScallopedMedallion(
                         center = Offset(cx, cy),
                         radius = minDim * 0.48f,
-                        baseColor = if (isArmed) Color(0xFFD4AF37) else baseColor,
-                        coreColor = if (isArmed) accentColor else baseColor,
+                        baseColor = baseColor,
+                        coreColor = accentColor,
                         isPressed = isPressed,
                         isArmed = isArmed,
                     )
