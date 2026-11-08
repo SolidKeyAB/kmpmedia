@@ -1,5 +1,7 @@
 package com.solidkey.painpoints.control
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -82,6 +84,16 @@ fun OGMedallion(
     onClick: () -> Unit,
 ) {
     var isPressed by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1f,
+        animationSpec = spring(stiffness = 650f, dampingRatio = 0.55f),
+        label = "medallionScale",
+    )
+    val pressDy by animateFloatAsState(
+        targetValue = if (isPressed) 8f else 0f,
+        animationSpec = spring(stiffness = 650f, dampingRatio = 0.55f),
+        label = "medallionDy",
+    )
 
     Box(
         modifier = modifier
@@ -107,10 +119,9 @@ fun OGMedallion(
                 )
             }
             .graphicsLayer {
-                val s = if (isPressed) 0.96f else 1f
-                scaleX = s
-                scaleY = s
-                translationY = if (isPressed) 2f else 0f
+                scaleX = pressScale
+                scaleY = pressScale
+                translationY = pressDy
                 alpha = if (enabled) 1f else 0.50f
             },
         contentAlignment = Alignment.Center,
