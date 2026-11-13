@@ -4,6 +4,27 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.48.0] — 2026-11-14
+
+> **Richer bubble physics + scroll-driven firefly mote field.**
+> Two additive FX extensions — no existing API breaks.
+
+### Changed — `drawOGBubbleFrame` iridescent deformation
+- **`drawOGBubbleFrame` gains `scaleX`/`scaleY` and `ripplePhase`/`rippleAmp` params** (all defaulting
+  to identity / off so every existing call site compiles unchanged). When `scaleX != 1 || scaleY != 1`,
+  all draw calls are wrapped in a `withTransform { scale(…, pivot=center) }` block for volume-preserving
+  squash-and-stretch. When `rippleAmp > 0`, three iridescent thin-film interference oval layers (cyan /
+  magenta / gold Newton crescents) are composited before the rim and specular — their positions oscillate
+  with `sin(ripplePhase)` for living shimmer. Alpha of each iridescent layer scales with `rippleAmp × alpha`
+  for clean fade-in and bubble-pop animations.
+
+### Changed — `OGFireflySpec` scroll velocity
+- **`OGFireflySpec` gains `scrollVX`/`scrollVY: Float = 0f`** (serializable, defaults zero — fully
+  back-compat). When non-zero, `OGFireflyState.update()` adds `scrollV{X,Y} × dt` to each firefly's
+  normalised position in addition to Brownian drift; positions wrap toroidally via the existing `frac()`
+  helper. Use `scrollVX = -gameSpeed * 0.001f` to drive the mote field with a horizontal scroller's speed.
+  The codec prompt documents both fields.
+
 ## [1.47.0] — 2026-10-18
 
 > **Living-vector honest motion — a described figure that *articulates* — plus five authoring packs.**
