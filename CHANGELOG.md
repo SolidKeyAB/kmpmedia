@@ -4,7 +4,7 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
-## [1.48.0] — 2026-11-14
+## [1.49.0] — 2026-11-14
 
 > **Richer bubble physics + scroll-driven firefly mote field.**
 > Two additive FX extensions — no existing API breaks.
