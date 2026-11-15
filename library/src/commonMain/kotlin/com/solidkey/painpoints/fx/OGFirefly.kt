@@ -31,7 +31,8 @@ object OGFirefly {
         radius and glowRadius are fractions of the shorter view dimension; driftSpeed is fraction/sec.
 
         Fields (all optional): name, count, coupling, omegaMean, omegaSpread, driftSpeed, turbulence,
-        radius, color, glowColor, glowRadius, blinkPower, opacity, seed.
+        radius, color, glowColor, glowRadius, blinkPower, opacity, seed,
+        scrollVX, scrollVY (fraction of view size/sec — drive the mote field with game scroll speed).
 
         Examples:
           {"name":"meadow","count":52,"coupling":2.8,"omegaMean":1.6,"color":"#CCFF90"}

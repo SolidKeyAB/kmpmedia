@@ -4,6 +4,60 @@ All notable changes to **KMPMedia** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims for
 [Semantic Versioning](https://semver.org/).
 
+## [1.50.0] — 2026-11-15
+
+> **Cinematic infinite perspective path — pseudo-3D depth and vanishing-point rendering on pure 2D Canvas.**
+> New `depth/` primitives; zero shaders, zero external deps.
+
+### Added — `OGPerspectiveCamera` + `OGInfinitePath`
+- **`OGPerspectiveCamera`** (new, `depth/`). Pinhole camera data class with `focalLength`,
+  `cameraHeight`, `horizonFraction` and four pure math helpers: `perspectiveScale(z)`,
+  `projectX(worldX, z, vpX)`, `groundZAt(screenY, horizonY)`, `screenYAt(z, horizonY)`.
+  Zero runtime — all functions are testable, composable math.
+- **`OGInfinitePathView` / `drawOGInfinitePathFrame`** (new, `depth/`). Continuously-scrolling
+  pseudo-3D road scene rendered entirely with Canvas draw calls. Rendering layers:
+  1. Sky + ground gradients.
+  2. Road surface — 70-step scanline-sampled curved polygon (OutRun 1986 scanline technique:
+     `z(y) = focalLength × cameraHeight / (screenY − horizonY)`) filled with one `drawPath`.
+  3. Shoulders and dashed centre-line marks, phase-corrected to scroll continuously.
+  4. Billboard tree silhouettes — painter's-algorithm z-sort, triangle crown + rect trunk.
+  5. Lambert-Beer atmospheric haze — horizon gradient, `alpha ∝ depth`.
+  6. Pulsing target beacon at the vanishing point.
+- **`OGPathDynamics`** — dual-harmonic road bend: centre X =
+  `A(0.6·sin(f₁·z) + 0.4·sin(f₂·z))`. Sinusoidal guarantees the path always returns to
+  centre. The VP tracks the road's first derivative × `cameraFollowStrength`, leaning the
+  camera into every curve naturally.
+- **`OGTreeLineSpec`**, **`OGInfinitePathColors`** — tree billboard config and pre-resolved
+  colour container (allocated once per spec change via `remember`).
+- **13 `commonTest` tests** covering projection round-trips, amplitude bounds, heading
+  as a numerical derivative, seed variation, and RNG range/determinism.
+
+### Composes with existing primitives
+`OGParticleSystem` (depth-scattered particles with `worldZ`), `OGFog` (place emitters near VP),
+`OGSway` (apply after projection, scale amplitude by perspective factor), `Modifier.ogLook`
+(whole-scene colour grade), `OGStage` (fits as a future `OGStageContent.PerspectiveScene`).
+
+## [1.49.0] — 2026-11-14
+
+> **Richer bubble physics + scroll-driven firefly mote field.**
+> Two additive FX extensions — no existing API breaks.
+
+### Changed — `drawOGBubbleFrame` iridescent deformation
+- **`drawOGBubbleFrame` gains `scaleX`/`scaleY` and `ripplePhase`/`rippleAmp` params** (all defaulting
+  to identity / off so every existing call site compiles unchanged). When `scaleX != 1 || scaleY != 1`,
+  all draw calls are wrapped in a `withTransform { scale(…, pivot=center) }` block for volume-preserving
+  squash-and-stretch. When `rippleAmp > 0`, three iridescent thin-film interference oval layers (cyan /
+  magenta / gold Newton crescents) are composited before the rim and specular — their positions oscillate
+  with `sin(ripplePhase)` for living shimmer. Alpha of each iridescent layer scales with `rippleAmp × alpha`
+  for clean fade-in and bubble-pop animations.
+
+### Changed — `OGFireflySpec` scroll velocity
+- **`OGFireflySpec` gains `scrollVX`/`scrollVY: Float = 0f`** (serializable, defaults zero — fully
+  back-compat). When non-zero, `OGFireflyState.update()` adds `scrollV{X,Y} × dt` to each firefly's
+  normalised position in addition to Brownian drift; positions wrap toroidally via the existing `frac()`
+  helper. Use `scrollVX = -gameSpeed * 0.001f` to drive the mote field with a horizontal scroller's speed.
+  The codec prompt documents both fields.
+
 ## [1.47.0] — 2026-10-18
 
 > **Living-vector honest motion — a described figure that *articulates* — plus five authoring packs.**

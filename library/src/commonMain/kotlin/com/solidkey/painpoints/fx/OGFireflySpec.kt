@@ -48,6 +48,19 @@ data class OGFireflySpec(
     /** Overall brightness scale (0..1). */
     val opacity: Float = 1f,
     val seed: Int = 0,
+    /**
+     * Constant scroll velocity X added to every firefly position each frame (toroidal wrap).
+     * Units: **normalised screen fractions per second** — 1.0 = full view width/sec.
+     * Use `scrollVX = -gameSpeed * 0.001f` to drift the mote field left with a horizontal scroller.
+     * Note: because positions are normalised, scrollVX = 1 means one full view-width/sec regardless
+     * of pixel density — but horizontal and vertical visual speeds will differ on non-square views.
+     */
+    val scrollVX: Float = 0f,
+    /**
+     * Constant scroll velocity Y added to every firefly position each frame (toroidal wrap).
+     * Units: **normalised screen fractions per second** — 1.0 = full view height/sec.
+     */
+    val scrollVY: Float = 0f,
 ) {
     fun sanitized() = copy(
         count       = count.coerceIn(1, 500),

@@ -71,8 +71,8 @@ class OGFireflyState(spec: OGFireflySpec) {
 
             wanderX[i] += spec.turbulence * dtC * (0.8f + omegas[i] * 0.12f)
             wanderY[i] += spec.turbulence * dtC * (0.6f + omegas[i] * 0.09f)
-            posX[i] = frac(posX[i] + spec.driftSpeed * dtC * cos(wanderX[i]))
-            posY[i] = frac(posY[i] + spec.driftSpeed * dtC * sin(wanderY[i]))
+            posX[i] = frac(posX[i] + spec.driftSpeed * dtC * cos(wanderX[i]) + spec.scrollVX * dtC)
+            posY[i] = frac(posY[i] + spec.driftSpeed * dtC * sin(wanderY[i]) + spec.scrollVY * dtC)
         }
     }
 
