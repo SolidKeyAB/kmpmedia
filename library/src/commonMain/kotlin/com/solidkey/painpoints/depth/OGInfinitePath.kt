@@ -21,6 +21,35 @@ import kotlinx.serialization.Serializable
 import kotlin.math.cos
 import kotlin.math.sin
 
+// ── Road spec ─────────────────────────────────────────────────────────────────
+
+/** Lane marking style. */
+enum class OGLaneMarkStyle {
+    /** Dashed centre/dividing lines (default). */
+    DASHES,
+    /** Solid continuous lines. */
+    SOLID,
+    /** No dividing lines (bare road surface). */
+    NONE,
+    /** Reflective cat's-eye dots at regular intervals. */
+    CATS_EYE,
+}
+
+/**
+ * Multi-lane road configuration for [OGInfinitePathSpec].
+ *
+ * @param laneCount Number of driving lanes. 1 = single lane (no divider); 2 = two lanes with
+ *   one centre line (default); 3+ = additional dividing lines.
+ * @param markStyle Visual style of the dividing and edge lines.
+ * @param edgeLineColor Solid edge-line colour at the shoulder boundary.
+ */
+@Serializable
+data class OGRoadSpec(
+    val laneCount: Int = 2,
+    val markStyle: OGLaneMarkStyle = OGLaneMarkStyle.DASHES,
+    val edgeLineColor: String = "#AAFFFFFF",
+)
+
 /**
  * Infinite perspective path — a continuously-scrolling pseudo-3D road that bends left and right,
  * always converging toward a glowing target on the horizon. The camera follows the road heading,
@@ -83,6 +112,9 @@ data class OGInfinitePathSpec(
     /** Outer glow colour (`#AARRGGBB`). */
     val targetGlowColor: String = "#2244FF88",
 
+    // ── Road lanes ────────────────────────────────────────────────────────────
+    val road: OGRoadSpec = OGRoadSpec(),
+
     // ── Motion ────────────────────────────────────────────────────────────────
     /** Forward scroll speed in world units per second. */
     val scrollSpeed: Float = 180f,
@@ -133,7 +165,7 @@ data class OGTreeLineSpec(
 // ── Resolved colours (allocated once per spec change via [OGInfinitePathSpec.resolveColors]) ──
 
 class OGInfinitePathColors(
-    val road: Color, val shoulder: Color, val laneMark: Color,
+    val road: Color, val shoulder: Color, val laneMark: Color, val edgeLine: Color,
     val skyTop: Color, val skyHorizon: Color,
     val gndHorizon: Color, val gndNear: Color,
     val haze: Color, val target: Color, val targetGlow: Color,
@@ -144,6 +176,7 @@ fun OGInfinitePathSpec.resolveColors() = OGInfinitePathColors(
     road        = roadColor.toSpecColor()         ?: Color(0xFF2B3D2B),
     shoulder    = shoulderColor.toSpecColor()     ?: Color(0xFF19271A),
     laneMark    = laneMarkColor.toSpecColor()     ?: Color(0x99FFFFCC),
+    edgeLine    = road.edgeLineColor.toSpecColor() ?: Color(0xAAFFFFFF.toInt()),
     skyTop      = skyTopColor.toSpecColor()       ?: Color(0xFF050D05),
     skyHorizon  = skyHorizonColor.toSpecColor()   ?: Color(0xFF122412),
     gndHorizon  = groundHorizonColor.toSpecColor() ?: Color(0xFF0E190E),
@@ -308,22 +341,58 @@ fun DrawScope.drawOGInfinitePathFrame(
         drawPath(rp, colors.road)
     }
 
-    // ── 4. Lane-mark dashes ───────────────────────────────────────────────────
-    var localZ = scroll % spec.laneMarkInterval  // phase: first visible mark
-    while (localZ < spec.farClip) {
-        val scale   = cam.perspectiveScale(localZ)
-        val screenY = cam.screenYAt(localZ, horizonY)
-        if (screenY in horizonY..h) {
-            val cx     = pathCenterX(localZ + scroll, spec.path) * scale
-            val markW  = (3f * scale).coerceAtLeast(0.5f)
-            val markH  = (10f * scale).coerceAtLeast(1f)
-            drawRect(
-                color    = colors.laneMark,
-                topLeft  = Offset(vpX + cx - markW, screenY - markH),
-                size     = Size(markW * 2f, markH * 2f),
-            )
+    // ── 4. Lane marks ─────────────────────────────────────────────────────────
+    val road        = spec.road
+    val laneCount   = road.laneCount.coerceAtLeast(1)
+    // Dividing-line X offsets in world units (relative to road centre).
+    // laneCount lanes → (laneCount - 1) dividers at ±road intervals.
+    val dividerXs = if (laneCount <= 1) emptyList()
+    else List(laneCount - 1) { k ->
+        -spec.roadHalfWidth + spec.roadHalfWidth * 2f * (k + 1).toFloat() / laneCount
+    }
+
+    if (road.markStyle != OGLaneMarkStyle.NONE) {
+        // SOLID draws at half the interval (overlapping marks → continuous line).
+        val step = if (road.markStyle == OGLaneMarkStyle.SOLID) spec.laneMarkInterval * 0.4f
+                   else spec.laneMarkInterval
+        var localZ = scroll % step
+        while (localZ < spec.farClip) {
+            val scale   = cam.perspectiveScale(localZ)
+            val screenY = cam.screenYAt(localZ, horizonY)
+            if (screenY in horizonY..h) {
+                val cx   = pathCenterX(localZ + scroll, spec.path)
+                val markW = (2.5f * scale).coerceAtLeast(0.5f)
+                val markH = (if (road.markStyle == OGLaneMarkStyle.SOLID) step * scale * 1.1f else 10f * scale).coerceAtLeast(1f)
+                for (dx in dividerXs) {
+                    val sx = vpX + (cx + dx) * scale
+                    if (road.markStyle == OGLaneMarkStyle.CATS_EYE)
+                        drawCircle(colors.laneMark, markW * 1.5f, Offset(sx, screenY))
+                    else
+                        drawRect(colors.laneMark, Offset(sx - markW, screenY - markH), Size(markW * 2f, markH * 2f))
+                }
+            }
+            localZ += step
         }
-        localZ += spec.laneMarkInterval
+    }
+
+    // Edge lines along road shoulders
+    if (road.markStyle != OGLaneMarkStyle.NONE && colors.edgeLine.alpha > 0.01f) {
+        val step = spec.laneMarkInterval * 0.5f
+        var localZ = scroll % step
+        while (localZ < spec.farClip) {
+            val scale   = cam.perspectiveScale(localZ)
+            val screenY = cam.screenYAt(localZ, horizonY)
+            if (screenY in horizonY..h) {
+                val cx   = pathCenterX(localZ + scroll, spec.path)
+                val markW = (1.5f * scale).coerceAtLeast(0.5f)
+                val markH = (step * scale * 1.1f).coerceAtLeast(1f)
+                for (edgeSign in listOf(-1f, 1f)) {
+                    val sx = vpX + (cx + edgeSign * spec.roadHalfWidth) * scale
+                    drawRect(colors.edgeLine, Offset(sx - markW, screenY - markH), Size(markW * 2f, markH * 2f))
+                }
+            }
+            localZ += step
+        }
     }
 
     // ── 5. Trees — far → near (painter's algorithm) ───────────────────────────
