@@ -367,7 +367,12 @@ tasks.register("generateOgManifest") {
 
         outputFile.parentFile.mkdirs()
         outputFile.writeText(out)
-        println("✅  OG_MANIFEST.md — $total primitives in ${sorted.size} packages → ${outputFile.path}")
+
+        val resourceFile = project.file("src/commonMain/resources/OG_MANIFEST.md")
+        resourceFile.parentFile.mkdirs()
+        resourceFile.writeText(out)
+
+        println("✅  OG_MANIFEST.md — $total primitives in ${sorted.size} packages → ${outputFile.path} + bundled in JAR resources")
     }
 }
 
