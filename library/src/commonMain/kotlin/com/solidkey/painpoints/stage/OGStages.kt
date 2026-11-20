@@ -5,11 +5,18 @@ import com.solidkey.painpoints.ai.OGSceneSpec
 import com.solidkey.painpoints.compositor.OGEasing
 import com.solidkey.painpoints.compositor.OGKeyframe
 import com.solidkey.painpoints.compositor.OGKeyframedFloat
+import com.solidkey.painpoints.fx.OGAuroraSpec
+import com.solidkey.painpoints.fx.OGCrackSpec
+import com.solidkey.painpoints.fx.OGFireflySpec
 import com.solidkey.painpoints.fx.OGLightningSpec
+import com.solidkey.painpoints.fx.OGRippleSpec
+import com.solidkey.painpoints.fx.OGShockwaveSpec
 import com.solidkey.painpoints.fx.OGSlashSpec
 import com.solidkey.painpoints.fx.OGSpeedLinesSpec
+import com.solidkey.painpoints.fx.OGWaveSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
+import com.solidkey.painpoints.motion.OGClothSpec
 import com.solidkey.painpoints.particle.OGParticleSpec
 import com.solidkey.painpoints.style.OGStyleSpec
 import kotlinx.serialization.json.Json
@@ -131,6 +138,79 @@ object OGStages {
         blend: OGBlendMode = OGBlendMode.NORMAL,
     ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.SpeedLines(spec), startMs = startMs, endMs = endMs, blend = blend)
 
+    /** A procedural wave surface layer (calm, ocean, flood, lava). */
+    fun wave(
+        id: String,
+        spec: OGWaveSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Wave(spec), startMs = startMs, endMs = endMs, x = x, y = y, scale = scale, opacity = opacity, blend = blend)
+
+    /** An impact crack / fracture layer. */
+    fun crack(
+        id: String,
+        spec: OGCrackSpec,
+        originX: Float = 0.5f,
+        originY: Float = 0.5f,
+        progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Crack(spec, originX, originY, progress), startMs = startMs, endMs = endMs, x = x, y = y, opacity = opacity, blend = blend)
+
+    /** An expanding impact shockwave ring layer. */
+    fun shockwave(
+        id: String,
+        spec: OGShockwaveSpec,
+        originX: Float = 0.5f,
+        originY: Float = 0.5f,
+        progress: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Shockwave(spec, originX, originY, progress), startMs = startMs, endMs = endMs, x = x, y = y, opacity = opacity, blend = blend)
+
+    /** An aurora borealis curtain layer. */
+    fun aurora(
+        id: String,
+        spec: OGAuroraSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.SCREEN,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Aurora(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
+
+    /** A raindrop ripple capillary ring layer. */
+    fun ripple(
+        id: String,
+        spec: OGRippleSpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Ripple(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
+
+    /** A synchronized Kuramoto firefly layer. */
+    fun firefly(
+        id: String,
+        spec: OGFireflySpec,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        blend: OGBlendMode = OGBlendMode.PLUS,
+    ): OGStageLayer = OGStageLayer(id = id, content = OGStageContent.Firefly(spec), startMs = startMs, endMs = endMs, opacity = opacity, blend = blend)
+
     /**
      * A **styled-vector-text** layer — a title / caption / lower-third, centred in the box (position it
      * with [x] / [y], a fraction of the box). [size] is the em height as a fraction of the stage height;
@@ -161,6 +241,93 @@ object OGStages {
         startMs = startMs, endMs = endMs,
         x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
         onTap = onTap,
+    )
+
+    /**
+     * A **raster-cutout** layer — a bundled image shown as real drawn pixels (not a redrawn vector),
+     * optionally a frame-swap sprite ([frames] held in order on the local clock: blink / mouth / wave).
+     * The image fits within [widthFrac] × [heightFrac] of the box (aspect preserved); place and size it
+     * with [x] / [y] / [scale], and make it poke-reactive with [onTap]. The frame resources must be
+     * bundled by the host app (Android `res/drawable`, iOS bundle).
+     */
+    fun image(
+        id: String,
+        frames: List<OGImageFrame>,
+        widthFrac: Float = 1f,
+        heightFrac: Float = 1f,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        rotationDeg: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        look: OGLookSpec? = null,
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
+    ): OGStageLayer = OGStageLayer(
+        id = id,
+        content = OGStageContent.Image(frames, widthFrac, heightFrac),
+        startMs = startMs, endMs = endMs,
+        x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
+        onTap = onTap,
+    )
+
+    /**
+     * A **wind-blown cloth / hair strip** layer — a scarf, cape edge, banner or a lock of long hair that
+     * hangs and flutters on the breeze (the motion family's Verlet [OGClothSpec]: gravity + prevailing
+     * wind + turbulent gusts). The strip's head pins at ([anchorX], [anchorY]) in the box and streams out;
+     * [taper] narrows it to a point at the free end (hair / pennant). Pin it onto a character by placing
+     * this layer at the hairline / hem with [x] / [y]. Deterministic → preview and export match.
+     */
+    fun cloth(
+        id: String,
+        cloth: OGClothSpec,
+        anchorX: Float = 0.5f,
+        anchorY: Float = 0.12f,
+        color: String = "#FFFFFF",
+        width: Float = 0.05f,
+        taper: Boolean = true,
+        tailX: Float = 0.5f,
+        tailY: Float = 0.12f,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        rotationDeg: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        look: OGLookSpec? = null,
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
+    ): OGStageLayer = OGStageLayer(
+        id = id,
+        content = OGStageContent.Cloth(cloth, anchorX, anchorY, tailX, tailY, color, width, taper),
+        startMs = startMs, endMs = endMs,
+        x = x, y = y, scale = scale, rotationDeg = rotationDeg, opacity = opacity, look = look, blend = blend,
+        onTap = onTap,
+    )
+
+    /** Shorthand for a single-frame still cutout (one bundled image, no frame-swap). */
+    fun imageStill(
+        id: String,
+        resource: String,
+        widthFrac: Float = 1f,
+        heightFrac: Float = 1f,
+        startMs: Long = 0L,
+        endMs: Long? = null,
+        x: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        y: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        scale: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        rotationDeg: OGKeyframedFloat = OGKeyframedFloat.const(0f),
+        opacity: OGKeyframedFloat = OGKeyframedFloat.const(1f),
+        look: OGLookSpec? = null,
+        blend: OGBlendMode = OGBlendMode.NORMAL,
+        onTap: OGStageTrigger? = null,
+    ): OGStageLayer = image(
+        id = id, frames = listOf(OGImageFrame(resource)), widthFrac = widthFrac, heightFrac = heightFrac,
+        startMs = startMs, endMs = endMs, x = x, y = y, scale = scale, rotationDeg = rotationDeg,
+        opacity = opacity, look = look, blend = blend, onTap = onTap,
     )
 
     // --- Interactivity shorthands --------------------------------------------------------------
@@ -232,6 +399,12 @@ object OGStages {
           { "type":"slash", "slash": <an OGSlashSpec> }                 // a water/flame/thunder sweep
           { "type":"lightning", "lightning": <an OGLightningSpec> }     // a forked bolt
           { "type":"speedlines", "speedLines": <an OGSpeedLinesSpec> }  // manga impact lines
+          { "type":"wave", "wave": <an OGWaveSpec> }                    // procedural wave surface (calm/ocean/flood)
+          { "type":"crack", "crack": <an OGCrackSpec>, "originX":0.5, "originY":0.5, "progress":1.0 } // ground fractures
+          { "type":"shockwave", "shockwave": <an OGShockwaveSpec>, "originX":0.5, "originY":0.5, "progress":1.0 } // air/ground burst
+          { "type":"aurora", "aurora": <an OGAuroraSpec> }              // polar light curtain
+          { "type":"ripple", "ripple": <an OGRippleSpec> }              // raindrop impact capillary ripples
+          { "type":"firefly", "firefly": <an OGFireflySpec> }           // synchronized Kuramoto fireflies
           { "type":"text", "text":"TITLE", "size":0.14, "color":"#RRGGBB", "bold":false,
             "italic":false, "family":null, "style": <an OGStyleSpec, optional> }  // styled vector text
         The slash/lightning/speedlines specs are the KMPMedia action-FX packs, authored as their own

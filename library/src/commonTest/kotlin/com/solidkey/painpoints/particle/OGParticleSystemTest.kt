@@ -1,12 +1,38 @@
 package com.solidkey.painpoints.particle
 
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Covers the pure particle simulation ([OGParticleSystem]), its emission/lifetime/physics and the codec. */
 class OGParticleSystemTest {
+
+    @Test
+    fun wind_pushesParticlesSideways_whileNoWindLeavesXUntouched() {
+        // A single particle launched straight DOWN with no horizontal motion/gravity.
+        fun spec(wind: Float, amp: Float) = OGParticleSpec(
+            burst = 1, emissionRate = 0f, maxParticles = 1, lifetimeMs = 100_000f, lifetimeJitter = 0f,
+            x = 0.5f, y = 0.1f, spawnRadius = 0f, angleDeg = 90f, spreadDeg = 0f, speed = 0.1f, speedJitter = 0f,
+            gravityX = 0f, gravityY = 0f, drag = 0f, wind = wind, windAmplitude = amp, seed = 1,
+        )
+        // No wind → x never moves (byte-identical to the old integrator).
+        val calm = spec(0f, 0f).toSystem()
+        repeat(60) { calm.update(16f) }
+        assertEquals(0.5f, calm.x[0], 1e-4f)
+
+        // Steady rightward wind → x drifts right.
+        val windy = spec(0.5f, 0f).toSystem()
+        repeat(60) { windy.update(16f) }
+        assertTrue(windy.x[0] > 0.5f, "steady wind should push x right, was ${windy.x[0]}")
+
+        // Turbulent gusts alone (no prevailing wind) → x is perturbed off-centre.
+        val gusty = spec(0f, 0.6f).toSystem()
+        repeat(60) { gusty.update(16f) }
+        assertTrue(abs(gusty.x[0] - 0.5f) > 1e-3f, "gusts should perturb x, was ${gusty.x[0]}")
+    }
 
     @Test
     fun burst_spawnsExactlyBurstCount_onFirstUpdate() {
@@ -103,6 +129,15 @@ class OGParticleSystemTest {
         val sys = OGParticles.decodeOrNull(fenced)!!
         sys.update(16f)
         assertEquals(5, sys.count)
+    }
+
+    @Test
+    fun bubblesPreset_existsAndRisesBuoyantly() {
+        val spec = OGParticles.preset("bubbles")
+        assertNotNull(spec)
+        assertEquals(OGParticles.BUBBLES, OGParticles.preset("BUBBLES")) // case-insensitive
+        assertTrue(spec.gravityY < 0f, "bubbles are buoyant (negative gravity)")
+        assertEquals(13, OGParticles.presets.size)
     }
 
     @Test

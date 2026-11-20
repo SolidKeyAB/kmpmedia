@@ -46,6 +46,12 @@ sealed interface OGPressEffect {
     data class Dim(val alpha: Float = 0.6f) : OGPressEffect
 
     /**
+     * Tactile 3D button press: top surface translates straight down along Y by [depth] (compressing
+     * the 3D bottom extrusion lip), accompanied by a subtle [scale] settle.
+     */
+    data class Tactile(val depth: Dp = 4.dp, val scale: Float = 0.985f) : OGPressEffect
+
+    /**
      * The flat/pop-art "hard shadow push-in": the modifier **draws its own** hard-offset silhouette
      * shadow (no blur) behind the content at rest, and on press the content slides onto it by [offset]
      * while the shadow collapses — so the graphic looks pressed into the page. The silhouette is the
@@ -59,15 +65,21 @@ sealed interface OGPressEffect {
 }
 
 /** The content transform at press depth [progress] (`0` = rest, `1` = fully pressed). Pure + testable. */
-internal data class OGButtonTransform(val scale: Float, val alpha: Float, val translateFraction: Float)
+internal data class OGButtonTransform(
+    val scale: Float,
+    val alpha: Float,
+    val translateFraction: Float,
+    val translateYFraction: Float = 0f,
+)
 
 internal fun OGPressEffect.transformAt(progress: Float): OGButtonTransform {
     val p = progress.coerceIn(0f, 1f)
     return when (this) {
-        is OGPressEffect.Scale -> OGButtonTransform(1f + (scale - 1f) * p, 1f, 0f)
-        is OGPressEffect.Dim -> OGButtonTransform(1f, 1f + (alpha - 1f) * p, 0f)
-        is OGPressEffect.Brutalist -> OGButtonTransform(1f, 1f, p)
-        OGPressEffect.None -> OGButtonTransform(1f, 1f, 0f)
+        is OGPressEffect.Scale -> OGButtonTransform(1f + (scale - 1f) * p, 1f, 0f, 0f)
+        is OGPressEffect.Dim -> OGButtonTransform(1f, 1f + (alpha - 1f) * p, 0f, 0f)
+        is OGPressEffect.Tactile -> OGButtonTransform(1f + (scale - 1f) * p, 1f, 0f, p)
+        is OGPressEffect.Brutalist -> OGButtonTransform(1f, 1f, p, 0f)
+        OGPressEffect.None -> OGButtonTransform(1f, 1f, 0f, 0f)
     }
 }
 
@@ -175,6 +187,8 @@ fun Modifier.ogButton(
             val off = pressEffect.offset.toPx() * t.translateFraction
             translationX = off
             translationY = off
+        } else if (pressEffect is OGPressEffect.Tactile) {
+            translationY = pressEffect.depth.toPx() * t.translateYFraction
         }
     }
 

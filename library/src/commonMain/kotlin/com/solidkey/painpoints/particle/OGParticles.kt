@@ -46,6 +46,9 @@ object OGParticles {
         Fields (all optional, sensible defaults):
           maxParticles, emissionRate (per sec), burst (one-shot count), lifetimeMs, lifetimeJitter,
           x, y, spawnRadius, angleDeg, spreadDeg, speed, speedJitter, gravityX, gravityY, drag,
+          wind (steady horizontal breeze, + = right), windAmplitude (turbulent gust strength on top),
+          windFrequency (how fast gusts wander), windSeed,
+          turbulenceStrength (0..1 curl-noise eddying — swirling smoke/leaf motion; 0 = off),
           startSize, endSize, sizeJitter, startColor, endColor, startAlpha, endAlpha,
           spinDeg, spinJitter, shape ("circle"|"square"|"triangle"|"star"|"petal"|"teardrop"), seed.
 
@@ -53,6 +56,7 @@ object OGParticles {
         Examples:
         {"name":"confetti","shape":"square","burst":150,"emissionRate":0,"angleDeg":270,"spreadDeg":160,"speed":0.55,"gravityY":0.55,"spinDeg":220,"startColor":"#FF5252","endAlpha":0}
         {"name":"embers","emissionRate":40,"angleDeg":270,"spreadDeg":40,"speed":0.2,"gravityY":-0.05,"startColor":"#FFE082","endColor":"#FF6D00","endAlpha":0,"startSize":0.01,"endSize":0.003}
+        {"name":"blizzard","shape":"circle","emissionRate":90,"y":-0.1,"spawnRadius":0.6,"angleDeg":90,"spreadDeg":30,"speed":0.14,"gravityY":0.05,"wind":0.25,"windAmplitude":0.4,"windFrequency":0.8,"startColor":"#FFFFFF","endAlpha":0}
 
         Output the JSON only, with no prose and no markdown fences.
 
@@ -86,6 +90,16 @@ object OGParticles {
         angleDeg = 90f, spreadDeg = 30f, speed = 0.12f, speedJitter = 0.6f, gravityY = 0.02f,
         drag = 0.1f, startSize = 0.01f, endSize = 0.01f, sizeJitter = 0.6f,
         startColor = "#FFFFFF", startAlpha = 0.9f, endAlpha = 0f, seed = 11,
+    )
+
+    /** A driving snowstorm — flakes sweep sideways on a steady wind with turbulent gusts swelling on top. */
+    val BLIZZARD = OGParticleSpec(
+        name = "blizzard", shape = "circle", maxParticles = 320, burst = 0, emissionRate = 95f,
+        lifetimeMs = 7000f, lifetimeJitter = 0.3f, x = 0.4f, y = -0.1f, spawnRadius = 0.7f,
+        angleDeg = 90f, spreadDeg = 36f, speed = 0.16f, speedJitter = 0.7f, gravityY = 0.05f,
+        drag = 0.05f, wind = 0.28f, windAmplitude = 0.45f, windFrequency = 0.85f, windSeed = 4,
+        startSize = 0.009f, endSize = 0.009f, sizeJitter = 0.7f,
+        startColor = "#FFFFFF", startAlpha = 0.95f, endAlpha = 0f, seed = 19,
     )
 
     /** Dreamy out-of-focus dots drifting gently in every direction. */
@@ -132,7 +146,7 @@ object OGParticles {
         name = "embers", shape = "circle", maxParticles = 200, burst = 0, emissionRate = 55f,
         lifetimeMs = 1600f, lifetimeJitter = 0.4f, x = 0.5f, y = 0.72f, spawnRadius = 0.25f,
         angleDeg = 270f, spreadDeg = 50f, speed = 0.22f, speedJitter = 0.7f, gravityY = -0.06f,
-        drag = 0.2f, startSize = 0.012f, endSize = 0.003f, sizeJitter = 0.5f,
+        drag = 0.2f, turbulenceStrength = 0.20f, startSize = 0.012f, endSize = 0.003f, sizeJitter = 0.5f,
         startColor = "#FFE082", endColor = "#FF6D00", endAlpha = 0f, seed = 31,
     )
 
@@ -141,8 +155,17 @@ object OGParticles {
         name = "droplets", shape = "teardrop", maxParticles = 160, burst = 0, emissionRate = 40f,
         lifetimeMs = 1400f, lifetimeJitter = 0.3f, x = 0.5f, y = 0.3f, spawnRadius = 0.25f,
         angleDeg = 90f, spreadDeg = 60f, speed = 0.18f, speedJitter = 0.6f, gravityY = 0.5f,
-        drag = 0.1f, startSize = 0.01f, endSize = 0.006f, sizeJitter = 0.4f,
+        drag = 0.1f, turbulenceStrength = 0.15f, startSize = 0.01f, endSize = 0.006f, sizeJitter = 0.4f,
         startColor = "#E1F5FE", endColor = "#4FC3F7", startAlpha = 0.9f, endAlpha = 0f, seed = 41,
+    )
+
+    /** Underwater bubbles rising buoyantly, fading to near-white as they near the surface. */
+    val BUBBLES = OGParticleSpec(
+        name = "bubbles", shape = "circle", maxParticles = 60, burst = 0, emissionRate = 20f,
+        lifetimeMs = 2200f, lifetimeJitter = 0.45f, x = 0.5f, y = 1.05f, spawnRadius = 0.5f,
+        angleDeg = 270f, spreadDeg = 30f, speed = 0.08f, speedJitter = 0.6f, gravityY = -0.05f,
+        startSize = 0.018f, endSize = 0.018f, sizeJitter = 0.65f,
+        startColor = "#B3E5FC", endColor = "#E1F5FE", startAlpha = 0.55f, endAlpha = 0f, seed = 53,
     )
 
     /** Autumn leaves drifting down, turning from green to amber. */
@@ -150,14 +173,27 @@ object OGParticles {
         name = "leaves", shape = "petal", maxParticles = 90, burst = 0, emissionRate = 16f,
         lifetimeMs = 7000f, lifetimeJitter = 0.3f, x = 0.5f, y = -0.1f, spawnRadius = 0.6f,
         angleDeg = 90f, spreadDeg = 50f, speed = 0.09f, speedJitter = 0.7f, gravityY = 0.015f,
-        drag = 0.08f, startSize = 0.024f, endSize = 0.024f, sizeJitter = 0.6f,
+        drag = 0.08f, turbulenceStrength = 0.45f, startSize = 0.024f, endSize = 0.024f, sizeJitter = 0.6f,
         startColor = "#AED581", endColor = "#FBC02D", startAlpha = 0.95f, endAlpha = 0f,
         spinDeg = 150f, spinJitter = 1f, seed = 51,
     )
 
+    /**
+     * Kira-kira anime sparkles — 4-pointed diamond sparkle bursts (Spencer 1995 astroid).
+     * Classic use: glass/jewel/magical highlight bursts. Spin fast, dissolve quickly.
+     */
+    val SPARKLES = OGParticleSpec(
+        name = "sparkles", shape = "sparkle", maxParticles = 60, burst = 12, emissionRate = 0f,
+        lifetimeMs = 620f, lifetimeJitter = 0.45f, x = 0.5f, y = 0.5f, spawnRadius = 0.08f,
+        angleDeg = 270f, spreadDeg = 360f, speed = 0.22f, speedJitter = 0.75f, gravityY = -0.04f,
+        drag = 0.12f, startSize = 0.040f, endSize = 0.010f, sizeJitter = 0.6f,
+        startColor = "#FFFFFF", endColor = "#FFD700", startAlpha = 1f, endAlpha = 0f,
+        spinDeg = 480f, spinJitter = 1f, seed = 77,
+    )
+
     /** All built-in presets, keyed by lowercase name. */
     val presets: Map<String, OGParticleSpec> = listOf(
-        CONFETTI, SPARKS, SNOW, BOKEH, RAIN, FIREWORKS,
-        PETALS, EMBERS, DROPLETS, LEAVES,
+        CONFETTI, SPARKS, SNOW, BLIZZARD, BOKEH, RAIN, FIREWORKS,
+        PETALS, EMBERS, DROPLETS, BUBBLES, LEAVES, SPARKLES,
     ).associateBy { it.name!! }
 }

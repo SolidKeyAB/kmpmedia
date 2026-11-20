@@ -32,6 +32,18 @@ class OGButtonTest {
     }
 
     @Test
+    fun tactileEffect_drivesVerticalTranslationAndMicroScale() {
+        val e = OGPressEffect.Tactile(scale = 0.98f)
+        val t0 = e.transformAt(0f)
+        assertEquals(1f, t0.scale, eps)
+        assertEquals(0f, t0.translateYFraction, eps)
+        val t1 = e.transformAt(1f)
+        assertEquals(0.98f, t1.scale, eps)
+        assertEquals(1f, t1.translateYFraction, eps)
+        assertEquals(1f, t1.alpha, eps)
+    }
+
+    @Test
     fun brutalistEffect_drivesTranslationFractionOnly() {
         val e = OGPressEffect.Brutalist()
         val t = e.transformAt(0.5f)

@@ -67,7 +67,7 @@ object OGSlashes {
         name = "water",
         width = 0.12f, taper = 0.9f, peak = 0.42f, smoothing = 1f, samples = 80,
         colorStart = "#4FC3F7", colorEnd = "#01579B", glow = 0.8f, glowColor = "#B3E5FC",
-        edge = "wave", edgeAmp = 0.022f, edgeSpeed = 1.2f, edgeDetail = 4,
+        edge = "wave", edgeAmp = 0.032f, edgeSpeed = 1.2f, edgeDetail = 5,
         breatheAmp = 0.14f, breatheSpeed = 0.9f,
         revealMs = 420f, holdMs = 900f, fadeMs = 380f, loop = true, seed = 0,
     )

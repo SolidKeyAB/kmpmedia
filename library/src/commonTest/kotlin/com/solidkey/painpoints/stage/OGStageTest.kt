@@ -12,6 +12,7 @@ import com.solidkey.painpoints.fx.OGSlashSpec
 import com.solidkey.painpoints.fx.OGSpeedLinesSpec
 import com.solidkey.painpoints.look.OGBlendMode
 import com.solidkey.painpoints.look.OGLookSpec
+import com.solidkey.painpoints.motion.OGCloths
 import com.solidkey.painpoints.particle.OGParticleSpec
 import com.solidkey.painpoints.style.OGStyleOp
 import com.solidkey.painpoints.style.OGStyleSpec
@@ -60,6 +61,25 @@ class OGStageTest {
         val stage = sampleStage()
         val back = OGStages.decode(OGStages.encode(stage))
         assertEquals(stage, back, "a stage should survive encode → decode unchanged")
+    }
+
+    @Test
+    fun clothLayerRoundTripsAndIsLive() {
+        val stage = OGStage.of(
+            OGStages.solid("bg", "#102030"),
+            OGStages.cloth(
+                "hair",
+                cloth = OGCloths.preset("hair")!!.copy(wind = 0.4f, windAmplitude = 0.5f),
+                anchorX = 0.5f, anchorY = 0.1f, color = "#6D4C41", width = 0.05f, taper = true,
+            ),
+            width = 100, height = 200, durationMs = 2000L,
+        )
+        val back = OGStages.decode(OGStages.encode(stage))
+        assertEquals(stage, back, "a cloth layer should survive encode → decode unchanged")
+        val cloth = back.layers[1].content
+        assertTrue(cloth is OGStageContent.Cloth && cloth.cloth.wind == 0.4f)
+        // A cloth strip always flutters → the stage reports itself live.
+        assertTrue(back.isLive, "a stage with a cloth layer is live")
     }
 
     @Test
@@ -231,6 +251,60 @@ class OGStageTest {
         assertEquals(stage, OGStages.decode(OGStages.encode(stage)), "all seven kinds survive JSON")
         assertEquals(7, stage.resolveAt(100L).size, "all seven are visible mid-timeline and flatten")
         assertTrue(stage.isLive, "a mix with fx + particles + scene motion is live")
+    }
+
+    @Test
+    fun imageCutoutRoundTripsAndFrameSwapDrivesLiveness() {
+        // A tappable, multi-frame raster cutout (a blink) — the puppet primitive.
+        val blink = listOf(
+            OGImageFrame("head_open", holdMs = 3000L),
+            OGImageFrame("head_half", holdMs = 40L),
+            OGImageFrame("head_shut", holdMs = 90L),
+            OGImageFrame("head_half", holdMs = 40L),
+        )
+        val stage = OGStage.of(
+            OGStages.image("head", blink, widthFrac = 0.45f, heightFrac = 0.5f,
+                onTap = OGStageTrigger(OGTapAction.BOUNCE)),
+        )
+        val back = OGStages.decode(OGStages.encode(stage))
+        assertEquals(stage, back, "an image cutout (frames + fit box + onTap) survives JSON")
+        val c = back.layers.first().content
+        assertTrue(c is OGStageContent.Image)
+        assertEquals(4, c.frames.size)
+        assertEquals("head_open", c.frames.first().resource)
+        assertTrue(c.isAnimated)
+        assertEquals(0.45f, c.widthFrac, 1e-4f)
+        assertNotNull(back.layers.first().onTap)
+
+        // A frame-swap sprite makes the stage live; a single still frame does not (unless transformed).
+        assertTrue(stage.isLive, "a multi-frame cutout animates by frame-swap")
+        assertTrue(!OGStage.of(OGStages.imageStill("still", "head_open")).isLive, "a single-frame cutout is static")
+        assertTrue(
+            OGStage.of(OGStages.imageStill("still", "head_open", opacity = OGStages.track(0L to 0f, 500L to 1f))).isLive,
+            "...but a fade-in transform still makes it live",
+        )
+    }
+
+    @Test
+    fun imageFrameIndexWalksHoldsAndLoops() {
+        val c = OGStageContent.Image(
+            frames = listOf(
+                OGImageFrame("a", holdMs = 100L),
+                OGImageFrame("b", holdMs = 50L),
+                OGImageFrame("c", holdMs = 50L),
+            ),
+        )
+        assertEquals(0, c.frameIndexAt(0L))
+        assertEquals(0, c.frameIndexAt(99L))
+        assertEquals(1, c.frameIndexAt(100L))
+        assertEquals(1, c.frameIndexAt(149L))
+        assertEquals(2, c.frameIndexAt(150L))
+        assertEquals(2, c.frameIndexAt(199L))
+        // total span = 200ms, so it loops: t=200 is back to frame 0, t=300 back to frame 1.
+        assertEquals(0, c.frameIndexAt(200L))
+        assertEquals(1, c.frameIndexAt(300L))
+        // A single frame (or none) always resolves to index 0.
+        assertEquals(0, OGStageContent.Image(listOf(OGImageFrame("only"))).frameIndexAt(9999L))
     }
 
     @Test

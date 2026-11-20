@@ -59,8 +59,16 @@ object OGLightnings {
         name = "spark", x1 = 0.08f, y1 = 0.5f, x2 = 0.92f, y2 = 0.46f,
         width = 0.01f, jaggedness = 0.1f, detail = 5, branches = 3, branchLength = 0.3f,
         color = "#FFF59D", coreColor = "#FFFFFF", glowColor = "#FFE082", glow = 1f,
-        strikeMs = 60f, decayMs = 150f, gapMs = 300f, seed = 9,
+        strikeMs = 60f, decayMs = 150f, gapMs = 300f, seed = 9, taper = true, flashRadius = 0.04f,
     )
 
-    val presets: Map<String, OGLightningSpec> = listOf(BOLT, STORM, SPARK).associateBy { it.name!! }
+    /** A highly cinematic, tapering, branched massive thunder strike with intense impact flash. */
+    val THUNDER = OGLightningSpec(
+        name = "thunder", x1 = 0.5f, y1 = 0.01f, x2 = 0.45f, y2 = 0.98f,
+        width = 0.035f, jaggedness = 0.25f, detail = 8, branches = 12, branchLength = 0.45f,
+        color = "#81D4FA", coreColor = "#FFFFFF", glowColor = "#03A9F4", glow = 1.2f,
+        strikeMs = 120f, decayMs = 350f, gapMs = 600f, seed = 14, taper = true, flashRadius = 0.15f,
+    )
+
+    val presets: Map<String, OGLightningSpec> = listOf(BOLT, STORM, SPARK, THUNDER).associateBy { it.name!! }
 }

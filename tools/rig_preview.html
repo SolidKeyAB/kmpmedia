@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>▶ Rig Preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0f1e;color:#e8ecff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden;}
+  #cv{display:block;width:100vw;height:100vh;}
+  #hud{position:fixed;left:12px;top:10px;font-size:12px;color:#9aa3cf;background:#0008;
+    padding:6px 10px;border-radius:8px;line-height:1.4;}
+  #hud b{color:#5ad1c4;}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">loading…</div>
+<script>
+const qs=new URLSearchParams(location.search);
+const SRC=qs.get('src')||'../.nexum-shared/rig_payload_3_.json';
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d'), hud=document.getElementById('hud');
+let rig=null, imgs={}, moverPhase={}, t0=0;
+function fit(){ const dpr=window.devicePixelRatio||1;
+  cv.width=innerWidth*dpr; cv.height=innerHeight*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+addEventListener('resize',fit); fit();
+
+async function boot(){
+  const d=await (await fetch(SRC)).json();
+  rig=d.rig;
+  // resolve images (base64 data strings) → Image objects
+  const names=[...new Set(rig.layers.map(l=>l.resource))];
+  await Promise.all(names.map(n=>new Promise(res=>{
+    const src=d.images[n]; if(!src){res();return;}
+    const im=new Image(); im.onload=()=>{imgs[n]=im;res();}; im.onerror=()=>res();
+    im.src=src.startsWith('data:')?src:('data:image/png;base64,'+src);
+  })));
+  // phase per mover = (index among movers, in layer order) * 1.3  — matches the cutter's live preview
+  let mi=0; for(const l of rig.layers){ if(l.role==='mover') moverPhase[l.id]=(mi++)*1.3; }
+  hud.innerHTML=`<b>${rig.width}×${rig.height}</b> · ${rig.layers.length} layers · `+
+    `${rig.layers.filter(l=>l.role==='mover').length} movers · ${rig.fps}fps`;
+  requestAnimationFrame(loop);
+}
+function loop(ts){ if(!t0) t0=ts; const t=(ts-t0)/1000; draw(t); requestAnimationFrame(loop); }
+
+function byId(id){ return rig.layers.find(l=>l.id===id||l.resource===id)||null; }
+function applyX(l,t){ const W=rig.width,H=rig.height;
+  ctx.translate((l.offsetX||0)*W,(l.offsetY||0)*H);
+  if(l.role==='mover'){ const amp=(l.swingDeg||0)*Math.PI/180, spd=l.speed||1;
+    const ang=amp*Math.sin(t*2.2*spd+(moverPhase[l.id]||0));
+    const px=(l.pivotX==null?0.5:l.pivotX)*W, py=(l.pivotY==null?0.5:l.pivotY)*H;
+    ctx.translate(px,py); ctx.rotate(ang); ctx.translate(-px,-py); } }
+function chain(l){ const out=[],seen=new Set([l.id]); let p=l.parent?byId(l.parent):null;
+  while(p&&!seen.has(p.id)){ out.unshift(p); seen.add(p.id); p=p.parent?byId(p.parent):null; } return out; }
+function draw(t){
+  const cw=innerWidth, ch=innerHeight;
+  const g=ctx.createRadialGradient(cw/2,ch*0.42,40, cw/2,ch*0.5,Math.max(cw,ch)*0.75);
+  g.addColorStop(0,'#1b2142'); g.addColorStop(1,'#070a16');
+  ctx.fillStyle=g; ctx.fillRect(0,0,cw,ch);
+  const W=rig.width, H=rig.height, s=Math.min(cw/W, ch/H)*0.92;
+  ctx.save();
+  ctx.translate((cw-W*s)/2,(ch-H*s)/2); ctx.scale(s,s);
+  ctx.imageSmoothingEnabled=true;
+  for(const l of rig.layers){
+    const im=imgs[l.resource]; if(!im) continue;
+    ctx.save();
+    for(const anc of chain(l)) applyX(anc,t);   // ride parent chain
+    applyX(l,t);                                 // + own motion
+    ctx.drawImage(im,0,0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+boot().catch(e=>{ hud.textContent='load error: '+e; });
+window.__rig={get t(){return (performance.now()-t0)/1000;}, get ready(){return !!rig;}};
+</script>
+</body>
+</html>

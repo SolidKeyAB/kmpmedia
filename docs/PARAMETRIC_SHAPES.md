@@ -77,6 +77,46 @@ val fromModel = OGParametrics.decodeOrNull(myLlm.complete(prompt))
 
 An unknown `kind` yields an empty outline (nothing shown) rather than throwing.
 
+## Snowflakes — a recursive-fractal crystal generator (`OGSnowflake`)
+
+`OGSnowflake` is the line-figure cousin of the closed parametric outlines: a deterministic `seed` → a
+unique, n-fold **symmetric ice crystal** as plain line **segments** (`OGSnowflakeSegment(a, b)` in a
+unit space centred at `(0,0)`). Unlike the filled parametric shapes, a snowflake is a **stroked line
+figure**, so the caller turns the segments into a `Path` and strokes it (no two seeds alike).
+
+```kotlin
+import com.solidkey.painpoints.shape.OGSnowflake
+
+val segments = OGSnowflake.generate(seed = 42)      // arms = 6, branches = 3, depth = 2 by default
+
+// Turn them into a stroked Path, scaled + translated to place the crystal:
+val path = Path().apply {
+    for (s in segments) {
+        moveTo(cx + s.a.x * r, cy + s.a.y * r)
+        lineTo(cx + s.b.x * r, cy + s.b.y * r)
+    }
+}
+```
+
+How it is built: one **arm** is grown along +Y — a central spine plus a few side-twigs — then
+mirrored left ↔ right for bilateral symmetry, and that whole arm is copied `arms` times around the
+centre (`6` = a real snowflake's hexagonal symmetry). Each twig is a tiny **recursive fractal**: at
+`depth > 0` every twig sprouts its own smaller side-twigs, and those sprout again, the way a real
+stellar-dendrite crystal grows.
+
+```kotlin
+fun generate(
+    seed: Int,
+    arms: Int = 6,        // radial symmetry; clamped 3..12 (6 is natural)
+    branches: Int = 3,    // primary side-twigs per arm; clamped 0..6
+    depth: Int = 2,       // fractal recursion; clamped 0..4
+): List<OGSnowflakeSegment>
+```
+
+`depth` is the new knob: `0` = the old plain-prong look (straight prongs), `2` (the default) reads as a
+convincing dendrite, capped at `4`. It is pure maths with a seeded xorshift — no Compose, zero
+dependency — so a given seed yields the same crystal on Android, iOS, preview and export.
+
 ## Where this sits on the roadmap
 
 Part of the new **Bet — Generative & living content**, with [particles](./PARTICLES.md): describing
