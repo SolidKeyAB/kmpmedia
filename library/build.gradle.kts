@@ -268,7 +268,7 @@ tasks.register("generateOgManifest") {
         }
 
         fun presetsOf(src: String, name: String): List<String> =
-            Regex("val\\s+([A-Z][A-Z0-9_]{1,})\\s*=\\s*$name(?:Spec)?\\s*\\(")
+            Regex("val\\s+([A-Z][A-Za-z0-9_]+)\\s*=\\s*$name(?:Spec)?\\s*\\(")
                 .findAll(src).map { it.groupValues[1] }.toList()
 
         fun viewOf(src: String, name: String): String? {
@@ -321,12 +321,16 @@ tasks.register("generateOgManifest") {
             .sortedBy { it.name }
             .forEach fileLoop@{ f ->
                 val src = f.readText()
-                if (!src.contains("val presets") && !src.contains("fun decodeSpec")) return@fileLoop
+                val hasPresets = src.contains("val presets") || src.contains("fun decodeSpec") ||
+                    Regex("object\\s+OG\\w+s\\s*\\{").containsMatchIn(src)
+                if (!hasPresets) return@fileLoop
                 val pkg = f.parentFile.relativeTo(sourceDir).path.replace("\\", "/")
                 val poolSrc = dirSrc(f.parentFile)
+                val filePrimitive = f.nameWithoutExtension
                 Regex("data class (OG[A-Za-z0-9]+)\\s*\\(").findAll(src).forEach innerLoop@{ m ->
                     val cls = m.groupValues[1]
                     val primitive = cls.removeSuffix("Spec")
+                    if (primitive != filePrimitive) return@innerLoop
                     record(primitive, pkg, descOf(src), fieldsOf(src, cls), presetsOf(poolSrc, primitive), viewOf(poolSrc, primitive))
                 }
             }
