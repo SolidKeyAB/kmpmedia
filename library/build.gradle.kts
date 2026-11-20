@@ -223,3 +223,147 @@ mavenPublishing {
     }
 }
 
+// ── OG Manifest generator ─────────────────────────────────────────────────────
+// Produces docs/OG_MANIFEST.md — a compact, AI-friendly index of every public
+// primitive in the library. Run manually or hook into your release workflow:
+//
+//   ./gradlew generateOgManifest
+//
+// The file is fully derived from source; never edit it by hand.
+// ─────────────────────────────────────────────────────────────────────────────
+tasks.register("generateOgManifest") {
+    group = "documentation"
+    description = "Generates docs/OG_MANIFEST.md — compact AI-friendly index of every library primitive."
+
+    val sourceDir = file("src/commonMain/kotlin/com/solidkey/painpoints")
+    val outputFile = rootProject.file("docs/OG_MANIFEST.md")
+
+    inputs.dir(sourceDir)
+    outputs.file(outputFile)
+
+    doLast {
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        fun fieldsOf(src: String, className: String): List<String> {
+            val start = src.indexOf("data class $className(").takeIf { it >= 0 } ?: return emptyList()
+            var depth = 0; val buf = StringBuilder(); var i = src.indexOf('(', start)
+            while (i < src.length) {
+                val c = src[i]
+                if (c == '(') depth++ else if (c == ')') { depth--; if (depth == 0) break }
+                buf.append(c); i++
+            }
+            return Regex("val\\s+(\\w+)\\s*:").findAll(buf).map { it.groupValues[1] }
+                .filter { it != "name" }.toList()
+        }
+
+        fun descOf(src: String): String {
+            val kdoc = Regex("/\\*\\*(.*?)\\*/", setOf(RegexOption.DOT_MATCHES_ALL))
+                .find(src)?.groupValues?.get(1) ?: return ""
+            val line = kdoc.lines().map { it.trim().trimStart('*').trim() }
+                .firstOrNull { it.isNotBlank() && !it.startsWith("@") } ?: return ""
+            val after = Regex("\\*\\*.*?\\*\\*\\s*[—–-]\\s*(.+)").find(line)?.groupValues?.get(1) ?: line
+            return after.replace(Regex("\\[([^]]+)\\](?:\\([^)]*\\))?"), "$1")
+                .replace(Regex("\\*\\*([^*]+)\\*\\*"), "$1")
+                .substringBefore(". ").substringBefore(".").trim()
+        }
+
+        fun presetsOf(src: String, name: String): List<String> =
+            Regex("val\\s+([A-Z][A-Z0-9_]{1,})\\s*=\\s*$name(?:Spec)?\\s*\\(")
+                .findAll(src).map { it.groupValues[1] }.toList()
+
+        fun viewOf(src: String, name: String): String? {
+            val m = Regex("fun\\s+(${name}View)\\s*\\(([^)]+)\\)").find(src) ?: return null
+            val params = m.groupValues[2].split(",").mapNotNull { p ->
+                val n = p.trim().removePrefix("val ").removePrefix("var ")
+                    .substringBefore(":").substringBefore("=").trim()
+                n.takeIf { it.isNotBlank() && it != "modifier" }
+            }
+            return "${m.groupValues[1]}(${params.joinToString(", ")})"
+        }
+
+        fun dirSrc(dir: java.io.File): String =
+            dir.listFiles()?.filter { it.extension == "kt" }?.joinToString("\n") { it.readText() } ?: ""
+
+        fun renderBlock(primitive: String, desc: String, fields: List<String>, presets: List<String>, view: String?): String =
+            buildString {
+                appendLine("### $primitive")
+                if (desc.isNotBlank()) appendLine("$desc.")
+                if (fields.isNotEmpty()) appendLine("Fields: `${fields.joinToString("` `")}`")
+                if (presets.isNotEmpty()) appendLine("Presets: `${presets.joinToString("` `") { it.lowercase() }}`")
+                if (view != null) appendLine("View: `$view`")
+            }
+
+        // ── Scan ──────────────────────────────────────────────────────────────
+        val seen = mutableSetOf<String>()
+        val byPkg = linkedMapOf<String, MutableList<String>>()
+
+        fun record(primitive: String, pkg: String, desc: String, fields: List<String>, presets: List<String>, view: String?) {
+            if (!seen.add(primitive)) return
+            byPkg.getOrPut(pkg) { mutableListOf() } += renderBlock(primitive, desc, fields, presets, view)
+        }
+
+        // Pass 1: OG*Spec.kt — authoritative
+        sourceDir.walkTopDown()
+            .filter { it.name.startsWith("OG") && it.name.endsWith("Spec.kt") }
+            .sortedBy { it.name }
+            .forEach specLoop@{ f ->
+                val primitive = f.nameWithoutExtension.removeSuffix("Spec")
+                val pkg = f.parentFile.relativeTo(sourceDir).path.replace("\\", "/")
+                val specSrc = f.readText()
+                val poolSrc = dirSrc(f.parentFile)
+                val cls = if (specSrc.contains("data class ${primitive}Spec(")) "${primitive}Spec" else primitive
+                record(primitive, pkg, descOf(specSrc), fieldsOf(specSrc, cls), presetsOf(poolSrc, primitive), viewOf(poolSrc, primitive))
+            }
+
+        // Pass 2: primitives with embedded data class + codec in same file
+        sourceDir.walkTopDown()
+            .filter { it.name.startsWith("OG") && it.name.endsWith(".kt") && !it.name.endsWith("Spec.kt") && !it.name.endsWith("View.kt") }
+            .sortedBy { it.name }
+            .forEach fileLoop@{ f ->
+                val src = f.readText()
+                if (!src.contains("val presets") && !src.contains("fun decodeSpec")) return@fileLoop
+                val pkg = f.parentFile.relativeTo(sourceDir).path.replace("\\", "/")
+                val poolSrc = dirSrc(f.parentFile)
+                Regex("data class (OG[A-Za-z0-9]+)\\s*\\(").findAll(src).forEach innerLoop@{ m ->
+                    val cls = m.groupValues[1]
+                    val primitive = cls.removeSuffix("Spec")
+                    record(primitive, pkg, descOf(src), fieldsOf(src, cls), presetsOf(poolSrc, primitive), viewOf(poolSrc, primitive))
+                }
+            }
+
+        // ── Render ────────────────────────────────────────────────────────────
+        val sorted = byPkg.entries.sortedBy { it.key }
+        val total = seen.size
+
+        val out = buildString {
+            appendLine("# OGManifest — KMPMedia Library Primitives")
+            appendLine()
+            appendLine("> Auto-generated by `./gradlew generateOgManifest`. Do **not** edit by hand.")
+            appendLine("> **$total primitives** across **${sorted.size} packages**.")
+            appendLine()
+            appendLine("## Quick usage")
+            appendLine("```kotlin")
+            appendLine("// Spec (serializable data, AI-authorable JSON) + drop-in View")
+            appendLine("OGFlameView(OGFlame.CAMPFIRE, Modifier.fillMaxSize())")
+            appendLine("OGDigitalRainView(OGDigitalRain.MATRIX, Modifier.fillMaxSize())")
+            appendLine("// Timing primitive — no View")
+            appendLine("val ramp = remember { OGTimeRampValue(OGTimeRamp.BULLET_TIME) }")
+            appendLine("ramp.trigger() // on slow-mo moment")
+            appendLine("val dt = rawDt * ramp.timeScale // in game loop")
+            appendLine("```")
+            appendLine()
+            appendLine("---")
+            appendLine()
+            sorted.forEach { (pkg, blocks) ->
+                appendLine("## `$pkg`")
+                appendLine()
+                blocks.forEach { appendLine(it) }
+            }
+        }
+
+        outputFile.parentFile.mkdirs()
+        outputFile.writeText(out)
+        println("✅  OG_MANIFEST.md — $total primitives in ${sorted.size} packages → ${outputFile.path}")
+    }
+}
+
