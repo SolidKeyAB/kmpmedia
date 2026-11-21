@@ -3,6 +3,7 @@ package com.solidkey.painpoints.shape
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class OGPatternSpecTest {
 
@@ -35,6 +36,6 @@ class OGPatternSpecTest {
     fun presetsHaveDifferentSeeds_snowflakesLookDifferent() {
         val a = OGSnowflake.generate(OGPatterns.SnowCrystal.seed)
         val b = OGSnowflake.generate(OGPatterns.SuperCrystal.seed)
-        assert(a != b) { "different preset seeds should produce different crystals" }
+        assertTrue(a != b, "different preset seeds should produce different crystals")
     }
 }

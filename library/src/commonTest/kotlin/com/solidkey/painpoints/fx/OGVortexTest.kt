@@ -82,7 +82,7 @@ class OGVortexTest {
     fun single_ring_uses_full_velocity() {
         val spec = OGVortexSpec(rings = 1, angularVelocity = 2.0f).sanitized()
         val state = vortexState(spec, 1.0f)
-        val expected = 1.0f * 2.0f * (2.0 * Math.PI).toFloat()
+        val expected = 1.0f * 2.0f * (2.0 * kotlin.math.PI).toFloat()
         assertTrue(kotlin.math.abs(state.ringOmegas[0] - expected) < 0.001f)
     }
 
