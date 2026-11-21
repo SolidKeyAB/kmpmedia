@@ -124,3 +124,15 @@ Not differentiators, but things adopters expect — cheap to add and they remove
 4. **Compositor + export** — the headline "2.0."
 
 Have a feature request or an idea? Open an issue — this roadmap is shaped by what people ask for.
+
+---
+
+## Under evaluation
+
+Ideas with clear value and a viable Canvas 2D implementation path, not yet scheduled:
+
+- 🧭 **True scene-aware reflection** — `OGMirrorView` / `OGWaterView` that capture actual scene
+  content via `rememberGraphicsLayer()` + `drawLayer()` and composite a flipped, optionally
+  distorted copy. No shaders; pure Compose. Technically proven safe on Skiko (OGGlass multi-draw
+  spike). Deferred until the fake-reflection package (`OGReflection` / `OGReflectionView`, 1.55.0)
+  is dogfooded and demand for scene-accurate mirrors/water is confirmed.
