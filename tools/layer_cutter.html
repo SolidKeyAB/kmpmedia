@@ -133,264 +133,264 @@
     </div>
   </div>
 
-  <aside class=”side”>
+  <aside class="side">
 
     <!-- ── Stepper nav ── -->
-    <nav class=”stepper” id=”stepper”>
-      <button class=”step-btn active” data-s=”1”>1 · Load</button>
-      <span class=”step-sep”>›</span>
-      <button class=”step-btn” data-s=”2” disabled>2 · Cut</button>
-      <span class=”step-sep”>›</span>
-      <button class=”step-btn” data-s=”3” disabled>3 · Layers</button>
-      <span class=”step-sep”>›</span>
-      <button class=”step-btn” data-s=”4” disabled>4 · Motion</button>
-      <span class=”step-sep”>›</span>
-      <button class=”step-btn” data-s=”5” disabled>5 · Export</button>
+    <nav class="stepper" id="stepper">
+      <button class="step-btn active" data-s="1">1 · Load</button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" data-s="2" disabled>2 · Cut</button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" data-s="3" disabled>3 · Layers</button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" data-s="4" disabled>4 · Motion</button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" data-s="5" disabled>5 · Export</button>
     </nav>
 
     <!-- ── Step 1 · Load ── -->
-    <div class=”sp sp-on” id=”sp1”>
-      <div class=”group”>
+    <div class="sp sp-on" id="sp1">
+      <div class="group">
         <h2>Open an image to get started</h2>
-        <div class=”row”>
-          <button class=”go” id=”loadBtnSide”>📁 Choose image…</button>
+        <div class="row">
+          <button class="go" id="loadBtnSide">📁 Choose image…</button>
         </div>
-        <p class=”hint” style=”margin-top:8px;”>Or <b>paste</b> a copied image (⌘V) · <b>drag</b> one onto the canvas · <b>open</b> a saved project below.</p>
-        <div class=”row” style=”margin-top:8px;”>
-          <button class=”sm” id=”openProjSide”>📂 Open saved project</button>
+        <p class="hint" style="margin-top:8px;">Or <b>paste</b> a copied image (⌘V) · <b>drag</b> one onto the canvas · <b>open</b> a saved project below.</p>
+        <div class="row" style="margin-top:8px;">
+          <button class="sm" id="openProjSide">📂 Open saved project</button>
         </div>
-        <button class=”sm go” id=”resumeBtnSide” style=”display:none; width:100%; margin-top:12px”>↩︎ Resume last cut</button>
-        <details class=”ht” style=”margin-top:14px;”>
+        <button class="sm go" id="resumeBtnSide" style="display:none; width:100%; margin-top:12px">↩︎ Resume last cut</button>
+        <details class="ht" style="margin-top:14px;">
           <summary>What is Layer Cutter?</summary>
-          <p class=”hint”>Cut a character drawing into <b>animated parts</b> (arm, head, leg…) for the KMPMedia puppet rig, or cut face features and pose <b>expressions</b> (happy / sad / angry / shocked). The lib then plays the puppet live in your app.</p>
+          <p class="hint">Cut a character drawing into <b>animated parts</b> (arm, head, leg…) for the KMPMedia puppet rig, or cut face features and pose <b>expressions</b> (happy / sad / angry / shocked). The lib then plays the puppet live in your app.</p>
         </details>
       </div>
     </div>
 
     <!-- ── Step 2 · Cut ── -->
-    <div class=”sp” id=”sp2”>
+    <div class="sp" id="sp2">
       <!-- ── Smart Cut ── -->
-      <div class=”group” id=”scGroup”>
-        <h2>Smart Cut <span style=”font-size:11px;color:var(--dim);font-weight:400”>— auto remove background</span></h2>
-        <button class=”go” id=”smartCutBtn” style=”width:100%;font-size:15px;padding:10px 0;margin-bottom:8px;”>✂️ Smart Cut</button>
-        <div class=”row”>
-          <button class=”sm” id=”scBoxBtn”>⬛ Draw subject hint</button>
-          <button class=”sm danger” id=”scBoxClear” style=”display:none;”>✕ Clear hint</button>
+      <div class="group" id="scGroup">
+        <h2>Smart Cut <span style="font-size:11px;color:var(--dim);font-weight:400">— auto remove background</span></h2>
+        <button class="go" id="smartCutBtn" style="width:100%;font-size:15px;padding:10px 0;margin-bottom:8px;">✂️ Smart Cut</button>
+        <div class="row">
+          <button class="sm" id="scBoxBtn">⬛ Draw subject hint</button>
+          <button class="sm danger" id="scBoxClear" style="display:none;">✕ Clear hint</button>
         </div>
-        <details class=”ht” style=”margin-top:4px;”>
+        <details class="ht" style="margin-top:4px;">
           <summary>How it works</summary>
-          <p class=”hint”>Analyses colours in the image border as background, centre as foreground, then classifies every pixel — instant first cut. For tricky images tap <b>⬛ Draw subject hint</b> and drag a loose box around your subject — only outside that box is treated as background. Refine the result with Brush / Wand below.</p>
+          <p class="hint">Analyses colours in the image border as background, centre as foreground, then classifies every pixel — instant first cut. For tricky images tap <b>⬛ Draw subject hint</b> and drag a loose box around your subject — only outside that box is treated as background. Refine the result with Brush / Wand below.</p>
         </details>
       </div>
 
       <!-- Tools -->
-      <div class=”group” id=”toolsGroup”>
+      <div class="group" id="toolsGroup">
         <h2>Refine manually</h2>
-        <div class=”row” id=”tools”>
-          <button data-tool=”wand” class=”on”>🪄 Wand</button>
-          <button data-tool=”brush”>🖌 Brush</button>
-          <button data-tool=”erase”>🧽 Erase</button>
-          <button data-tool=”lasso”>➰ Lasso</button>
-          <button data-tool=”pivot”>🎯 Pivot</button>
-          <button data-tool=”clone”>🩹 Patch</button>
+        <div class="row" id="tools">
+          <button data-tool="wand" class="on">🪄 Wand</button>
+          <button data-tool="brush">🖌 Brush</button>
+          <button data-tool="erase">🧽 Erase</button>
+          <button data-tool="lasso">➰ Lasso</button>
+          <button data-tool="pivot">🎯 Pivot</button>
+          <button data-tool="clone">🩹 Patch</button>
         </div>
-        <div id=”toolParams”>
-          <label class=”sld”>Brush size <span id=”brushVal”>120</span>px</label>
-          <input type=”range” id=”brush” min=”3” max=”600” value=”120”>
-          <div id=”eraseParams” style=”display:none; margin:8px 0;”>
-            <label class=”sld” style=”margin-top:0;”>Erase removes colour to…</label>
-            <div class=”row”>
-              <button class=”sm on” id=”eraseTrans”>⌫ Transparent</button>
-              <button class=”sm” id=”eraseWhite”>▢ White</button>
+        <div id="toolParams">
+          <label class="sld">Brush size <span id="brushVal">120</span>px</label>
+          <input type="range" id="brush" min="3" max="600" value="120">
+          <div id="eraseParams" style="display:none; margin:8px 0;">
+            <label class="sld" style="margin-top:0;">Erase removes colour to…</label>
+            <div class="row">
+              <button class="sm on" id="eraseTrans">⌫ Transparent</button>
+              <button class="sm" id="eraseWhite">▢ White</button>
             </div>
           </div>
-          <label class=”sld”>Wand tolerance <span id=”tolVal”>40</span></label>
-          <input type=”range” id=”tol” min=”2” max=”120” value=”40”>
-          <div class=”row” id=”wandMode” style=”margin-top:8px;”>
-            <button class=”sm on” data-wm=”add”>✚ Add to selection</button>
-            <button class=”sm” data-wm=”sub”>✖ Remove from</button>
+          <label class="sld">Wand tolerance <span id="tolVal">40</span></label>
+          <input type="range" id="tol" min="2" max="120" value="40">
+          <div class="row" id="wandMode" style="margin-top:8px;">
+            <button class="sm on" data-wm="add">✚ Add to selection</button>
+            <button class="sm" data-wm="sub">✖ Remove from</button>
           </div>
-          <div id=”cloneParams” style=”display:none; margin-top:8px;”>
-            <div class=”row” style=”margin-bottom:6px;”>
-              <button class=”sm go” id=”autoHeal” style=”width:100%;”>✨ Auto-heal (fill the magenta)</button>
+          <div id="cloneParams" style="display:none; margin-top:8px;">
+            <div class="row" style="margin-bottom:6px;">
+              <button class="sm go" id="autoHeal" style="width:100%;">✨ Auto-heal (fill the magenta)</button>
             </div>
-            <div class=”row”>
-              <button class=”sm on” id=”modeBox”>▭ Copy a box</button>
-              <button class=”sm” id=”modeBrush”>🖌 Brush stamp</button>
-              <button class=”sm” id=”modePattern”>🧵 Pattern</button>
+            <div class="row">
+              <button class="sm on" id="modeBox">▭ Copy a box</button>
+              <button class="sm" id="modeBrush">🖌 Brush stamp</button>
+              <button class="sm" id="modePattern">🧵 Pattern</button>
             </div>
-            <div class=”row” id=”boxRow” style=”margin-top:6px;”>
-              <button class=”sm go” id=”boxGrab”>▭ Grab a box</button>
+            <div class="row" id="boxRow" style="margin-top:6px;">
+              <button class="sm go" id="boxGrab">▭ Grab a box</button>
             </div>
-            <div class=”row” id=”brushRow” style=”margin-top:6px; display:none;”>
-              <button class=”sm go” id=”cloneSample”>🎯 Set source spot</button>
+            <div class="row" id="brushRow" style="margin-top:6px; display:none;">
+              <button class="sm go" id="cloneSample">🎯 Set source spot</button>
             </div>
-            <div class=”row” id=”patRow” style=”margin-top:6px; display:none;”>
-              <button class=”sm go” id=”patPick”>⬚ Pick pattern</button>
-              <button class=”sm” id=”patClear”>🧽 Clear area</button>
+            <div class="row" id="patRow" style="margin-top:6px; display:none;">
+              <button class="sm go" id="patPick">⬚ Pick pattern</button>
+              <button class="sm" id="patClear">🧽 Clear area</button>
             </div>
-            <label class=”sld” style=”margin-top:8px;”>Patch softness <span id=”softVal”>60</span>%</label>
-            <input type=”range” id=”soft” min=”0” max=”100” value=”60”>
-            <label class=”sld”>Infuse (blend) <span id=”infuseVal”>0</span>%</label>
-            <input type=”range” id=”infuse” min=”0” max=”100” value=”0”>
-            <details class=”ht” style=”margin-top:4px;”>
+            <label class="sld" style="margin-top:8px;">Patch softness <span id="softVal">60</span>%</label>
+            <input type="range" id="soft" min="0" max="100" value="60">
+            <label class="sld">Infuse (blend) <span id="infuseVal">0</span>%</label>
+            <input type="range" id="infuse" min="0" max="100" value="0">
+            <details class="ht" style="margin-top:4px;">
               <summary>How does Patch work?</summary>
-              <p class=”hint”>Rebuilds texture hidden under a mover. Picking this lifts the movers so the hidden area glows <b>magenta</b> — fill it back in. <b>▭ Copy a box</b>: grab a clean patch of the texture → stamp over the magenta. <b>🧵 Pattern</b>: pick a texture, paint any shape to fill it seamlessly.</p>
+              <p class="hint">Rebuilds texture hidden under a mover. Picking this lifts the movers so the hidden area glows <b>magenta</b> — fill it back in. <b>▭ Copy a box</b>: grab a clean patch of the texture → stamp over the magenta. <b>🧵 Pattern</b>: pick a texture, paint any shape to fill it seamlessly.</p>
             </details>
           </div>
         </div>
-        <details class=”ht”>
+        <details class="ht">
           <summary>Tool guide</summary>
-          <p class=”hint”>🪄 <b>Wand</b>: tap a colour to flood-select it. ✚ Add / ✖ Remove to build up the mask. 🖌 <b>Brush</b>: paint to add. 🧽 <b>Erase</b>: paint to remove. ➰ <b>Lasso</b>: draw a free shape. 🎯 <b>Pivot</b>: tap to place the rotation joint. Two fingers / mouse-wheel = zoom &amp; pan.</p>
+          <p class="hint">🪄 <b>Wand</b>: tap a colour to flood-select it. ✚ Add / ✖ Remove to build up the mask. 🖌 <b>Brush</b>: paint to add. 🧽 <b>Erase</b>: paint to remove. ➰ <b>Lasso</b>: draw a free shape. 🎯 <b>Pivot</b>: tap to place the rotation joint. Two fingers / mouse-wheel = zoom &amp; pan.</p>
         </details>
       </div>
 
       <!-- Clean up -->
-      <div class=”group” id=”cleanupGroup”>
+      <div class="group" id="cleanupGroup">
         <h2>Clean up selection</h2>
-        <div class=”row”>
-          <button class=”sm” id=”knock”>⬜ Knock white</button>
-          <button class=”sm” id=”invert”>↔ Invert</button>
+        <div class="row">
+          <button class="sm" id="knock">⬜ Knock white</button>
+          <button class="sm" id="invert">↔ Invert</button>
         </div>
-        <label class=”sld”>White threshold <span id=”bgVal”>235</span></label>
-        <input type=”range” id=”bg” min=”150” max=”254” value=”235”>
-        <div class=”row” style=”margin-top:8px;”>
-          <button class=”sm” id=”grow”>＋ Grow</button>
-          <button class=”sm” id=”shrink”>－ Shrink</button>
-          <button class=”sm” id=”feather”>🌫 Feather</button>
+        <label class="sld">White threshold <span id="bgVal">235</span></label>
+        <input type="range" id="bg" min="150" max="254" value="235">
+        <div class="row" style="margin-top:8px;">
+          <button class="sm" id="grow">＋ Grow</button>
+          <button class="sm" id="shrink">－ Shrink</button>
+          <button class="sm" id="feather">🌫 Feather</button>
         </div>
-        <div class=”row” style=”margin-top:6px;”>
-          <button class=”sm” id=”undo”>↩︎ Undo</button>
-          <button class=”sm” id=”redo”>↪︎ Redo</button>
-          <button class=”sm danger” id=”clear”>✕ Clear</button>
+        <div class="row" style="margin-top:6px;">
+          <button class="sm" id="undo">↩︎ Undo</button>
+          <button class="sm" id="redo">↪︎ Redo</button>
+          <button class="sm danger" id="clear">✕ Clear</button>
         </div>
-        <details class=”ht”>
+        <details class="ht">
           <summary>Tips</summary>
-          <p class=”hint”><b>Knock white</b> removes a white background in one tap — fastest first cut. Then <b>Grow</b> to catch soft pencil edges, <b>Shrink</b>/<b>Feather</b> to remove halos. ↩︎/↪︎ or ⌘Z/⇧⌘Z to undo/redo.</p>
+          <p class="hint"><b>Knock white</b> removes a white background in one tap — fastest first cut. Then <b>Grow</b> to catch soft pencil edges, <b>Shrink</b>/<b>Feather</b> to remove halos. ↩︎/↪︎ or ⌘Z/⇧⌘Z to undo/redo.</p>
         </details>
       </div>
 
-      <div class=”nxt-row”>
-        <button class=”nxt” id=”toStep3”>3 · Layers &amp; Parts →</button>
+      <div class="nxt-row">
+        <button class="nxt" id="toStep3">3 · Layers &amp; Parts →</button>
       </div>
     </div>
 
     <!-- ── Step 3 · Layers ── -->
-    <div class=”sp” id=”sp3”>
-      <div class=”group”>
+    <div class="sp" id="sp3">
+      <div class="group">
         <h2>What are you making?</h2>
-        <div class=”row” id=”modeSw”>
-          <button class=”sm on” data-mode=”rig”>🧍 Puppet rig</button>
-          <button class=”sm” data-mode=”face”>😀 Face expressions</button>
+        <div class="row" id="modeSw">
+          <button class="sm on" data-mode="rig">🧍 Puppet rig</button>
+          <button class="sm" data-mode="face">😀 Face expressions</button>
         </div>
-        <details class=”ht”>
+        <details class="ht">
           <summary>Which should I pick?</summary>
-          <p class=”hint”><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut face features (brow, eye, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them.</p>
+          <p class="hint"><b>Puppet rig</b> = cut parts + pin joints + set swing (what SUPER X uses). <b>Face expressions</b> = cut face features (brow, eye, mouth…) once, then pose <b>happy / sad / angry / shocked</b> by nudging them.</p>
         </details>
       </div>
 
-      <div class=”group” id=”layersGroup”>
+      <div class="group" id="layersGroup">
         <h2>Layers (back → front)</h2>
-        <div id=”layerList”></div>
-        <div class=”row”>
-          <button class=”sm” id=”addLayer”>＋ Add part</button>
-          <button class=”sm go” id=”preview”>▶ Preview</button>
+        <div id="layerList"></div>
+        <div class="row">
+          <button class="sm" id="addLayer">＋ Add part</button>
+          <button class="sm go" id="preview">▶ Preview</button>
         </div>
-        <label class=”pill” id=”skinFillPill” title=”Fill cut-out holes with the surrounding skin colour”><input type=”checkbox” id=”skinFill” checked> 🩹 fill holes with skin</label>
-        <details class=”ht”>
+        <label class="pill" id="skinFillPill" title="Fill cut-out holes with the surrounding skin colour"><input type="checkbox" id="skinFill" checked> 🩹 fill holes with skin</label>
+        <details class="ht">
           <summary>How to set up parts</summary>
-          <p class=”hint”><b>base</b> = the body, stays still. <b>mover</b> = a limb to animate — cut it off the body, tick <b>cut out</b>, place its 🎯 pivot (shoulder/hip/neck). Use ▲▼ to order front/back. Then ▶ Preview to see it swing.</p>
+          <p class="hint"><b>base</b> = the body, stays still. <b>mover</b> = a limb to animate — cut it off the body, tick <b>cut out</b>, place its 🎯 pivot (shoulder/hip/neck). Use ▲▼ to order front/back. Then ▶ Preview to see it swing.</p>
         </details>
       </div>
 
-      <div class=”nxt-row”>
-        <button class=”nxt” id=”toStep4”>4 · Motion &amp; Expressions →</button>
+      <div class="nxt-row">
+        <button class="nxt" id="toStep4">4 · Motion &amp; Expressions →</button>
       </div>
     </div>
 
     <!-- ── Step 4 · Motion / Expressions ── -->
-    <div class=”sp” id=”sp4”>
+    <div class="sp" id="sp4">
       <!-- Rig motion -->
-      <div class=”group” id=”motionGroup”>
+      <div class="group" id="motionGroup">
         <h2>Motion (selected mover)</h2>
-        <div id=”motion”></div>
-        <details class=”ht”>
+        <div id="motion"></div>
+        <details class="ht">
           <summary>Tips</summary>
-          <p class=”hint”><b>Angle</b> = how far it swings. <b>Speed</b> = how fast. <b>Tuck</b> nudges the part toward the body so the cut gap stays hidden. All changes show live in ▶ Preview.</p>
+          <p class="hint"><b>Angle</b> = how far it swings. <b>Speed</b> = how fast. <b>Tuck</b> nudges the part toward the body so the cut gap stays hidden. All changes show live in ▶ Preview.</p>
         </details>
       </div>
 
       <!-- Face expressions -->
-      <div class=”group” id=”faceGroup” style=”display:none”>
+      <div class="group" id="faceGroup" style="display:none">
         <h2>Expressions</h2>
-        <div class=”row” id=”exprChips”></div>
-        <div class=”row” id=”facsRow” style=”margin-top:6px; align-items:center; gap:8px;”>
-          <button class=”sm go” id=”facsAuto”>✨ FACS auto-pose</button>
-          <span style=”font-size:11px;color:var(--dim)”>whole face, one tap</span>
+        <div class="row" id="exprChips"></div>
+        <div class="row" id="facsRow" style="margin-top:6px; align-items:center; gap:8px;">
+          <button class="sm go" id="facsAuto">✨ FACS auto-pose</button>
+          <span style="font-size:11px;color:var(--dim)">whole face, one tap</span>
         </div>
-        <div id=”exprPose”></div>
-        <div class=”row” id=”warpRow” style=”margin-top:8px; align-items:center; gap:8px;”>
-          <span style=”font-size:11px;color:var(--dim)”>Edit:</span>
-          <button class=”sm on” data-edit=”box”>▦ Box</button>
-          <button class=”sm” data-edit=”warp”>🫠 Warp</button>
-          <button class=”sm” data-edit=”lips”>👄 Lip line</button>
+        <div id="exprPose"></div>
+        <div class="row" id="warpRow" style="margin-top:8px; align-items:center; gap:8px;">
+          <span style="font-size:11px;color:var(--dim)">Edit:</span>
+          <button class="sm on" data-edit="box">▦ Box</button>
+          <button class="sm" data-edit="warp">🫠 Warp</button>
+          <button class="sm" data-edit="lips">👄 Lip line</button>
         </div>
-        <div id=”lipTools” style=”display:none; margin-top:6px;”>
-          <div class=”row” style=”align-items:center; gap:8px;”>
-            <span style=”font-size:11px;color:var(--dim)”><b>Pick an expression, draw its mouth</b> — tap left→right along the lip.</span>
-            <button class=”mini” id=”lipUndo” style=”margin-left:auto”>⌫ point</button>
-            <button class=”mini” id=”lipClear”>⟲ clear</button>
+        <div id="lipTools" style="display:none; margin-top:6px;">
+          <div class="row" style="align-items:center; gap:8px;">
+            <span style="font-size:11px;color:var(--dim)"><b>Pick an expression, draw its mouth</b> — tap left→right along the lip.</span>
+            <button class="mini" id="lipUndo" style="margin-left:auto">⌫ point</button>
+            <button class="mini" id="lipClear">⟲ clear</button>
           </div>
-          <details class=”ht” style=”margin-top:4px;”>
+          <details class="ht" style="margin-top:4px;">
             <summary>Lip line guide</summary>
-            <p class=”hint”>Tap 🙂 Happy → draw the smile; tap ☹️ Sad → draw the frown. Neutral = trace the resting mouth (optional baseline). 3–6 points. Layer must be named <b>mouth / lip / dudak</b>.</p>
+            <p class="hint">Tap 🙂 Happy → draw the smile; tap ☹️ Sad → draw the frown. Neutral = trace the resting mouth (optional baseline). 3–6 points. Layer must be named <b>mouth / lip / dudak</b>.</p>
           </details>
         </div>
-        <div id=”warpTools” style=”display:none; margin-top:6px;”>
-          <div class=”row” style=”align-items:center; gap:8px;”>
-            <span style=”font-size:11px;color:var(--dim)”>Warp tool:</span>
-            <button class=”sm on” data-warptool=”region”>⭕ Region</button>
-            <button class=”sm” data-warptool=”point”>📍 Point</button>
-            <button class=”mini” id=”warpClear” style=”margin-left:auto”>⟲ clear</button>
+        <div id="warpTools" style="display:none; margin-top:6px;">
+          <div class="row" style="align-items:center; gap:8px;">
+            <span style="font-size:11px;color:var(--dim)">Warp tool:</span>
+            <button class="sm on" data-warptool="region">⭕ Region</button>
+            <button class="sm" data-warptool="point">📍 Point</button>
+            <button class="mini" id="warpClear" style="margin-left:auto">⟲ clear</button>
           </div>
-          <div id=”warpPanel”></div>
+          <div id="warpPanel"></div>
         </div>
-        <div class=”row” style=”margin-top:8px;”>
-          <button class=”sm go” id=”previewExpr”>▶ Preview</button>
-          <button class=”sm” id=”exportFaceFrames”>📸 Face frames</button>
+        <div class="row" style="margin-top:8px;">
+          <button class="sm go" id="previewExpr">▶ Preview</button>
+          <button class="sm" id="exportFaceFrames">📸 Face frames</button>
         </div>
-        <details class=”ht”>
+        <details class="ht">
           <summary>Posing guide</summary>
-          <p class=”hint”>Pick an expression → tap ✨ <b>FACS auto-pose</b> for a full-face starting point (needs layers named brow / eye / mouth). Then tweak: <b>▦ Box</b> = move / rotate / stretch the whole feature. <b>🫠 Warp</b>: ⭕ Region = drag a circle then zoom/rotate that area; 📍 Point = pull a spot. ↩︎ undoes any step.</p>
+          <p class="hint">Pick an expression → tap ✨ <b>FACS auto-pose</b> for a full-face starting point (needs layers named brow / eye / mouth). Then tweak: <b>▦ Box</b> = move / rotate / stretch the whole feature. <b>🫠 Warp</b>: ⭕ Region = drag a circle then zoom/rotate that area; 📍 Point = pull a spot. ↩︎ undoes any step.</p>
         </details>
       </div>
 
-      <div class=”nxt-row”>
-        <button class=”nxt” id=”toStep5”>5 · Export →</button>
+      <div class="nxt-row">
+        <button class="nxt" id="toStep5">5 · Export →</button>
       </div>
     </div>
 
     <!-- ── Step 5 · Export ── -->
-    <div class=”sp” id=”sp5”>
-      <div class=”group” id=”exportGroup”>
+    <div class="sp" id="sp5">
+      <div class="group" id="exportGroup">
         <h2>Export</h2>
-        <div class=”row” style=”align-items:center; gap:6px;”>
-          <label style=”font-size:12px;color:var(--dim)”>Character name</label>
-          <input id=”charName” type=”text” placeholder=”character” style=”flex:1; min-width:0; padding:5px 7px; font-size:12px;”>
+        <div class="row" style="align-items:center; gap:6px;">
+          <label style="font-size:12px;color:var(--dim)">Character name</label>
+          <input id="charName" type="text" placeholder="character" style="flex:1; min-width:0; padding:5px 7px; font-size:12px;">
         </div>
-        <p class=”hint” style=”margin-top:2px”>Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
-        <div class=”row” style=”margin-top:8px;”>
-          <button class=”go” id=”toApp”>📡 Send to app</button>
+        <p class="hint" style="margin-top:2px">Names the exports: <code>&lt;name&gt;_layers.zip</code>, <code>&lt;name&gt;.ogcut.json</code>.</p>
+        <div class="row" style="margin-top:8px;">
+          <button class="go" id="toApp">📡 Send to app</button>
         </div>
-        <div class=”row” style=”margin-top:6px;”>
-          <button class=”sm” id=”export”>⬇ Export .zip</button>
-          <button class=”sm” id=”previewBtn”>👁 Preview</button>
-          <button class=”sm” id=”showJson”>{ } JSON</button>
+        <div class="row" style="margin-top:6px;">
+          <button class="sm" id="export">⬇ Export .zip</button>
+          <button class="sm" id="previewBtn">👁 Preview</button>
+          <button class="sm" id="showJson">{ } JSON</button>
         </div>
-        <textarea id=”json” style=”display:none” readonly></textarea>
-        <details class=”ht”>
+        <textarea id="json" style="display:none" readonly></textarea>
+        <details class="ht">
           <summary>What does each button do?</summary>
-          <p class=”hint”><b>Send to app</b>: hands layers + rig to the host app directly (no files). <b>Export .zip</b>: one transparent PNG per layer + <code>rig.json</code>. <b>JSON</b>: view the raw rig data.</p>
+          <p class="hint"><b>Send to app</b>: hands layers + rig to the host app directly (no files). <b>Export .zip</b>: one transparent PNG per layer + <code>rig.json</code>. <b>JSON</b>: view the raw rig data.</p>
         </details>
       </div>
     </div>
